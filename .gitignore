@@ -1,0 +1,13 @@
+node_modules
+dist
+
+# Local env — the Gemini key lives here and must never be committed
+.env
+.env.local
+.env.*.local
+
+# Vercel CLI
+.vercel
+
+*.log
+.DS_Store
