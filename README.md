@@ -54,8 +54,14 @@ loop still runs end to end.
 
 ```
 api/move.js              serverless proxy (holds the Gemini key)
-public/games/*.js        PICO-8 web exports (static; loaded by the player)
-src/components/           React — embeds the cart, runs the GPIO poll loop
+public/games/*.{html,js} PICO-8 web exports (static); the iframe loads the .html
+src/components/           React — embeds the cart in an iframe, runs the GPIO poll loop
 src/lib/                  gpio.js (protocol) + ai.js (fetch + fallback)
-vercel.json              SPA routing (everything but /api/ → index.html)
+vercel.json              currently empty {} — see note below
 ```
+
+> **`vercel.json`:** intentionally empty. A catch-all SPA rewrite
+> (`/((?!api/).*)` → `/index.html`) was removed because it breaks `vercel dev` —
+> it intercepts Vite's dev modules (`/src/main.jsx`, `/@vite/client`) and returns
+> HTML for them. Restore a **dev-safe** rewrite only when client-side routing is
+> added; see [webapp-build-steps.md](webapp-build-steps.md).
