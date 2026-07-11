@@ -32,35 +32,43 @@ AI yet.
 Goal: PICO-8 renders and is playable inside the React page. This proves the
 embed works before any bridge code matters.
 
-- [ ] Copy the exported cart's `.js` into the static games folder, renaming it to
-      what the component expects (`game="tictactoe"` in [src/App.jsx](src/App.jsx)):
+**Embed approach: iframe.** A PICO-8 web export isn't a bare script — its `.js`
+renders into `Module.canvas` and needs the exported shell's setup (start button,
+layout, audio-context gating). So we embed the exported **`.html`** in an
+`<iframe>` (it carries that shell verbatim) rather than injecting the `.js`
+ourselves. It's same-origin, so GPIO stays reachable via
+`iframeRef.current.contentWindow.pico8_gpio` (wired in Step 4). This also isolates
+each cart, so the multi-game menu (Step 9) can just swap the iframe `src`.
+
+- [x] Copy **both** exported files into the static games folder, keeping their
+      names (the `.html` references `tic_tac_toe.js` by that exact name):
 
   ```sh
-  cp carts/tic_tac_toe/tic_tac_toe.js public/games/tictactoe.js
+  cp carts/tic_tac_toe/tic_tac_toe.html public/games/tic_tac_toe.html
+  cp carts/tic_tac_toe/tic_tac_toe.js  public/games/tic_tac_toe.js
   ```
 
-  > Only the `.js` goes in `public/games/`. The `.html` stays in `carts/` as a
-  > standalone test page / loader reference — the app doesn't use it.
+  [src/App.jsx](src/App.jsx) passes `game="tic_tac_toe"`, and
+  [Pico8Game.jsx](src/components/Pico8Game.jsx) loads `/games/${game}.html`.
 
-- [ ] Sanity check the cart on its own first: open
+- [x] Sanity check the cart on its own first: open
       `carts/tic_tac_toe/tic_tac_toe.html` directly in a browser. If it doesn't
       run here, it won't run embedded — fix the export before continuing.
 
-- [ ] `vercel dev` (NOT `npm run dev` / plain `vite` — plain vite won't run
+- [x] `vercel dev` (NOT `npm run dev` / plain `vite` — plain vite won't run
       `api/`). Open the local URL.
 
-- [ ] Confirm the cart canvas appears and the game is playable (as a normal
-      2-player / hotseat cart — the AI isn't wired to it yet).
+- [x] Confirm the cart appears in the iframe. PICO-8 shows a **start button**
+      (`p8_autoplay` is off); click it to boot (also satisfies the browser's
+      audio-gesture requirement). Play it as a normal 2-player / hotseat cart —
+      the AI isn't wired to it yet.
 
-**Done when:** you can play the existing tic-tac-toe cart inside the React page.
+**✅ Done — cart plays in the iframe.** (Confirmed 2026-07-11.)
 
-> ⚠️ Known PICO-8 embed gotchas if the canvas is blank:
-> - The runtime needs `<canvas id="canvas">` present *before* it loads — the
->   component already renders it. If you see a race, the script inject in
->   [Pico8Game.jsx](src/components/Pico8Game.jsx#L34-L38) may need to wait for the
->   canvas ref to mount.
-> - Audio won't start without a user gesture (browser policy); the cart's shell
->   normally shows a "click to start" state. That's expected.
+> ⚠️ If the iframe is blank: check the browser console/network for a 404 on
+> `/games/tic_tac_toe.html` or `/games/tic_tac_toe.js`, and make sure `vercel.json`
+> has no catch-all rewrite intercepting them (it was emptied in an earlier step
+> for exactly this reason).
 
 ---
 

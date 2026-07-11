@@ -6,7 +6,7 @@ export default function App() {
       <h1>PICO-8 + Gemini</h1>
       <p>Turn-based carts with a Gemini-powered AI opponent.</p>
       {/* Single game for now; a multi-game menu comes later (milestone 7). */}
-      <Pico8Game game="tictactoe" />
+      <Pico8Game game="tic_tac_toe" />
     </main>
   );
 }

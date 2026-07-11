@@ -35,6 +35,8 @@ environment, never in the browser.
 with the page through its **GPIO memory** (128 bytes at `0x5f80`–`0x5fff`),
 which the web export mirrors to a JavaScript array named `pico8_gpio`. The cart
 `poke`s/`peek`s; the JS reads/writes the same array; the JS does the networking.
+(We embed via an iframe — see Phase 0 — so that array lives on the iframe's
+`contentWindow`, reachable because it's same-origin.)
 
 ---
 
@@ -60,12 +62,24 @@ point: `gemini-2.5-flash` (or the current recommended free Flash model).
 
 | Approach | GPIO access | Trade-off |
 |---|---|---|
-| **Direct embed** (load the cart's `.js` into a canvas on the React page) | `window.pico8_gpio` directly | Simplest for GPIO; but PICO-8 uses fixed globals, so only run **one** cart per page load |
-| **iframe** (cart in its own `.html`) | `iframe.contentWindow.pico8_gpio` (same-origin OK) | Cleaner isolation, but slightly more plumbing |
+| **iframe** (embed the cart's exported `.html`) | `iframe.contentWindow.pico8_gpio` (same-origin OK) | The exported shell "just works"; clean per-cart isolation; a bit of `contentWindow` plumbing |
+| **Direct embed** (inject the cart's `.js` into a canvas on the React page) | `window.pico8_gpio` directly | Marginally simpler GPIO, but you must reproduce the shell's setup (`Module.canvas`, start button, audio-context gating), and PICO-8's fixed globals mean only **one** cart per page load |
 
-**Recommendation:** direct embed, one game per page. For a multi-game menu,
-navigate / reload between games rather than tearing down the player in place
-(PICO-8's global state makes in-place teardown fiddly).
+**Recommendation: iframe.** A PICO-8 web export isn't a bare script you can drop
+next to a `<canvas>` — its `.js` renders into `Module.canvas` and the exported
+shell does real setup (start button, layout, audio-context gating) before it runs
+the cart. Embedding the exported `.html` in an `<iframe>` carries that shell
+verbatim, so the cart renders with **no** shell re-implementation. It's
+same-origin, so GPIO stays reachable via `iframe.contentWindow.pico8_gpio`, and
+each cart is isolated — so a **multi-game menu just swaps the iframe `src`**
+instead of reloading the page (PICO-8's global state makes in-place teardown of a
+direct embed fiddly).
+
+> We started this project on direct embed and hit a blank canvas: the injected
+> `.js` had no `Module.canvas` and was missing the shell globals it expects.
+> Switching to the iframe fixed it immediately. If you ever *do* want direct
+> embed (e.g. to avoid the iframe), you must set `window.Module = { canvas }` and
+> seed `pico8_buttons` / `pico8_state` before injecting the script.
 
 ---
 
@@ -77,15 +91,18 @@ For each cart, from the PICO-8 prompt:
 > export tictactoe.html
 ```
 
-This produces **`tictactoe.html`** + **`tictactoe.js`**. The `.js` holds both the
-cart data and the full player runtime — it's the file that matters.
+This produces **`tictactoe.html`** + **`tictactoe.js`**. The `.js` holds the cart
+data and the full player runtime; the `.html` is the shell that sets that runtime
+up and loads it.
 
 - [ ] Export each game.
-- [ ] Drop the files into the project's `public/games/` folder (static passthrough — bundler won't rename them).
+- [ ] Drop **both files** into the project's `public/games/` folder (static
+      passthrough — bundler won't rename them). The iframe loads the `.html`,
+      which references the `.js` by name, so keep their names matching.
 - [ ] Quick sanity check: open the `.html` locally to confirm the cart runs.
 
-> If you go the direct-embed route you mainly need the `.js`; you can also run
-> `export tictactoe.js` to get just that file.
+> Because we use the iframe embed, you need **both** files. (Only the direct-embed
+> route could get away with just the `.js`.)
 
 ---
 
@@ -145,7 +162,7 @@ pico8-ai/
 │     └─ tictactoe.js
 ├─ src/
 │  ├─ components/
-│  │  └─ Pico8Game.jsx   # canvas + player load + GPIO polling
+│  │  └─ Pico8Game.jsx   # iframe embed of the cart + GPIO polling
 │  ├─ lib/
 │  │  ├─ gpio.js         # protocol constants + helpers
 │  │  └─ ai.js           # fetch('/api/move')
@@ -220,16 +237,23 @@ function buildPrompt(board) {
 
 ## 8. Phase 5 — Frontend glue (embed + poll + call)
 
-**Set up GPIO before the player loads**, then poll it:
+**Seed GPIO on the iframe's window before the cart runs**, then poll it. With the
+iframe embed, `pico8_gpio` must live on the *cart's* window
+(`iframe.contentWindow`), not the top page — that's the array the PICO-8 runtime
+inside the iframe mirrors its GPIO memory into.
 
 ```js
 // src/lib/gpio.js
 export const GPIO_LEN = 128;
 export const ST_IDLE = 0, ST_REQUEST = 1, ST_THINKING = 2, ST_READY = 3;
 
-export function initGpio() {
-  window.pico8_gpio = new Array(GPIO_LEN).fill(0);
-  return window.pico8_gpio;
+// Define pico8_gpio on the cart's own window (the iframe's contentWindow) so the
+// PICO-8 runtime mirrors its GPIO into it. Call this on the iframe's `load` event
+// (the cart doesn't actually run until the user clicks the start button, so the
+// array is in place well before the runtime reads it).
+export function initGpio(win) {
+  win.pico8_gpio = new Array(GPIO_LEN).fill(0);
+  return win.pico8_gpio;
 }
 ```
 
@@ -254,8 +278,9 @@ export function validateMove(move, board) {
 ```
 
 ```js
-// inside Pico8Game.jsx — after initGpio() and loading the cart's .js
-const g = window.pico8_gpio;
+// inside Pico8Game.jsx — on the iframe's onLoad handler
+const win = iframeRef.current.contentWindow; // same-origin: accessible
+const g = initGpio(win);                     // seed pico8_gpio on the cart's window
 const loop = setInterval(async () => {
   if (g[0] === ST_REQUEST) {
     g[0] = ST_THINKING;                 // ack so the cart shows "thinking"
@@ -269,8 +294,8 @@ const loop = setInterval(async () => {
 // clearInterval(loop) on unmount
 ```
 
-- [ ] Load the cart's `.js` (inject a `<script>` tag pointing at `/games/<game>.js`, with a `<canvas id="canvas">` present).
-- [ ] Verify `pico8_gpio` exists **before** the player initializes.
+- [ ] Render `<iframe src="/games/<game>.html">`; grab its `contentWindow` on the iframe's `load` event.
+- [ ] Seed `pico8_gpio` on that `contentWindow` (via `initGpio`) so it exists before the cart runs.
 - [ ] Clean up the interval on component unmount.
 
 ---
