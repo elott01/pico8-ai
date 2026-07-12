@@ -72,33 +72,33 @@ each cart, so the multi-game menu (Step 9) can just swap the iframe `src`.
 
 ---
 
-## Step 2 — Verify the JS side of the bridge in isolation
+## Step 2 — (folded into Step 4) The JS side of the bridge
 
-Before editing the cart, confirm the page's half of the protocol is sound. No
-cart changes here — we poke the array by hand.
+> This step originally had you drive the protocol **by hand** from the browser
+> console (`window.pico8_gpio[0] = 1`, watch it flip to READY) to prove the page's
+> half before editing the cart. That made sense with the old direct-embed, where
+> `pico8_gpio` sat on the top window. With the **iframe**, the array lives on
+> `iframe.contentWindow.pico8_gpio` and only exists once the cart is running, so
+> the clean "test it in isolation" separation is gone. We wired the **real** poll
+> loop instead (Step 4's JS side) and test it against the actual cart. Skip ahead.
 
-- [ ] With the app running, open the browser console and inspect
-      `window.pico8_gpio` — it should be a 128-length array (created by
-      `initGpio()` in [src/lib/gpio.js](src/lib/gpio.js)).
-- [ ] Manually drive the state machine to confirm the poll loop services a
-      request. In the console:
+The page's half now lives in [Pico8Game.jsx](src/components/Pico8Game.jsx): a
+`setInterval` reads `iframeRef.current.contentWindow.pico8_gpio`, and on
+`status == REQUEST` it acks (→ THINKING), reads the board via
+[readBoard](src/lib/gpio.js), calls [getAiMove](src/lib/ai.js) →
+[api/move.js](api/move.js), then writes the move (byte 10) and sets `status = READY`.
 
-  ```js
-  const g = window.pico8_gpio;
-  // fake a board: human (1) took cell 0, ask AI to move
-  [1,0,0, 0,0,0, 0,0,0].forEach((v,i) => g[i+1] = v);
-  g[0] = 1;                 // ST_REQUEST
-  // watch it flip: 1 -> 2 (thinking) -> 3 (ready), then read the move
-  setTimeout(() => console.log('status', g[0], 'move', g[10]), 500);
-  ```
+- [x] JS poll loop wired against the iframe's GPIO array.
 
-- [ ] You should see `g[10]` hold a legal cell and `g[0]` become `3` (READY).
-      That means the [poll loop](src/components/Pico8Game.jsx#L18-L27) →
-      [getAiMove](src/lib/ai.js) → [api/move.js](api/move.js) path works end to
-      end (returning the hardcoded fallback move, since no key yet).
+**If you still want a pure-JS smoke test** (no cart), boot the cart, open the
+console, and poke the iframe's array by hand:
 
-**Done when:** poking `pico8_gpio` from the console produces a move — the JS
-side is proven independently of the cart.
+```js
+const g = document.querySelector('iframe').contentWindow.pico8_gpio;
+[1,0,0, 0,0,0, 0,0,0].forEach((v,i) => g[i+1] = v); // human took cell 0
+g[0] = 1;                                            // ST_REQUEST
+setTimeout(() => console.log('status', g[0], 'move', g[10]), 500); // -> 3, a legal cell
+```
 
 ---
 
@@ -126,44 +126,46 @@ Current agreed layout (tic-tac-toe):
 
 ## Step 4 — Add GPIO to the cart, then re-export
 
-**This is the first and only cart edit for the basic loop.** Open the cart in
-PICO-8 and wire it to request/receive a move via GPIO.
+**This is the first and only cart edit for the basic loop.** The Lua glue is
+already written in [carts/tic_tac_toe.p8](carts/tic_tac_toe.p8) — you just need to
+re-export it so `public/games/` picks it up.
 
-- [ ] In PICO-8, add the GPIO glue to the tic-tac-toe cart (Lua). Minimum:
-      - On the AI's turn: write the board into bytes `1..9`, set byte `0 = 1`
-        (request), and enter a "waiting" state.
-      - Every `_update`: if byte `0 == 3` (ready), read byte `10`, play that
-        cell, reset byte `0 = 0`.
-      - Show a "thinking…" indicator while waiting (the call is ~0.5–3s).
+- [x] GPIO glue added to the cart. On the cpu's turn `update_ai()` writes the
+      board into bytes `1..9`, sets byte `0 = 1` (request), and waits; when byte
+      `0 == 3` (ready) it reads byte `10` (a 0-based index), plays that cell, and
+      resets byte `0 = 0`. It **falls back to local minimax** if the page never
+      acks (~0.5s — e.g. desktop PICO-8) or stalls (~6s), so the cart never hangs
+      and still plays standalone. The existing "cpu thinking…" status shows while
+      waiting.
+- [x] JS side wired (see Step 2) — the poll loop answers the request.
+- [x] All turn/win logic stays in the cart; the AI only supplies a cell index.
+- [x] **Re-export from PICO-8** (this can't be scripted — do it in the PICO-8
+      app). Load the edited cart and export the web version:
 
-  ```lua
-  gpio=0x5f80
-
-  function request_ai_move(board)
-    for i=1,9 do poke(gpio+i, board[i]) end
-    poke(gpio+0, 1)      -- request
-    ai_waiting=true
-  end
-
-  function poll_ai_move()  -- call in _update; returns a cell or nil
-    if ai_waiting and peek(gpio+0)==3 then
-      local cell=peek(gpio+10)
-      ai_waiting=false
-      poke(gpio+0, 0)    -- back to idle
-      return cell
-    end
-  end
+  ```
+  load carts/tic_tac_toe.p8
+  export tic_tac_toe.html
   ```
 
-- [ ] Keep **all** turn/win logic in the cart. The AI only supplies a cell index.
-- [ ] Re-export from PICO-8: `export tic_tac_toe.html` (or `export tic_tac_toe.js`
-      for just the runtime).
-- [ ] Copy the new `.js` over: `cp carts/tic_tac_toe/tic_tac_toe.js public/games/tictactoe.js`
-- [ ] `vercel dev`, play a real game: your move → cart requests → proxy returns
-      the fallback move → cart plays it. This is the **full loop with a dumb AI**.
+  Copy the exported files into `public/games/`, keeping the names:
 
-**Done when:** you play a complete game against the fallback (hardcoded-legal)
-opponent, entirely through GPIO.
+  ```sh
+  cp carts/tic_tac_toe/tic_tac_toe.html public/games/tic_tac_toe.html
+  cp carts/tic_tac_toe/tic_tac_toe.js  public/games/tic_tac_toe.js
+  ```
+
+  > Where PICO-8 writes the export depends on your cwd/config; adjust the source
+  > paths above to wherever `export` dropped them.
+
+- [x] `vercel dev`, switch the cart to **vs cpu** (pause menu → "mode: vs cpu"),
+      and play. Your move → cart requests → proxy returns the fallback move →
+      cart plays it. This is the **full loop with a dumb AI** (first-empty-cell,
+      since no Gemini key yet).
+
+**✅ Done — full GPIO loop confirmed.** (Confirmed 2026-07-11.) Verified via the
+Network tab: `/api/move` requests fired from `ai.js` returned 200, and the AI
+played first-empty-cell (not its local minimax), proving the moves came over the
+bridge rather than the cart's fallback.
 
 ---
 
@@ -245,8 +247,8 @@ your shared project quota (free tier ≈ 10–15 req/min, per project).
 ## Quick reference
 
 - **Run locally:** `vercel dev` (never plain `vite` — the proxy won't run).
-- **Cart location the app loads:** `public/games/tictactoe.js`
-  (from `game="tictactoe"` in [App.jsx](src/App.jsx)).
+- **Cart location the app loads:** `public/games/tic_tac_toe.html` + `.js`
+  (from `game="tic_tac_toe"` in [App.jsx](src/App.jsx)).
 - **Protocol lives in 3 synced places:** cart Lua · [src/lib/gpio.js](src/lib/gpio.js) · [AGENTS.md](AGENTS.md).
 - **Milestone order:** run cart embedded → prove JS bridge → add cart GPIO →
   real Gemini → harden → more games.
