@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   // The 2.5 family is retired for new API keys (404) and the `-latest` flagship
   // gets 503-stormed on the free tier. 2.0-flash is callable, low-demand, and
   // plenty for tic-tac-toe with the explicit-strategy prompt below.
-  const model = 'gemini-2.0-flash'; // verify the current free model in AI Studio
+  const model = 'gemini-3.1-flash-lite'; // verify the current free model in AI Studio
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   try {
