@@ -53,7 +53,8 @@ export default function Pico8Game({ game }) {
             {
               n: history.length + 1,
               board,
-              move,
+              move, // the cell actually played (may be a validateMove fallback)
+              intended: Number.isInteger(ai?.move) ? ai.move : null, // what the model asked for
               lines: ai?.lines ?? [],
               winMove: ai?.winMove ?? null,
               blockMove: ai?.blockMove ?? null,

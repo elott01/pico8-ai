@@ -63,8 +63,12 @@ export default function TurnPanel({ turns }) {
 }
 
 function TurnCard({ turn, defaultOpen }) {
-  const { n, board, move, lines, winMove, blockMove, commentary, fromModel } = turn;
+  const { n, board, move, intended, lines, winMove, blockMove, commentary, fromModel } = turn;
   const tag = classify(turn);
+  // Why the played cell differs from what the model asked for. `intended` is the cell
+  // it named; if that cell was occupied, we say so — otherwise the call timed out/failed
+  // and there was no model choice at all.
+  const occupied = Number.isInteger(intended) && board[intended] !== 0;
 
   return (
     <div style={{ borderBottom: `1px solid ${C.rule}`, padding: '0.6rem 0.75rem' }}>
@@ -82,7 +86,9 @@ function TurnCard({ turn, defaultOpen }) {
 
       {!fromModel && (
         <p style={{ margin: '0.4rem 0 0', color: C.threat, fontSize: 12 }}>
-          ⚠ Fallback move — the model didn't pick this cell.
+          {occupied
+            ? `⚠ Model chose ${intended} — already taken; played ${move} instead.`
+            : `⚠ No move from the model (timeout/error); played ${move} instead.`}
         </p>
       )}
 
