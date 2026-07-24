@@ -144,7 +144,11 @@ st_idle, st_request, st_thinking, st_ready = 0, 1, 2, 3
 
 -- how long to wait (frames @30fps) on a web move before falling back locally:
 ai_ack_frames = 15   -- ~0.5s: no ack -> assume no page (e.g. desktop pico-8)
-ai_max_frames = 180  -- ~6s: page acked but never answered -> don't hang
+-- must exceed the page's request timeout (getAiTurn ~10s in src/lib/ai.js) so the page
+-- always drives the move (incl. its NO_MOVE fallback) and we can read the played cell
+-- back. if we bail first, the page's answer arrives too late and the panel can't show
+-- what we played. only a truly dead page should ever hit this.
+ai_max_frames = 450  -- ~15s: page acked but never answered -> don't hang
 
 -- publish the board and ask the page for a move.
 function request_web_move()
