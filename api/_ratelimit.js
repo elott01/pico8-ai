@@ -25,7 +25,7 @@ const IP_MAX = 40; // a game is ~5 requests, so ~8 games back-to-back
 
 // Global caps on ACTUAL Gemini calls (not /api/move requests — one request can issue
 // several calls via retries). Env-tunable; check real limits in AI Studio.
-const CALLS_PER_MIN = Number(process.env.GEMINI_MAX_CALLS_PER_MIN) || 12;
+const CALLS_PER_MIN = Number(process.env.GEMINI_MAX_CALLS_PER_MIN) || 2;
 const CALLS_PER_DAY = Number(process.env.GEMINI_MAX_CALLS_PER_DAY) || 800;
 
 // TEMP DIAGNOSTIC — remove in step 8. Shows the caps actually in effect, so we can tell

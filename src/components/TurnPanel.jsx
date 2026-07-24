@@ -65,8 +65,10 @@ export default function TurnPanel({ turns }) {
 
 function TurnCard({ turn, defaultOpen }) {
   const { n, board, move, intended, lines, winMove, blockMove, commentary, fromModel } = turn;
-  const tag = classify(turn);
-  const note = fallbackNote(turn);
+  // WIN/BLOCK is derived from the model's analysis, so only tag a move the model played.
+  const tag = fromModel ? classify(turn) : null;
+  // A note only for turns the model didn't decide (the solver stepped in).
+  const note = fromModel ? null : fallbackNote(turn);
 
   return (
     <div style={{ borderBottom: `1px solid ${C.rule}`, padding: '0.6rem 0.75rem' }}>
@@ -91,6 +93,15 @@ function TurnCard({ turn, defaultOpen }) {
           <summary style={{ cursor: 'pointer', color: C.dim, fontSize: 12 }}>reasoning</summary>
           <Reasoning board={board} move={move} lines={lines} winMove={winMove} blockMove={blockMove} />
         </details>
+      )}
+
+      {/* Solver turns have no line-by-line analysis, but the board still shows WHERE it
+          played — same grid as model turns, minus the reasoning. Skip when the cell is
+          unknown (read-back miss), since there'd be nothing to ring. */}
+      {!fromModel && Number.isInteger(move) && (
+        <div style={{ marginTop: '0.5rem' }}>
+          <MiniBoard board={board} move={move} />
+        </div>
       )}
     </div>
   );
@@ -163,24 +174,29 @@ function Val({ v }) {
   return <span style={{ color: v === null ? C.dim : C.ink }}>{v === null ? 'null' : v}</span>;
 }
 
-// Explains a cell the model didn't choose. Being rate-limited isn't a malfunction, so
-// it reads as a notice rather than an error — a red "something went wrong" would be
-// both alarming and untrue. Returns null when the model really did pick the move.
-function fallbackNote({ move, intended, board, reason, fromModel }) {
-  if (fromModel) return null;
+// Explains a turn the model didn't decide. On these, the cart's built-in minimax played
+// the move (read back from GPIO), so `move` is a real, optimal cell — the note says who
+// played and why they stepped in. Rate-limiting isn't a malfunction, so it reads amber
+// (a notice); genuine failures read red. Returns null when the model itself played.
+function fallbackNote({ move, intended, board, reason }) {
+  const played = Number.isInteger(move) ? `played ${move}` : 'played';
+  const solver = `built-in solver ${played}`;
 
   if (reason === 'rate-limited') {
-    return { color: C.notice, text: `⏳ Demo rate limit reached — the AI is resting. Played ${move}.` };
-  }
-  // An occupied `intended` means the model answered but named a taken cell, which is a
-  // different story from never answering at all.
-  if (Number.isInteger(intended) && board[intended] !== 0) {
-    return { color: C.threat, text: `⚠ Model chose ${intended} — already taken; played ${move} instead.` };
+    return { color: C.notice, text: `⏳ Demo rate limit reached — ${solver}.` };
   }
   if (reason === 'timeout') {
-    return { color: C.threat, text: `⚠ Model timed out; played ${move} instead.` };
+    return { color: C.threat, text: `⚠ Model timed out — ${solver}.` };
   }
-  return { color: C.threat, text: `⚠ Model unavailable; played ${move} instead.` };
+  if (reason === 'error') {
+    return { color: C.threat, text: `⚠ Model unavailable — ${solver}.` };
+  }
+  // reason is null but this isn't a model turn: the model answered with an unusable move
+  // (e.g. an occupied cell) and the solver took over.
+  if (Number.isInteger(intended) && board[intended] !== 0) {
+    return { color: C.threat, text: `⚠ Model chose ${intended} (already taken) — ${solver}.` };
+  }
+  return { color: C.threat, text: `⚠ Model move rejected — ${solver}.` };
 }
 
 // Why this cell: the model took its win, covered a threat, or just played position.
