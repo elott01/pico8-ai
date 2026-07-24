@@ -11,9 +11,17 @@
 // If this is raised again, update the abort threshold noted in api/move.js.
 //
 // Resolves to the model's full turn payload so the UI can show its work:
-//   { move, winMove, blockMove, lines, commentary }
+//   { move, winMove, blockMove, lines, commentary, reason }
 // `move` is the only field the game needs; the rest is display-only and may be
 // absent (e.g. the no-key fallback path returns a bare move).
+//
+// ALWAYS resolves to an object, never null, and `reason` says why there's no move:
+//   null           — success, the model chose
+//   'rate-limited' — 429; retryAfter (seconds) says how long to back off
+//   'timeout'      — we aborted first
+//   'error'        — network failure or a non-OK response
+// These must stay distinguishable: a rate-limited player needs to be told that, not
+// shown a random move that makes a working AI look broken.
 export async function getAiTurn(board, timeoutMs = 10000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -24,14 +32,27 @@ export async function getAiTurn(board, timeoutMs = 10000) {
       body: JSON.stringify({ board }),
       signal: ctrl.signal,
     });
-    return await r.json();
+
+    if (r.status === 429) {
+      const body = await r.json().catch(() => ({}));
+      const header = Number(r.headers.get('Retry-After'));
+      return {
+        move: null,
+        reason: 'rate-limited',
+        retryAfter: Number(body.retryAfter) || header || 60,
+      };
+    }
+    if (!r.ok) return { move: null, reason: 'error' };
+
+    return { ...(await r.json()), reason: null };
   } catch (e) {
     // TEMP DIAGNOSTIC — distinguishes "we gave up waiting" from a real network
     // failure. A timeout here alongside a 200 in the server log means the model
     // answered fine and we just weren't patient enough.
-    if (e.name === 'AbortError') console.warn(`[ai] timed out after ${timeoutMs}ms — falling back`);
+    const timedOut = e.name === 'AbortError';
+    if (timedOut) console.warn(`[ai] timed out after ${timeoutMs}ms — falling back`);
     else console.warn('[ai] request failed — falling back:', e.message);
-    return null;
+    return { move: null, reason: timedOut ? 'timeout' : 'error' };
   } finally {
     clearTimeout(t);
   }

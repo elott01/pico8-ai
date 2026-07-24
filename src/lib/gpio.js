@@ -18,10 +18,22 @@ export const ST_READY = 3;
 // Byte layout for tic-tac-toe:
 //   0      status (above)
 //   1..9   board cells: 0 empty, 1 human, 2 AI
-//   10     AI's chosen cell, 0-based (0..8) — the cart adds 1 to index its 1..9 board
+//   10     move cell, 0-based (0..8) — the cart adds 1 to index its 1..9 board.
+//          Dual meaning across the handshake:
+//            • JS writes it before READY: the move to play, or NO_MOVE when the page
+//              has none (rate-limited/timeout/error) so the cart plays its own minimax.
+//            • The cart overwrites it with the cell it ACTUALLY played, then returns
+//              status to idle — so after the handshake JS can read back the real move
+//              (needed to show fallback turns in the panel).
 export const IDX_STATUS = 0;
 export const IDX_BOARD = 1; // board occupies bytes 1..9
 export const IDX_MOVE = 10;
+
+// Sentinel written to IDX_MOVE when the page has no move for the cart to play. Any value
+// outside 0..8 trips the cart's "garbage → local minimax" recovery; 255 is the max byte
+// value, unmistakably not a cell index. Requires the cart's write-back change (step 2 of
+// cart-fallback-plan.md) to be re-exported before the read-back half works.
+export const NO_MOVE = 255;
 
 // Read the 9 board cells out of a gpio array into a plain [0..8] board that
 // api/move.js and ai.js understand (0 empty, 1 human, 2 AI).

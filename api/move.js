@@ -2,6 +2,8 @@
 // Runs on Vercel's Node runtime (see engines.node in package.json). Vercel
 // auto-parses JSON request bodies, so req.body is already an object here.
 
+import { checkRateLimit, reserveGeminiCall, QuotaError } from './_ratelimit.js';
+
 // Mirrors the getAiTurn timeout in src/lib/ai.js. Diagnostic only — nothing here
 // enforces it; it just flags answers that finished after the client stopped waiting.
 const CLIENT_ABORT_MS = 10000;
@@ -9,10 +11,22 @@ const CLIENT_ABORT_MS = 10000;
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
-  // TODO(phase-9): rate limit per IP (in-memory or Vercel KV) before this URL
-  // goes public — on trip, return { move: null } so the client falls back to a
-  // local move. Pair with a local minimax fallback so Gemini is an enhancement,
-  // not a dependency. See build plan Phase 9.
+  // Only this app's own page calls /api/move, so anything else is a script.
+  if (!isSameOrigin(req)) return res.status(403).json({ error: 'forbidden' });
+
+  // Per-IP limit. 429 (not a silent fallback) so the UI can say "rate limited"
+  // rather than playing a random cell that looks like a broken AI.
+  const limit = await checkRateLimit(req);
+  // TEMP DIAGNOSTIC — confirms KV is wired. 'kv' = durable shared store; 'mem' = the
+  // in-memory fallback (KV env missing or unreachable). Remove in step 8.
+  console.log('[move] ratelimit store:', limit.store);
+  if (limit.limited) {
+    res.setHeader('Retry-After', String(limit.retryAfter));
+    return res.status(429).json({ move: null, rateLimited: true, retryAfter: limit.retryAfter });
+  }
+
+  // The global Gemini-call cap is enforced deeper, in reserveGeminiCall() — it counts
+  // real API calls (including retries) rather than requests. See rate-limiting-plan.md.
 
   const { board } = req.body ?? {};
 
@@ -35,7 +49,11 @@ export default async function handler(req, res) {
     // Retry ONCE, echoing the mistake back — cheaper and more honest than silently
     // overriding it, and it keeps `lines`/commentary consistent with the final move.
     // This is the Step 6 illegal-move guard.
-    if (!isLegalMove(parsed.move, board)) {
+    //
+    // Only when it actually NAMED a cell and got it wrong. If there's no move at all
+    // (503 storm, unparseable response), "that cell was illegal" is a nonsense
+    // correction and just doubles the load on an API that's already failing.
+    if (Number.isInteger(parsed.move) && !isLegalMove(parsed.move, board)) {
       console.log(`[move] illegal move ${parsed.move}; retrying with correction`);
       const correction =
         `Cell ${parsed.move} is NOT empty. You may only play one of these cells: ` +
@@ -58,6 +76,12 @@ export default async function handler(req, res) {
       commentary: parsed.commentary ?? null,
     });
   } catch (e) {
+    // Quota exhaustion is a rate limit, not a failure — surface it as 429 so the UI
+    // says "rate limited" instead of quietly playing a random cell.
+    if (e instanceof QuotaError) {
+      res.setHeader('Retry-After', String(e.retryAfter));
+      return res.status(429).json({ move: null, rateLimited: true, retryAfter: e.retryAfter });
+    }
     // Let the client fall back to a local legal move rather than erroring out.
     console.log('[move] gemini call FAILED, falling back to null:', e.message);
     return res.status(200).json({ move: null });
@@ -76,6 +100,7 @@ async function askGemini(board, correction) {
   const started = Date.now();
   let r, data;
   for (let attempt = 0; attempt < 3; attempt++) {
+    await reserveGeminiCall(); // throws QuotaError -> 429; counts retries, not just requests
     r = await fetch(GEMINI_URL, {
       method: 'POST',
       headers: {
@@ -107,6 +132,31 @@ async function askGemini(board, correction) {
   } catch {
     console.log('[move] unparseable response body:', JSON.stringify(data));
     throw new Error('could not parse model response');
+  }
+}
+
+// Reject requests that didn't come from this app's own page. Comparing the Origin's
+// host against the request's own Host means this works unchanged on localhost, preview
+// deployments, and any custom domain — no allowlist to keep in sync.
+//
+// Browsers always send Origin on POST (even same-origin), so a missing Origin means a
+// non-browser client: curl, a script, someone else's page. Those are exactly what this
+// is meant to turn away.
+//
+// This is a speed bump, NOT security — Origin is trivially forged outside a browser.
+// It cheaply stops drive-by scripts; the rate limits in rate-limiting-plan.md are the
+// real control over quota abuse.
+function isSameOrigin(req) {
+  const origin = req.headers?.origin;
+  if (!origin) return false;
+
+  // x-forwarded-host is what the user actually hit when a proxy is in front (Vercel);
+  // host is the direct value. Accept a match on either.
+  const hosts = [req.headers['x-forwarded-host'], req.headers.host].filter(Boolean);
+  try {
+    return hosts.includes(new URL(origin).host);
+  } catch {
+    return false; // malformed Origin header
   }
 }
 

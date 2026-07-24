@@ -12,6 +12,7 @@ const C = {
   dim: '#5f6b8a',
   win: '#00a03a',
   threat: '#ff004d',
+  notice: '#b07000', // amber: expected condition, not a failure
   rule: '#dfe3ec',
   panel: '#fbfcfe',
 };
@@ -65,10 +66,7 @@ export default function TurnPanel({ turns }) {
 function TurnCard({ turn, defaultOpen }) {
   const { n, board, move, intended, lines, winMove, blockMove, commentary, fromModel } = turn;
   const tag = classify(turn);
-  // Why the played cell differs from what the model asked for. `intended` is the cell
-  // it named; if that cell was occupied, we say so — otherwise the call timed out/failed
-  // and there was no model choice at all.
-  const occupied = Number.isInteger(intended) && board[intended] !== 0;
+  const note = fallbackNote(turn);
 
   return (
     <div style={{ borderBottom: `1px solid ${C.rule}`, padding: '0.6rem 0.75rem' }}>
@@ -84,12 +82,8 @@ function TurnCard({ turn, defaultOpen }) {
         <p style={{ margin: '0.4rem 0 0', fontStyle: 'italic' }}>“{commentary}”</p>
       )}
 
-      {!fromModel && (
-        <p style={{ margin: '0.4rem 0 0', color: C.threat, fontSize: 12 }}>
-          {occupied
-            ? `⚠ Model chose ${intended} — already taken; played ${move} instead.`
-            : `⚠ No move from the model (timeout/error); played ${move} instead.`}
-        </p>
+      {note && (
+        <p style={{ margin: '0.4rem 0 0', color: note.color, fontSize: 12 }}>{note.text}</p>
       )}
 
       {fromModel && lines?.length > 0 && (
@@ -167,6 +161,26 @@ function Tag({ text, color }) {
 
 function Val({ v }) {
   return <span style={{ color: v === null ? C.dim : C.ink }}>{v === null ? 'null' : v}</span>;
+}
+
+// Explains a cell the model didn't choose. Being rate-limited isn't a malfunction, so
+// it reads as a notice rather than an error — a red "something went wrong" would be
+// both alarming and untrue. Returns null when the model really did pick the move.
+function fallbackNote({ move, intended, board, reason, fromModel }) {
+  if (fromModel) return null;
+
+  if (reason === 'rate-limited') {
+    return { color: C.notice, text: `⏳ Demo rate limit reached — the AI is resting. Played ${move}.` };
+  }
+  // An occupied `intended` means the model answered but named a taken cell, which is a
+  // different story from never answering at all.
+  if (Number.isInteger(intended) && board[intended] !== 0) {
+    return { color: C.threat, text: `⚠ Model chose ${intended} — already taken; played ${move} instead.` };
+  }
+  if (reason === 'timeout') {
+    return { color: C.threat, text: `⚠ Model timed out; played ${move} instead.` };
+  }
+  return { color: C.threat, text: `⚠ Model unavailable; played ${move} instead.` };
 }
 
 // Why this cell: the model took its win, covered a threat, or just played position.
