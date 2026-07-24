@@ -1,7 +1,7 @@
 pico-8 cartridge // http://www.pico-8.com
 version 43
 __lua__
--- two-player tic-tac-toe
+-- tic-tac-toe -- defaults to vs cpu; pause menu toggles 2-player
 -- by ethan lott
 
 -- game state
@@ -28,8 +28,8 @@ end
 
 function _init()
     scores = {0, 0} -- scores[1]=player x wins, scores[2]=player o wins
-    p2_is_ai = false        -- false = 2 players, true = player 2 is the cpu
-    set_mode(false)         -- registers the pause-menu toggle
+    p2_is_ai = true         -- false = 2 players, true = player 2 is the cpu (default)
+    set_mode(true)          -- registers the pause-menu toggle
     reset()
 end
 
@@ -133,7 +133,10 @@ end
 -- the web export mirrors these 128 bytes to a js array the page can read/write.
 --   byte 0     status: 0 idle · 1 request · 2 thinking · 3 ready
 --   bytes 1..9 board cells (0 empty, 1 human, 2 ai) -- same coding as `board`
---   byte 10    the ai's chosen cell, 0-based (0..8); we add 1 to index board
+--   byte 10    move cell, 0-based (0..8); we add 1 to index board.
+--              page WRITES it before ready: the move to play, or a value >8 (no move)
+--              meaning "play your own minimax". we OVERWRITE it with the cell actually
+--              played before going idle, so the page can read the real move back.
 gpio = 0x5f80
 gp_status = 0
 gp_move = 10
@@ -179,7 +182,8 @@ function update_ai()
     end
 
     if cell then
-        poke(gpio+gp_status, st_idle)          -- release the bridge
+        poke(gpio+gp_move, cell-1)             -- publish the cell we ACTUALLY played
+        poke(gpio+gp_status, st_idle)          -- release the bridge; page reads it back
         ai_state = "idle"
         place(cell)
     end
