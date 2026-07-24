@@ -27,6 +27,7 @@ export default function Pico8Game({ game }) {
   // we answer via /api/move and write the move (byte 10) + set byte 0 = READY.
   useEffect(() => {
     let busy = false; // one request in flight at a time (getAiTurn is async)
+    let pausedUntil = 0; // epoch ms; while in the future we're rate-limited and skip the API
     const id = setInterval(async () => {
       const gpio = iframeRef.current?.contentWindow?.pico8_gpio;
       if (!gpio || busy || gpio[IDX_STATUS] !== ST_REQUEST) return;
@@ -35,7 +36,22 @@ export default function Pico8Game({ game }) {
       gpio[IDX_STATUS] = ST_THINKING; // ack synchronously so the cart stops re-requesting
       try {
         const board = readBoard(gpio);
-        const ai = await getAiTurn(board); // null if the call failed/timed out
+
+        // While rate-limited, don't call the API at all — it would only 429 again. We
+        // still answer the cart so the game never hangs; the panel explains why the
+        // move isn't the model's.
+        let ai;
+        if (Date.now() < pausedUntil) {
+          ai = { move: null, reason: 'rate-limited' };
+        } else {
+          ai = await getAiTurn(board);
+          if (ai.reason === 'rate-limited') {
+            // Honour Retry-After, clamped so a bad value can't wedge the game.
+            const wait = Math.min(Math.max(ai.retryAfter ?? 60, 5), 15 * 60);
+            pausedUntil = Date.now() + wait * 1000;
+          }
+        }
+
         const move = validateMove(ai?.move, board); // legal cell 0..8, or null if full
         gpio[IDX_MOVE] = move ?? 0;
         gpio[IDX_STATUS] = ST_READY;
@@ -59,6 +75,7 @@ export default function Pico8Game({ game }) {
               winMove: ai?.winMove ?? null,
               blockMove: ai?.blockMove ?? null,
               commentary: ai?.commentary ?? null,
+              reason: ai?.reason ?? null, // why there's no model move, if there isn't one
               fromModel: Number.isInteger(ai?.move) && ai.move === move,
             },
           ];
