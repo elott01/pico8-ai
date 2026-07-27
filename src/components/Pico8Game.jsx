@@ -159,15 +159,9 @@ async function readCartPlayedMove(gpio, timeoutMs = 3500) {
     // a normal turn still returns within a frame or two.
     if (gpio[IDX_STATUS] === ST_IDLE) {
       const cell = gpio[IDX_MOVE];
-      if (cell >= 0 && cell <= 8) {
-        console.log(`[game] read-back: cell ${cell} after ${Date.now() - start}ms`); // TEMP
-        return cell;
-      }
+      if (cell >= 0 && cell <= 8) return cell;
     }
     await sleep(16); // ~1 frame at 60fps
   }
-  // TEMP DIAGNOSTIC (browser console) — if this still fires, paste it: the status/byte10
-  // pin down whether the cart never idled or left byte 10 unwritten.
-  console.log(`[game] read-back: TIMED OUT ${timeoutMs}ms, status=${gpio[IDX_STATUS]}, byte10=${gpio[IDX_MOVE]}`);
-  return null;
+  return null; // cart never returned a valid cell in time (rare); panel shows no cell
 }

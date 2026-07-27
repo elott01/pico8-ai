@@ -4,9 +4,31 @@ Gemini meets PICO-8 — turn-based PICO-8 games embedded in a React app, playing
 against a Gemini-powered AI opponent. One Vercel deploy: a static Vite/React
 frontend plus a serverless proxy (`api/move.js`) that holds the API key.
 
-- **Build plan:** [pico8-gemini-build-plan.md](pico8-gemini-build-plan.md) (concept/architecture)
-- **Step-by-step:** [webapp-build-steps.md](webapp-build-steps.md) (ordered checklist)
-- **Contributor notes:** [AGENTS.md](AGENTS.md)
+## Architecture
+
+One Vercel project: static frontend + serverless proxy sharing an origin (no CORS, one
+URL). The Gemini key lives only in the function's environment, never in the browser.
+
+```
+┌───────────────────── Vercel (one project, one origin) ─────────────────────┐
+│  Browser                                                                    │
+│  ┌───────────────────────────┐        ┌────────────────────────┐           │
+│  │  React app (static)       │  fetch │  /api/move             │   HTTPS    │
+│  │  ┌─────────────────────┐  │ ─────► │  serverless function   │ ─────► Gemini
+│  │  │ PICO-8 web player   │  │        │  (holds API key)       │ ◄───── API │
+│  │  │  cart ⇄ pico8_gpio  │  │ ◄───── │  returns move+reasoning│           │
+│  │  └─────────────────────┘  │  JSON  └────────────────────────┘           │
+│  │    ▲ poll + read/write    │                                             │
+│  │    │ (JS glue)            │                                             │
+│  └────┴──────────────────────┘                                             │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+**The core trick:** a PICO-8 cart can't make network calls. It talks to the page through
+its GPIO memory (128 bytes at `0x5f80`–`0x5fff`), which the web export mirrors to a JS
+array (`pico8_gpio`). The cart pokes/peeks; the JS reads/writes the same array and does the
+networking. The cart is embedded via an iframe, so that array lives on the iframe's
+same-origin `contentWindow`. Detailed build steps: [webapp-build-steps.md](webapp-build-steps.md).
 
 ## Prerequisites
 
@@ -65,3 +87,20 @@ vercel.json              currently empty {} — see note below
 > it intercepts Vite's dev modules (`/src/main.jsx`, `/@vite/client`) and returns
 > HTML for them. Restore a **dev-safe** rewrite only when client-side routing is
 > added; see [webapp-build-steps.md](webapp-build-steps.md).
+
+## Roadmap
+
+The point of this project is that an **LLM** plays — not a solver. Tic-tac-toe is a
+solved game, so a minimax opponent would be trivial and beside the point; it's used only
+as an offline *availability* fallback, never as the player. That framing drives what's next.
+
+- **Perception layer.** Small models are poor at a game's *arithmetic* (scanning lines,
+  counting) but good at *judgement* once the facts are laid out. The plan is to have code
+  compute the salient facts of a position (legal moves, threats) and let the LLM weigh
+  them and decide — giving it eyes, not a strategy. It stays the player.
+- **More carts.** Each PICO-8 game ships a small feature-extractor over a shared contract,
+  so the pipeline is written once. Future games have no optimal algorithm to fall back on,
+  which is exactly why the LLM genuinely has to play them.
+- **Close the fork gap.** The current `win → block → center → corner` heuristic has no
+  concept of a move creating two threats at once, so the AI still loses to the
+  opposite-corner trap — the first thing the perception layer should fix.

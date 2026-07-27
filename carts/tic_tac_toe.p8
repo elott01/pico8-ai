@@ -129,7 +129,7 @@ function best_move(b, me)
     return bestcell
 end
 
--- gpio bridge to the web page (see src/lib/gpio.js + AGENTS.md).
+-- gpio bridge to the web page (see src/lib/gpio.js).
 -- the web export mirrors these 128 bytes to a js array the page can read/write.
 --   byte 0     status: 0 idle · 1 request · 2 thinking · 3 ready
 --   bytes 1..9 board cells (0 empty, 1 human, 2 ai) -- same coding as `board`
