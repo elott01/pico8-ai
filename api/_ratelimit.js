@@ -25,12 +25,8 @@ const IP_MAX = 40; // a game is ~5 requests, so ~8 games back-to-back
 
 // Global caps on ACTUAL Gemini calls (not /api/move requests — one request can issue
 // several calls via retries). Env-tunable; check real limits in AI Studio.
-const CALLS_PER_MIN = Number(process.env.GEMINI_MAX_CALLS_PER_MIN) || 2;
+const CALLS_PER_MIN = Number(process.env.GEMINI_MAX_CALLS_PER_MIN) || 12;
 const CALLS_PER_DAY = Number(process.env.GEMINI_MAX_CALLS_PER_DAY) || 800;
-
-// TEMP DIAGNOSTIC — remove in step 8. Shows the caps actually in effect, so we can tell
-// whether a .env.local override loaded or fell back to the defaults.
-console.log(`[ratelimit] caps in effect: ${CALLS_PER_MIN}/min ${CALLS_PER_DAY}/day`);
 
 export class QuotaError extends Error {
   constructor(retryAfter) {
@@ -55,8 +51,6 @@ export async function checkRateLimit(req, now = Date.now()) {
 // window is full. Async because the store may be remote.
 export async function reserveGeminiCall(now = Date.now()) {
   const minute = await hitWindow('rl:gl:min', 'all', 60, CALLS_PER_MIN, now);
-  // TEMP DIAGNOSTIC — remove in step 8. Shows the count climbing (or not) per call.
-  console.log(`[ratelimit] gemini call ${minute.count}/${CALLS_PER_MIN} this minute (${minute.store})`);
   if (minute.count > CALLS_PER_MIN) {
     console.log(`[ratelimit] global cap: ${minute.count}/${CALLS_PER_MIN} calls this minute (${minute.store})`);
     throw new QuotaError(minute.retryAfter);

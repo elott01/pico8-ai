@@ -1,8 +1,7 @@
 # Web App — Step-by-Step Build
 
-Concrete, repo-specific steps for building the web app in **this** repo. The
-conceptual/architecture reference is [pico8-gemini-build-plan.md](pico8-gemini-build-plan.md);
-this file is the ordered "what do I actually do next" checklist.
+Concrete, repo-specific steps for building the web app in **this** repo — the ordered
+"what do I actually do next" checklist. Architecture overview is in [README.md](README.md).
 
 **Where we're starting:** Phase 3 scaffolding is already committed. The React
 app, GPIO helpers, the `/api/move` proxy (with a hardcoded-move fallback), and
@@ -19,9 +18,9 @@ AI yet.
 
 ## Step 0 — One-time local setup
 
-- [ ] `npm install` (if `node_modules` is stale).
-- [ ] `npm i -g vercel` if you don't have it.
-- [ ] `cp .env.example .env.local` — leave `GEMINI_API_KEY` **blank** for now.
+- [x] `npm install` (if `node_modules` is stale).
+- [x] `npm i -g vercel` if you don't have it.
+- [x] `cp .env.example .env.local` — leave `GEMINI_API_KEY` **blank** for now.
       With no key, [api/move.js](api/move.js) returns a legal move, so the whole
       loop works before you ever touch Gemini.
 
@@ -85,7 +84,7 @@ each cart, so the multi-game menu (Step 9) can just swap the iframe `src`.
 The page's half now lives in [Pico8Game.jsx](src/components/Pico8Game.jsx): a
 `setInterval` reads `iframeRef.current.contentWindow.pico8_gpio`, and on
 `status == REQUEST` it acks (→ THINKING), reads the board via
-[readBoard](src/lib/gpio.js), calls [getAiMove](src/lib/ai.js) →
+[readBoard](src/lib/gpio.js), calls [getAiTurn](src/lib/ai.js) →
 [api/move.js](api/move.js), then writes the move (byte 10) and sets `status = READY`.
 
 - [x] JS poll loop wired against the iframe's GPIO array.
@@ -104,9 +103,9 @@ setTimeout(() => console.log('status', g[0], 'move', g[10]), 500); // -> 3, a le
 
 ## Step 3 — Lock the GPIO protocol (source of truth)
 
-The protocol table lives in **three** places that must agree: the cart's Lua,
-[src/lib/gpio.js](src/lib/gpio.js), and [AGENTS.md](AGENTS.md). Pick the layout
-now so the cart edit in Step 4 targets the right bytes.
+The protocol table lives in **two** places that must agree: the cart's Lua and
+[src/lib/gpio.js](src/lib/gpio.js). Pick the layout now so the cart edit in Step 4
+targets the right bytes.
 
 Current agreed layout (tic-tac-toe):
 
@@ -116,11 +115,16 @@ Current agreed layout (tic-tac-toe):
 | `1..9`  | Board cells: `0` empty, `1` human, `2` AI              | cart       |
 | `10`    | AI's chosen move (0..8)                                 | JS         |
 
-> AGENTS.md also reserves bytes `11..` for optional AI "dialogue"/trash-talk.
-> That's a later enhancement — ignore it until the basic move loop works.
+> Bytes `11..` are reserved for optional AI "dialogue"/trash-talk. That ended up
+> travelling over the `/api/move` JSON response instead (see Step 5b), so the
+> reservation is currently unused.
 
-- [ ] Decide if you're keeping it minimal (bytes 0–10) for the first pass. If so,
+- [x] Decide if you're keeping it minimal (bytes 0–10) for the first pass. If so,
       no code change needed here — the stubs already match.
+
+**✅ Done — kept minimal (bytes 0–10); no code change needed.** The AI's
+trash-talk ended up travelling over the `/api/move` JSON response instead of the
+reserved GPIO bytes `11..` (see Step 5b), so that reservation is still unused.
 
 ---
 
@@ -171,58 +175,171 @@ bridge rather than the cart's fallback.
 
 ## Step 5 — Swap the fallback for real Gemini
 
-- [ ] Get a **Gemini API key** from Google AI Studio (free tier, Flash-class).
-- [ ] Put it in `.env.local`: `GEMINI_API_KEY=...` (never commit — it's gitignored).
-- [ ] Verify the free model name in AI Studio and update `model` in
-      [api/move.js](api/move.js#L24) if `gemini-2.5-flash` isn't current/free.
-- [ ] Restart `vercel dev`. Now [api/move.js](api/move.js) takes the real branch
+- [x] Get a **Gemini API key** from Google AI Studio (free tier, Flash-class).
+- [x] Put it in `.env.local`: `GEMINI_API_KEY=...` (never commit — it's gitignored).
+- [x] Verify the free model name in AI Studio and update `MODEL` in
+      [api/move.js](api/move.js). Now `gemini-3.1-flash-lite`.
+- [x] Restart `vercel dev`. Now [api/move.js](api/move.js) takes the real branch
       (it only falls back when the key is missing).
-- [ ] Play again — the opponent should now play like Gemini, not first-empty-cell.
+- [x] Play again — the opponent should now play like Gemini, not first-empty-cell.
 
 **Done when:** moves come from Gemini, and the game is still fully playable.
+
+**✅ Done — Gemini plays the moves.** (Confirmed 2026-07-19.)
+
+### Gotchas worth keeping
+
+**Model availability, not code, was most of the fight.** `ListModels` lists models
+your key cannot actually call: the whole `2.5` family is retired for new keys and
+404s on `generateContent` despite appearing in the list. `gemini-flash-latest`
+resolves to the flagship and gets 503-stormed on the free tier. `gemini-3.1-flash-lite`
+is callable, fast, and low-demand. **Env vars and `api/` code are read only at boot —
+fully restart `vercel dev` after touching either.**
+
+**Symptom decoder** (which layer produced the move):
+
+| What you see | Where it came from |
+|---|---|
+| Always the first empty cell | No-key branch — `firstLegal()` in [api/move.js](api/move.js) |
+| A random legal cell | Gemini returned null/illegal → `validateMove` fallback in [src/lib/ai.js](src/lib/ai.js) |
+| Blocks and takes wins | Real Gemini |
+
+### Prompt design (why it looks the way it does)
+
+Getting a flash-lite model to play soundly took three rounds, and the shape of
+[buildPrompt](api/move.js) is the result. The one technique that worked every time:
+**when the model fumbles a derivation, make that derivation an explicit output field**
+rather than something it computes in its head.
+
+1. **Room to think.** The original prompt demanded bare `{"move": N}`, forcing the
+   entire scan → count → prioritise chain into the first generated token. Adding a
+   reasoning field (and `temperature` `0.6` → `0.1`) fixed most bad play immediately.
+2. **Counting as a field.** It would write `[1,4,7]: 0,2,2` and still conclude "no
+   line has two 2s," missing wins. Emitting per-line `twos`/`ones`/`emptyCells`, then
+   `winMove`/`blockMove` as separate fields, fixed win detection.
+3. **Legality as a field.** It played the center while the center was occupied —
+   having correctly listed that line's `emptyCells` moments earlier. Emitting
+   `legalCells` and choosing *from that list* addressed it, backed by a server-side
+   retry (Step 6).
+
+**Key-order is load-bearing.** JSON keys generate in order, so each field is
+conditioned on the ones above it. `commentary` sits **last**, after `move`, so flavor
+text can never steer the game. Don't reorder these keys.
+
+**Known gap: forks.** The `win → block → center → corner` priority has no concept of
+a move creating *two* threats at once, so the AI still loses to the opposite-corner
+trap. Not a perception failure — its counting is correct; the strategy itself is
+incomplete. See the Roadmap in [README.md](README.md).
+
+---
+
+## Step 5b — Show the model's work (reasoning panel)
+
+Not in the original plan; built after Step 5. Makes it evident a real LLM is playing
+rather than a hidden algorithm — the most portfolio-relevant piece of the app.
+
+- [x] `/api/move` returns the model's full analysis, not just a move:
+      `{ move, winMove, blockMove, lines, commentary }`.
+- [x] `getAiMove` → **`getAiTurn`** in [src/lib/ai.js](src/lib/ai.js), returning the
+      whole payload (renamed because it no longer returns a move).
+- [x] [Pico8Game.jsx](src/components/Pico8Game.jsx) keeps a per-game turn history,
+      reset when the board's filled-cell count drops (i.e. a new game started).
+- [x] [TurnPanel.jsx](src/components/TurnPanel.jsx) renders one card per turn beside
+      the cart: commentary, a WIN/BLOCK tag, and collapsible reasoning with a mini
+      board and the decision-relevant lines.
+
+**Honesty rules baked in** — the panel exists to prove the LLM is really choosing, so
+it must never imply more than it can support:
+
+- Cards store the cell **actually played** plus the model's **intended** cell. When
+  they differ, the card says so (`"Model chose 4 — already taken; played 5 instead"`).
+- Reasoning is hidden on fallback turns — showing the model's analysis next to a move
+  it didn't make would undercut the whole point.
+- Commentary is generated *after* `move`, so it narrates a decision already made. It's
+  flavor, not cause; the structured reasoning is the real record.
 
 ---
 
 ## Step 6 — Robustness (already partly stubbed — verify it holds)
 
-The stubs already include validation, timeout, and graceful failure. Confirm
-each actually works:
+The stubs already include validation, timeout, and graceful failure. Two of the
+three got verified **in real play** rather than by forced testing:
 
-- [ ] **Illegal-move guard:** [validateMove](src/lib/ai.js) replaces any illegal
-      / non-integer move with a random legal cell. Force it by temporarily
-      returning a garbage move from the proxy and confirm the game doesn't break.
-- [ ] **Timeout:** [getAiMove](src/lib/ai.js) aborts after 5s → `null` → fallback.
-      Test with the network throttled.
+- [x] **Illegal-move guard** — verified in the wild: the model returned cell `4`
+      while `4` was occupied. Two layers now:
+      1. **Server** ([api/move.js](api/move.js)) checks legality and retries **once**,
+         echoing the mistake back (`"Cell 4 is NOT empty. You may only play …"`).
+      2. **Client** ([validateMove](src/lib/ai.js)) substitutes a random legal cell if
+         an illegal move still gets through.
+      An occasional `illegal move N; retrying with correction` in the server log is
+      the guard working. The red panel warning means it whiffed *twice*.
+- [x] **Timeout** — verified in the wild, and the original 5s was too tight: turns
+      generate 8 line objects plus commentary before the response completes, so valid
+      answers were being discarded (200 in the server log, random cell on screen).
+      Now **10s** in [getAiTurn](src/lib/ai.js), mirrored by `CLIENT_ABORT_MS` in
+      [api/move.js](api/move.js), which flags any generation finishing past it.
+      **Keep those two in sync.**
 - [ ] **Bad key / quota:** set a bogus key; [api/move.js](api/move.js) `catch`
       returns `{ move: null }`, client falls back. Confirm the game stays playable.
+      *(Untested deliberately — it lands in the same `{ move: null }` path the
+      timeouts already exercised. Transient 503/429 retry is separately confirmed
+      working.)*
 
 **Done when:** killing the network or using a bad key never hard-stops the game.
+
+> Belt and braces: per Step 4 the **cart itself** falls back to local minimax if the
+> page stalls (~6s), so the game stays playable even with the whole web layer dead.
 
 ---
 
 ## Step 7 — Deploy
 
+> ⚠️ **Do Step 8 first if the URL is going straight to recruiters.** These steps were
+> written assuming deploy-then-harden with a quiet gap between. Sharing the link
+> immediately closes that gap: an unlimited public `/api/move` can be drained by one
+> bored visitor, and the next person to open the demo gets random fallback moves.
+
 - [ ] Commit and push. Import the repo in Vercel (auto-build), or `vercel --prod`.
-- [ ] Set `GEMINI_API_KEY` in **Vercel → Project → Settings → Environment
-      Variables** for the **Production** environment (the local `.env.local`
-      doesn't ship).
+- [ ] Set these in **Vercel → Settings → Environment Variables** for **Production**
+      (local `.env.local` doesn't ship): `GEMINI_API_KEY`, and the KV creds
+      `KV_REST_API_URL` / `KV_REST_API_TOKEN`. The Upstash/KV Marketplace link usually
+      adds the KV vars to all envs — confirm Production has them, or the rate limiter
+      silently runs on the per-request in-memory fallback (i.e. no real global cap).
 - [ ] Smoke-test the live URL on desktop **and** mobile (touch input).
+- [ ] **Verify rate limiting live** (only checkable against a deployed URL):
+      - A few normal games → zero 429s.
+      - Abuse loop from one browser (`while(true) fetch('/api/move', …)`) → 429s begin
+        and Gemini calls stop.
+      - **Cross-instance / cold-start:** trip the cap, then hit it again after a cold
+        start — still limited. This is what proves KV is doing its job (an in-memory
+        limiter couldn't survive the reload).
+      - *(optional)* point `KV_REST_API_URL` at a bad host → game stays playable
+        (fail-open; already unit-tested, so belt-and-suspenders).
 
 ---
 
-## Step 8 — Harden (before sharing publicly)
+## Step 8 — Harden (before sharing publicly) ✅
 
-The key is safe server-side, but the public `/api/move` endpoint can still burn
-your shared project quota (free tier ≈ 10–15 req/min, per project).
+The public `/api/move` endpoint can burn the shared free-tier quota (≈ 10–15 req/min,
+per project), so it's rate-limited. Implemented in [api/_ratelimit.js](api/_ratelimit.js):
 
-- [ ] Rate-limit `/api/move` per IP (there's a `TODO(phase-9)` marker already in
-      [api/move.js](api/move.js#L9-L12)). On trip → `{ move: null }` so the
-      client falls back.
-- [ ] On Gemini 429/quota errors, return `{ move: null }` (don't error).
-- [ ] Consider a **local minimax fallback** for tic-tac-toe so the game is fully
-      playable even when Gemini is down — turns the LLM into an enhancement, not
-      a dependency.
-- [ ] Note: free-tier prompts may be used for training — fine for a game board.
+- [x] **Origin check** — rejects requests that didn't come from this app's own page
+      (a speed bump, not security; missing `Origin` = a non-browser client).
+- [x] **Per-IP limit** (40 / 10 min) and a **global cap on actual Gemini calls**
+      (default 12/min, 800/day; env-tunable). The global cap counts *calls including
+      retries*, not requests — one request can issue several. On trip → **429** with
+      `Retry-After` (not a silent `{move:null}`), so the UI shows a rate-limit notice
+      instead of a random move that looks broken.
+- [x] **Durable, shared state** via Vercel KV / Upstash (REST, no dep). Counters live in
+      the store so they survive the per-request module reload that `vercel dev` and cold
+      starts cause. **Fail-open:** any KV error degrades to in-memory, never a broken game.
+- [x] **Availability fallback** — the cart plays its own minimax when Gemini is
+      unavailable (rate-limited / timeout / error), so the LLM stays the player but the
+      game never depends on it. See the cart-minimax write-back handshake in
+      [src/lib/gpio.js](src/lib/gpio.js).
+- [x] Temp diagnostics stripped; operational logs (retries, cap-trip, KV fail-open) kept.
+- Live verification of all this happens post-deploy — see Step 7.
+- Note: free-tier prompts may be used for training — fine for a game board.
 
 ---
 
@@ -247,8 +364,19 @@ your shared project quota (free tier ≈ 10–15 req/min, per project).
 ## Quick reference
 
 - **Run locally:** `vercel dev` (never plain `vite` — the proxy won't run).
+  **Restart fully** after any change to `.env.local` or `api/` — both are read only
+  at boot.
 - **Cart location the app loads:** `public/games/tic_tac_toe.html` + `.js`
   (from `game="tic_tac_toe"` in [App.jsx](src/App.jsx)).
-- **Protocol lives in 3 synced places:** cart Lua · [src/lib/gpio.js](src/lib/gpio.js) · [AGENTS.md](AGENTS.md).
+- **Protocol lives in 2 synced places:** cart Lua · [src/lib/gpio.js](src/lib/gpio.js).
+- **Also keep in sync:** the client abort in [src/lib/ai.js](src/lib/ai.js) and
+  `CLIENT_ABORT_MS` in [api/move.js](api/move.js).
+- **Model:** `gemini-3.1-flash-lite`. Don't trust `ListModels` — it lists models a new
+  key can't call.
 - **Milestone order:** run cart embedded → prove JS bridge → add cart GPIO →
-  real Gemini → harden → more games.
+  real Gemini → show its reasoning → harden → deploy → more games.
+- **Current position:** Steps 0–5b done, Step 6 all but the bad-key test.
+  **Next: Step 8 (rate limit), then Step 7 (deploy).**
+- **Separate track:** the perception layer — moving fact-derivation from prompt into JS.
+  Not part of this checklist; see the Roadmap in [README.md](README.md). The open fork
+  gap is its trigger condition.

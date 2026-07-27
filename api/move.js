@@ -4,10 +4,6 @@
 
 import { checkRateLimit, reserveGeminiCall, QuotaError } from './_ratelimit.js';
 
-// Mirrors the getAiTurn timeout in src/lib/ai.js. Diagnostic only — nothing here
-// enforces it; it just flags answers that finished after the client stopped waiting.
-const CLIENT_ABORT_MS = 10000;
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
@@ -17,16 +13,13 @@ export default async function handler(req, res) {
   // Per-IP limit. 429 (not a silent fallback) so the UI can say "rate limited"
   // rather than playing a random cell that looks like a broken AI.
   const limit = await checkRateLimit(req);
-  // TEMP DIAGNOSTIC — confirms KV is wired. 'kv' = durable shared store; 'mem' = the
-  // in-memory fallback (KV env missing or unreachable). Remove in step 8.
-  console.log('[move] ratelimit store:', limit.store);
   if (limit.limited) {
     res.setHeader('Retry-After', String(limit.retryAfter));
     return res.status(429).json({ move: null, rateLimited: true, retryAfter: limit.retryAfter });
   }
 
   // The global Gemini-call cap is enforced deeper, in reserveGeminiCall() — it counts
-  // real API calls (including retries) rather than requests. See rate-limiting-plan.md.
+  // real API calls (including retries) rather than requests.
 
   const { board } = req.body ?? {};
 
@@ -61,10 +54,6 @@ export default async function handler(req, res) {
       parsed = await askGemini(board, correction);
     }
 
-    console.log('[move] lines:', JSON.stringify(parsed.lines));
-    console.log('[move] winMove:', parsed.winMove, '| blockMove:', parsed.blockMove, '=> move:', parsed.move);
-    console.log('[move] commentary:', parsed.commentary);
-
     // Pass the model's own analysis through to the client so the UI can show that a
     // real LLM picked this move. `move` stays the only field the game depends on; if
     // it is still illegal after the retry, the client's validateMove falls back.
@@ -95,9 +84,9 @@ const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MO
 // retries transient overload, and returns the parsed JSON. Throws on unparseable output.
 async function askGemini(board, correction) {
   // Retry transient overload/rate-limit (503/429) a couple times with a short backoff
-  // — these clear quickly. Attempt count and backoff have to fit inside CLIENT_ABORT_MS
-  // alongside generation (and any legality retry), or the client gives up mid-retry.
-  const started = Date.now();
+  // — these clear quickly. Attempt count and backoff have to fit inside the client's
+  // request timeout (getAiTurn in ai.js) alongside generation and any legality retry,
+  // or the client gives up mid-retry.
   let r, data;
   for (let attempt = 0; attempt < 3; attempt++) {
     await reserveGeminiCall(); // throws QuotaError -> 429; counts retries, not just requests
@@ -120,12 +109,6 @@ async function askGemini(board, correction) {
     await new Promise((res) => setTimeout(res, 400 * (attempt + 1)));
   }
 
-  // TEMP DIAGNOSTIC — remove once confirmed. The elapsed time matters: a 200 logged
-  // past the client's abort deadline means the browser already fell back.
-  const ms = Date.now() - started;
-  const late = ms > CLIENT_ABORT_MS ? ' ⚠ PAST CLIENT ABORT' : '';
-  console.log('[move] gemini HTTP:', r.status, `(${ms}ms${late})`);
-
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
   try {
     return JSON.parse(text);
@@ -144,8 +127,8 @@ async function askGemini(board, correction) {
 // is meant to turn away.
 //
 // This is a speed bump, NOT security — Origin is trivially forged outside a browser.
-// It cheaply stops drive-by scripts; the rate limits in rate-limiting-plan.md are the
-// real control over quota abuse.
+// It cheaply stops drive-by scripts; the rate limits in _ratelimit.js are the real
+// control over quota abuse.
 function isSameOrigin(req) {
   const origin = req.headers?.origin;
   if (!origin) return false;

@@ -31,8 +31,8 @@ export const IDX_MOVE = 10;
 
 // Sentinel written to IDX_MOVE when the page has no move for the cart to play. Any value
 // outside 0..8 trips the cart's "garbage → local minimax" recovery; 255 is the max byte
-// value, unmistakably not a cell index. Requires the cart's write-back change (step 2 of
-// cart-fallback-plan.md) to be re-exported before the read-back half works.
+// value, unmistakably not a cell index. The cart then writes the cell it played back to
+// IDX_MOVE (see the write-back note above), so the panel can still show the move.
 export const NO_MOVE = 255;
 
 // Read the 9 board cells out of a gpio array into a plain [0..8] board that

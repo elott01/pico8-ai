@@ -46,12 +46,9 @@ export async function getAiTurn(board, timeoutMs = 10000) {
 
     return { ...(await r.json()), reason: null };
   } catch (e) {
-    // TEMP DIAGNOSTIC — distinguishes "we gave up waiting" from a real network
-    // failure. A timeout here alongside a 200 in the server log means the model
-    // answered fine and we just weren't patient enough.
+    // Distinguish an abort (we stopped waiting) from a real network failure, so the UI
+    // can say "timed out" vs "unavailable".
     const timedOut = e.name === 'AbortError';
-    if (timedOut) console.warn(`[ai] timed out after ${timeoutMs}ms — falling back`);
-    else console.warn('[ai] request failed — falling back:', e.message);
     return { move: null, reason: timedOut ? 'timeout' : 'error' };
   } finally {
     clearTimeout(t);
