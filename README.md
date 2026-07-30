@@ -1,8 +1,8 @@
 # pico-ai
 
-Gemini meets PICO-8 — turn-based PICO-8 games embedded in a React app, playing
-against a Gemini-powered AI opponent. One Vercel deploy: a static Vite/React
-frontend plus a serverless proxy (`api/move.js`) that holds the API key.
+Turn-based PICO-8 games embedded in a React app, played against a Gemini-powered
+opponent. One Vercel deploy: a static Vite/React frontend plus a serverless proxy
+(`api/move.js`) that holds the API key.
 
 ## Architecture
 
@@ -28,79 +28,88 @@ URL). The Gemini key lives only in the function's environment, never in the brow
 its GPIO memory (128 bytes at `0x5f80`–`0x5fff`), which the web export mirrors to a JS
 array (`pico8_gpio`). The cart pokes/peeks; the JS reads/writes the same array and does the
 networking. The cart is embedded via an iframe, so that array lives on the iframe's
-same-origin `contentWindow`. Detailed build steps: [webapp-build-steps.md](webapp-build-steps.md).
+same-origin `contentWindow`.
 
-## Prerequisites
+## Design decisions
 
-- **Node.js 20.x** (see `engines` in `package.json`)
-- **Vercel CLI** — `npm i -g vercel`
-- **A Vercel account** (free Hobby tier) — sign up at [vercel.com](https://vercel.com)
-- **A Gemini API key** from [Google AI Studio](https://aistudio.google.com) (free tier)
+**The LLM is the player, not a solver.** Tic-tac-toe is solved, so a minimax opponent
+would be unbeatable and beside the point. The cart ships one anyway, but strictly as an
+availability fallback: when Gemini is rate-limited, times out, or returns an illegal move,
+the page hands control back and the cart plays its own minimax so the game never stalls.
+The panel says so explicitly, so a fallback move is never passed off as the model's.
 
-## First-time setup
+**Reliability came from restructuring the output, not from a longer prompt.** A
+flash-class model would transcribe a line correctly and then miscount it — it once emitted
+`[1,4,7]: 0,2,2` and still concluded no line had two 2s, missing the win. The fix was to
+make each derivation an explicit output field (per-line `twos`/`ones`, then `winMove`,
+`blockMove`, `legalCells`) so the model selects from a list it just wrote instead of
+re-deriving in its head. Since JSON keys generate in order, that ordering is load-bearing:
+`commentary` comes last, after `move`, so flavour text can never steer the game.
+
+**Known limits.** The move priority (win → block → center → corner) has no concept of
+forks, so a player who takes two opposite corners can still win. Gemini's free-tier quota
+is per-project rather than per-key, so `/api/move` is limited two ways: per IP, and a
+global cap counted in *actual Gemini calls* rather than requests, since one request can
+retry several times.
+
+## Setup
+
+Requires **Node 20.x**, the **Vercel CLI**, and a **Gemini API key** from
+[Google AI Studio](https://aistudio.google.com) (free tier).
 
 ```sh
-npm install                 # install dependencies
-npm i -g vercel             # install the Vercel CLI (once, globally)
-vercel login                # authenticate (opens a browser)
-cp .env.example .env.local  # then paste your GEMINI_API_KEY into .env.local
+npm install
+npm i -g vercel
+vercel login
+cp .env.example .env.local  # paste your GEMINI_API_KEY into it
 ```
 
-`.env.local` is gitignored — the key lives there locally and must never be
-committed. Without a key set, `api/move.js` returns a hardcoded legal move so the
-loop still runs end to end.
+Without a key, `api/move.js` answers with the first empty cell — enough to exercise the
+whole loop, and obviously not the model.
 
 ## Commands
 
-| Command | What it does | Notes |
-|---|---|---|
-| `vercel dev` | **Local dev — use this.** Runs the frontend **and** the `api/` functions. | Serves on `localhost:3000`. This is the only local command where the AI opponent works. |
-| `npm run dev` | Frontend only (plain Vite dev server). | ⚠️ `/api/move` returns 404 here — no AI. Fine for pure UI work; otherwise prefer `vercel dev`. |
-| `npm run build` | Production build → `dist/`. | Static frontend only; Vercel runs this for you on deploy. |
-| `npm run preview` | Serve the built `dist/` locally. | Static preview only — no `api/` functions. |
-| `npm audit` | Check dependencies for known vulnerabilities. | Currently clean (0 vulnerabilities). |
-| `vercel --prod` | Deploy to production. | Or just push to the connected repo for auto-deploy. |
-
-> **Why `vercel dev` and not `npm run dev`?** Plain Vite only knows the frontend.
-> `vercel dev` also runs `api/move.js` (the Gemini proxy), matching production —
-> so the AI works locally. See [webapp-build-steps.md](webapp-build-steps.md).
+| Command | What it does |
+|---|---|
+| `vercel dev` | **Local dev — use this.** Serves the frontend *and* the `api/` functions on `localhost:3000`. The only local command where the AI works. |
+| `npm run dev` | Frontend only. `/api/move` 404s, so no AI — fine for pure UI work. |
+| `npm test` | Run the test suite (`node --test`). Add `--watch` via `npm run test:watch`. |
+| `npm run build` | Production build → `dist/`. Vercel runs this on deploy. |
+| `vercel --prod` | Deploy to production, or just push to the connected repo. |
 
 ## Deploy
 
-1. Push to GitHub and import the repo in Vercel (auto-deploys on push), **or** run `vercel --prod`.
-2. Set `GEMINI_API_KEY` in **Vercel → Project → Settings → Environment Variables**
-   for the **Production** environment (`.env.local` is local-only and does not ship).
+1. Push to GitHub and import the repo in Vercel (auto-deploys on push), or `vercel --prod`.
+2. Set these for the **Production** environment in Vercel → Settings → Environment
+   Variables — `.env.local` is local-only and does not ship:
+   - `GEMINI_API_KEY`
+   - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (from the Upstash/KV integration). Without
+     them the rate limiter falls back to per-instance memory, which cannot enforce a
+     global cap.
 3. Smoke-test the live URL on desktop and mobile.
 
 ## Project layout
 
 ```
-api/move.js              serverless proxy (holds the Gemini key)
-public/games/*.{html,js} PICO-8 web exports (static); the iframe loads the .html
-src/components/           React — embeds the cart in an iframe, runs the GPIO poll loop
-src/lib/                  gpio.js (protocol) + ai.js (fetch + fallback)
-vercel.json              currently empty {} — see note below
+api/move.js               serverless proxy — prompt, Gemini call, response shaping
+api/_ratelimit.js         per-IP + global quota limiting, KV-backed, fails open
+carts/*.p8                PICO-8 sources; exported into public/games/
+public/games/*.{html,js}  exported carts; the iframe loads the .html
+src/components/           iframe embed, GPIO poll loop, reasoning panel
+src/lib/                  gpio.js (byte protocol) + ai.js (calls /api/move)
+tests/                    node:test suites
 ```
 
-> **`vercel.json`:** intentionally empty. A catch-all SPA rewrite
-> (`/((?!api/).*)` → `/index.html`) was removed because it breaks `vercel dev` —
-> it intercepts Vite's dev modules (`/src/main.jsx`, `/@vite/client`) and returns
-> HTML for them. Restore a **dev-safe** rewrite only when client-side routing is
-> added; see [webapp-build-steps.md](webapp-build-steps.md).
+> `vercel.json` is intentionally empty. A catch-all SPA rewrite breaks `vercel dev` by
+> intercepting Vite's dev modules (`/src/main.jsx`, `/@vite/client`) and returning HTML
+> for them. Only add a dev-safe rewrite if client-side routing is introduced.
 
 ## Roadmap
 
-The point of this project is that an **LLM** plays — not a solver. Tic-tac-toe is a
-solved game, so a minimax opponent would be trivial and beside the point; it's used only
-as an offline *availability* fallback, never as the player. That framing drives what's next.
-
 - **Perception layer.** Small models are poor at a game's *arithmetic* (scanning lines,
-  counting) but good at *judgement* once the facts are laid out. The plan is to have code
-  compute the salient facts of a position (legal moves, threats) and let the LLM weigh
-  them and decide — giving it eyes, not a strategy. It stays the player.
-- **More carts.** Each PICO-8 game ships a small feature-extractor over a shared contract,
-  so the pipeline is written once. Future games have no optimal algorithm to fall back on,
-  which is exactly why the LLM genuinely has to play them.
-- **Close the fork gap.** The current `win → block → center → corner` heuristic has no
-  concept of a move creating two threats at once, so the AI still loses to the
-  opposite-corner trap — the first thing the perception layer should fix.
+  counting) but good at *judgement* once the facts are laid out. Have code compute the
+  salient facts of a position and let the LLM weigh them — giving it eyes, not a strategy.
+  Closing the fork gap is the first thing this should fix.
+- **More carts.** Each game ships a small feature-extractor over a shared contract, so the
+  pipeline is written once. Games without an optimal algorithm to fall back on are exactly
+  where the LLM genuinely has to play.
