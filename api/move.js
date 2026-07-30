@@ -56,7 +56,7 @@ export default async function handler(req, res) {
 
     // Pass the model's own analysis through to the client so the UI can show that a
     // real LLM picked this move. `move` stays the only field the game depends on; if
-    // it is still illegal after the retry, the client's validateMove falls back.
+    // it is still illegal after the retry, the cart plays its own minimax instead.
     return res.status(200).json({
       move: parsed.move,
       winMove: parsed.winMove ?? null,
