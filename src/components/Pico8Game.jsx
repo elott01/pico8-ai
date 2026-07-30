@@ -3,70 +3,59 @@ import { IDX_STATUS, IDX_MOVE, ST_IDLE, ST_REQUEST, ST_THINKING, ST_READY, NO_MO
 import { getAiTurn } from '../lib/ai.js';
 import TurnPanel from './TurnPanel.jsx';
 
-// Embeds a PICO-8 web cart via an <iframe> pointing at its exported .html.
-//
-// Why an iframe: a PICO-8 web export isn't a bare script — its .js renders into
-// Module.canvas and expects the shell's setup (start button, layout, audio-context
-// gating). Loading the exported .html gives us that shell verbatim, so the cart
-// "just works." It's same-origin, so we reach the cart's GPIO memory via
-// iframeRef.current.contentWindow.pico8_gpio to run the AI.
+// The cart is embedded as its exported .html in an iframe rather than by injecting the
+// .js: the export expects its own shell (canvas wiring, start button, audio gating), and
+// loading the .html gets that verbatim. Same-origin, so the cart's GPIO memory stays
+// reachable at contentWindow.pico8_gpio.
 export default function Pico8Game({ game }) {
   const iframeRef = useRef(null);
   const [status, setStatus] = useState('loading'); // 'loading' | 'ready' | 'missing'
-  const [turns, setTurns] = useState([]); // AI turn history: the model's analysis + what it played
+  const [turns, setTurns] = useState([]);
 
   useEffect(() => {
     setStatus('loading');
-    setTurns([]); // stale analysis from the previous cart would be misleading
+    setTurns([]); // analysis from the previous cart would be misleading
   }, [game]);
 
-  // GPIO poll loop: the cart's half of the protocol lives in Lua (tic_tac_toe.p8);
-  // this is the page's half. The exported shell declares `pico8_gpio` on the
-  // iframe's window and the runtime mirrors the cart's GPIO memory to it. When the
-  // cart wants a move it writes the board into bytes 1..9 and sets byte 0 = REQUEST;
-  // we answer via /api/move and write the move (byte 10) + set byte 0 = READY.
+  // The page's half of the GPIO protocol; the cart's half is in tic_tac_toe.p8 and the
+  // byte layout is documented in lib/gpio.js.
   useEffect(() => {
-    let busy = false; // one request in flight at a time (getAiTurn is async)
-    let pausedUntil = 0; // epoch ms; while in the future we're rate-limited and skip the API
+    let busy = false;
+    let pausedUntil = 0; // epoch ms; while in the future we are rate-limited
     const id = setInterval(async () => {
       const gpio = iframeRef.current?.contentWindow?.pico8_gpio;
       if (!gpio || busy || gpio[IDX_STATUS] !== ST_REQUEST) return;
 
       busy = true;
-      gpio[IDX_STATUS] = ST_THINKING; // ack synchronously so the cart stops re-requesting
+      gpio[IDX_STATUS] = ST_THINKING; // ack synchronously, or the cart keeps re-requesting
       try {
         const board = readBoard(gpio);
 
-        // While rate-limited, don't call the API at all — it would only 429 again. We
-        // still answer the cart so the game never hangs; the panel explains why the
-        // move isn't the model's.
+        // While rate-limited, skip the API entirely — it would only 429 again — but still
+        // answer the cart so the game never hangs.
         let ai;
         if (Date.now() < pausedUntil) {
           ai = { move: null, reason: 'rate-limited' };
         } else {
           ai = await getAiTurn(board);
           if (ai.reason === 'rate-limited') {
-            // Honour Retry-After, clamped so a bad value can't wedge the game.
-            const wait = Math.min(Math.max(ai.retryAfter ?? 60, 5), 15 * 60);
+            const wait = Math.min(Math.max(ai.retryAfter ?? 60, 5), 15 * 60); // clamped: a bad value must not wedge the game
             pausedUntil = Date.now() + wait * 1000;
           }
         }
 
-        // If the model gave a legal cell, ask the cart to play it. Otherwise send NO_MOVE
-        // and let the cart play its own (unbeatable) minimax — better than a random cell.
+        // A legal model move gets played; anything else sends NO_MOVE so the cart falls
+        // back to its own minimax rather than the page inventing a move.
         const modelMove =
           ai?.reason == null && Number.isInteger(ai?.move) && board[ai.move] === 0 ? ai.move : null;
         gpio[IDX_MOVE] = modelMove ?? NO_MOVE;
         gpio[IDX_STATUS] = ST_READY;
 
-        // The cart plays (our move or its own minimax), writes the cell it ACTUALLY
-        // played back to byte 10, and returns to idle. Read that back so the panel shows
-        // the real move even on fallback turns.
         const played = await readCartPlayedMove(gpio);
 
         setTurns((prev) => {
-          // The cart resets the board on a new game; marks only ever accumulate within
-          // one game, so a drop in filled cells means "start a fresh history".
+          // Marks only accumulate within a game, so fewer filled cells than last turn
+          // means the cart started a new one.
           const last = prev[prev.length - 1];
           const history = last && filled(board) < filled(last.board) ? [] : prev;
           return [
@@ -74,14 +63,15 @@ export default function Pico8Game({ game }) {
             {
               n: history.length + 1,
               board,
-              move: played, // cell the cart actually played, read back from GPIO (0..8 or null)
+              move: played, // what the cart played
               intended: Number.isInteger(ai?.move) ? ai.move : null, // what the model asked for
               lines: ai?.lines ?? [],
               winMove: ai?.winMove ?? null,
               blockMove: ai?.blockMove ?? null,
               commentary: ai?.commentary ?? null,
-              reason: ai?.reason ?? null, // why there's no model move, if there isn't one
-              // true only when the model's own move is the one that got played
+              reason: ai?.reason ?? null,
+              // Only true when the model's own move is the one that got played, so the
+              // panel can never credit it with a move the cart substituted.
               fromModel: modelMove !== null && played === modelMove,
             },
           ];
@@ -103,7 +93,6 @@ export default function Pico8Game({ game }) {
           <code>public/games/</code> to play.
         </p>
       )}
-      {/* Cart and panel side by side; wraps to stacked on narrow screens. */}
       <div
         style={{
           display: 'flex',
@@ -132,36 +121,24 @@ export default function Pico8Game({ game }) {
   );
 }
 
-// How many cells are occupied — used to detect a board reset between games.
 function filled(board) {
   return board.filter((c) => c !== 0).length;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// After we set READY, the cart consumes the move, plays it (or its own minimax when we
-// sent NO_MOVE), writes the cell it ACTUALLY played back to IDX_MOVE, then returns
-// status to IDLE. Poll for that release and read the played cell (0..8), or null if the
-// cart never releases (e.g. no cart listening) or wrote back a non-cell. Bounded at
-// ~500ms so a non-listening cart can't wedge the poll loop — the cart normally releases
-// within a frame or two at 30fps.
-// timeout is an upper bound only — the loop returns the instant the cart gives a valid
-// cell (normal turns ~20ms). The first AI turn of a game has been seen to take ~1.6s to
-// reach this point, so the ceiling sits well above that for margin; it only matters if
-// the cart never responds at all.
+// The cart writes the cell it actually played to IDX_MOVE and only then returns to idle,
+// so both conditions have to hold before the value can be trusted — otherwise we read the
+// NO_MOVE sentinel we just wrote. The timeout is an upper bound, not a wait: a normal turn
+// resolves in ~20ms, but the first AI turn of a game has taken ~1.6s to get here.
 async function readCartPlayedMove(gpio, timeoutMs = 3500) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    // The cart pokes the played cell to byte 10, THEN flips to idle. Wait for BOTH —
-    // idle status AND a cell in range — so we never give up mid-handshake or read the
-    // NO_MOVE sentinel we wrote. The first AI turn of a game can take several hundred ms
-    // to reach this point (turn-transition frames), which is why the wait is generous;
-    // a normal turn still returns within a frame or two.
     if (gpio[IDX_STATUS] === ST_IDLE) {
       const cell = gpio[IDX_MOVE];
       if (cell >= 0 && cell <= 8) return cell;
     }
-    await sleep(16); // ~1 frame at 60fps
+    await sleep(16);
   }
-  return null; // cart never returned a valid cell in time (rare); panel shows no cell
+  return null; // no cart listening, or it never wrote a cell; the panel shows no move
 }

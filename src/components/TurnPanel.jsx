@@ -1,11 +1,8 @@
-// Shows the model's own analysis for each AI turn, newest first.
-//
-// The point of this panel is to make it evident that a real LLM is choosing the
-// moves: every card pairs the model's trash talk with the exact line-by-line
-// scan it produced to pick that cell. The two must stay together — a quip next to
-// someone else's reasoning would prove nothing.
+// Per-turn record of the model's own analysis, newest first. The panel exists to
+// evidence that a real LLM chose each move, so a card must never pair the model's
+// commentary with a move it didn't make — hence the fromModel guards below.
 
-const MARK = ['', 'X', 'O']; // board values: 0 empty, 1 human (X), 2 AI (O)
+const MARK = ['', 'X', 'O']; // 0 empty, 1 human (X), 2 AI (O)
 
 const C = {
   ink: '#1d2b53', // pico-8 dark blue
@@ -65,9 +62,8 @@ export default function TurnPanel({ turns }) {
 
 function TurnCard({ turn, defaultOpen }) {
   const { n, board, move, intended, lines, winMove, blockMove, commentary, fromModel } = turn;
-  // WIN/BLOCK is derived from the model's analysis, so only tag a move the model played.
+  // WIN/BLOCK comes from the model's own analysis, so it may only tag a move it played.
   const tag = fromModel ? classify(turn) : null;
-  // A note only for turns the model didn't decide (the solver stepped in).
   const note = fromModel ? null : fallbackNote(turn);
 
   return (
@@ -78,8 +74,8 @@ function TurnCard({ turn, defaultOpen }) {
         {tag && <Tag {...tag} />}
       </div>
 
-      {/* Commentary is generated after `move`, so it narrates a decision already
-          made — flavor, never the cause. The reasoning below is the real record. */}
+      {/* Generated after `move`, so it narrates a decision already made, never causes
+          it. The reasoning below is the actual record. */}
       {commentary && (
         <p style={{ margin: '0.4rem 0 0', fontStyle: 'italic' }}>“{commentary}”</p>
       )}
@@ -95,9 +91,8 @@ function TurnCard({ turn, defaultOpen }) {
         </details>
       )}
 
-      {/* Solver turns have no line-by-line analysis, but the board still shows WHERE it
-          played — same grid as model turns, minus the reasoning. Skip when the cell is
-          unknown (read-back miss), since there'd be nothing to ring. */}
+      {/* Solver turns have no analysis to show, but the board still shows where it
+          played. Skipped when the read-back missed, since there is nothing to ring. */}
       {!fromModel && Number.isInteger(move) && (
         <div style={{ marginTop: '0.5rem' }}>
           <MiniBoard board={board} move={move} />
@@ -108,8 +103,8 @@ function TurnCard({ turn, defaultOpen }) {
 }
 
 function Reasoning({ board, move, lines, winMove, blockMove }) {
-  // Only lines with a completed pair are decision-relevant; the rest are noise, so
-  // they collapse to a count rather than padding the card with eight rows.
+  // Only lines with a completed pair drove the decision; the rest collapse to a count
+  // rather than padding every card with eight rows.
   const loud = lines.filter((l) => lineTag(l));
   const quiet = lines.length - loud.length;
 
@@ -135,7 +130,6 @@ function Reasoning({ board, move, lines, winMove, blockMove }) {
   );
 }
 
-// The position as the model saw it, with the cell it chose ringed.
 function MiniBoard({ board, move }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 18px)', gap: 2, flexShrink: 0 }}>
@@ -174,10 +168,9 @@ function Val({ v }) {
   return <span style={{ color: v === null ? C.dim : C.ink }}>{v === null ? 'null' : v}</span>;
 }
 
-// Explains a turn the model didn't decide. On these, the cart's built-in minimax played
-// the move (read back from GPIO), so `move` is a real, optimal cell — the note says who
-// played and why they stepped in. Rate-limiting isn't a malfunction, so it reads amber
-// (a notice); genuine failures read red. Returns null when the model itself played.
+// Explains a turn the model didn't decide, where the cart's minimax played instead —
+// so `move` is a real, optimal cell, not a failure. Rate limiting reads amber because it
+// is an expected condition; only genuine failures read red.
 function fallbackNote({ move, intended, board, reason }) {
   const played = Number.isInteger(move) ? `played ${move}` : 'played';
   const solver = `built-in solver ${played}`;
@@ -191,15 +184,13 @@ function fallbackNote({ move, intended, board, reason }) {
   if (reason === 'error') {
     return { color: C.threat, text: `⚠ Model unavailable — ${solver}.` };
   }
-  // reason is null but this isn't a model turn: the model answered with an unusable move
-  // (e.g. an occupied cell) and the solver took over.
+  // No reason, but not a model turn: it answered with an unusable cell.
   if (Number.isInteger(intended) && board[intended] !== 0) {
     return { color: C.threat, text: `⚠ Model chose ${intended} (already taken) — ${solver}.` };
   }
   return { color: C.threat, text: `⚠ Model move rejected — ${solver}.` };
 }
 
-// Why this cell: the model took its win, covered a threat, or just played position.
 function classify({ move, winMove, blockMove }) {
   if (winMove !== null && move === winMove) return { text: 'WIN', color: C.win };
   if (blockMove !== null && move === blockMove) return { text: 'BLOCK', color: C.threat };

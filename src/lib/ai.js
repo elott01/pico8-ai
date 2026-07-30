@@ -1,27 +1,13 @@
-// Client-side glue to the /api/move proxy. The API key never lives here — the
-// serverless function holds it. This file only asks for a move and sanity-checks
-// what comes back.
+// Client-side glue to the /api/move proxy.
 
-// Ask the proxy for a turn. Aborts after `timeoutMs` so a slow/over-quota call never
-// hangs the game — on timeout the cart plays its own minimax instead.
+// Always resolves to an object — never null — where `reason` says why there is no move:
+// null (the model chose), 'rate-limited' (with retryAfter seconds), 'timeout', 'error'.
+// Keeping those distinct is what lets the UI say "rate limited" instead of silently
+// showing a fallback move and looking broken. Everything but `move` is display-only.
 //
-// 10s, not 5s: a turn generates 8 line objects plus commentary before the response
-// completes, which can outrun a 5s budget. Aborting early threw away a move the
-// model had gotten right and replaced it with a random cell — worse than waiting.
-// If this is raised again, update the abort threshold noted in api/move.js.
-//
-// Resolves to the model's full turn payload so the UI can show its work:
-//   { move, winMove, blockMove, lines, commentary, reason }
-// `move` is the only field the game needs; the rest is display-only and may be
-// absent (e.g. the no-key fallback path returns a bare move).
-//
-// ALWAYS resolves to an object, never null, and `reason` says why there's no move:
-//   null           — success, the model chose
-//   'rate-limited' — 429; retryAfter (seconds) says how long to back off
-//   'timeout'      — we aborted first
-//   'error'        — network failure or a non-OK response
-// These must stay distinguishable: a rate-limited player needs to be told that, not
-// shown a random move that makes a working AI look broken.
+// timeoutMs must stay *below* the cart's own fallback window (ai_max_frames in
+// tic_tac_toe.p8, ~15s), so the page always gets to answer and read back the played
+// cell; if the cart gives up first it self-plays and the read-back finds nothing.
 export async function getAiTurn(board, timeoutMs = 10000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -46,8 +32,6 @@ export async function getAiTurn(board, timeoutMs = 10000) {
 
     return { ...(await r.json()), reason: null };
   } catch (e) {
-    // Distinguish an abort (we stopped waiting) from a real network failure, so the UI
-    // can say "timed out" vs "unavailable".
     const timedOut = e.name === 'AbortError';
     return { move: null, reason: timedOut ? 'timeout' : 'error' };
   } finally {
