@@ -129,14 +129,12 @@ function best_move(b, me)
     return bestcell
 end
 
--- gpio bridge to the web page (see src/lib/gpio.js).
--- the web export mirrors these 128 bytes to a js array the page can read/write.
+-- gpio bridge to the web page; must stay in sync with src/lib/gpio.js.
 --   byte 0     status: 0 idle · 1 request · 2 thinking · 3 ready
 --   bytes 1..9 board cells (0 empty, 1 human, 2 ai) -- same coding as `board`
---   byte 10    move cell, 0-based (0..8); we add 1 to index board.
---              page WRITES it before ready: the move to play, or a value >8 (no move)
---              meaning "play your own minimax". we OVERWRITE it with the cell actually
---              played before going idle, so the page can read the real move back.
+--   byte 10    move cell, 0-based. the page writes the move to play, or a value >8
+--              meaning "play your own minimax"; overwrite it with the cell that's
+--              actually played before going idle, so the page can read it back.
 gpio = 0x5f80
 gp_status = 0
 gp_move = 10
@@ -144,10 +142,9 @@ st_idle, st_request, st_thinking, st_ready = 0, 1, 2, 3
 
 -- how long to wait (frames @30fps) on a web move before falling back locally:
 ai_ack_frames = 15   -- ~0.5s: no ack -> assume no page (e.g. desktop pico-8)
--- must exceed the page's request timeout (getAiTurn ~10s in src/lib/ai.js) so the page
--- always drives the move (incl. its NO_MOVE fallback) and we can read the played cell
--- back. if we bail first, the page's answer arrives too late and the panel can't show
--- what we played. only a truly dead page should ever hit this.
+-- must exceed the page's request timeout (getAiTurn, ~10s) so the page always gets to
+-- answer and read back what was played; if it bails first it can't. only a dead page
+-- should reach this.
 ai_max_frames = 450  -- ~15s: page acked but never answered -> don't hang
 
 -- publish the board and ask the page for a move.

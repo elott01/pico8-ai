@@ -1,36 +1,26 @@
-// Serverless proxy: holds the Gemini key, builds the prompt, returns a clean move.
-// Runs on Vercel's Node runtime (see engines.node in package.json). Vercel
-// auto-parses JSON request bodies, so req.body is already an object here.
+// Serverless proxy for the Gemini call: holds the API key, builds the prompt, returns
+// the model's move and its reasoning. Vercel pre-parses JSON, so req.body is an object.
 
 import { checkRateLimit, reserveGeminiCall, QuotaError } from './_ratelimit.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-
-  // Only this app's own page calls /api/move, so anything else is a script.
   if (!isSameOrigin(req)) return res.status(403).json({ error: 'forbidden' });
 
-  // Per-IP limit. 429 (not a silent fallback) so the UI can say "rate limited"
-  // rather than playing a random cell that looks like a broken AI.
+  // 429 rather than a silent { move: null }: the UI has to tell a rate limit apart from
+  // a model failure, or a working AI looks broken.
   const limit = await checkRateLimit(req);
   if (limit.limited) {
     res.setHeader('Retry-After', String(limit.retryAfter));
     return res.status(429).json({ move: null, rateLimited: true, retryAfter: limit.retryAfter });
   }
 
-  // The global Gemini-call cap is enforced deeper, in reserveGeminiCall() — it counts
-  // real API calls (including retries) rather than requests.
-
   const { board } = req.body ?? {};
-
-  // Validate input before doing anything else: a 9-element array of 0/1/2.
   if (!isValidBoard(board)) {
     return res.status(400).json({ error: 'board must be a 9-element array of 0/1/2' });
   }
 
-  // No key configured (e.g. fresh `vercel dev` before setup): return a legal
-  // move so the end-to-end loop still works. Swap this for the real call once
-  // GEMINI_API_KEY is set.
+  // No key (fresh checkout): still answer, so the cart/page loop can be exercised.
   if (!process.env.GEMINI_API_KEY) {
     return res.status(200).json({ move: firstLegal(board) });
   }
@@ -38,14 +28,9 @@ export default async function handler(req, res) {
   try {
     let parsed = await askGemini(board);
 
-    // The model still occasionally names an occupied cell despite listing legalCells.
-    // Retry ONCE, echoing the mistake back — cheaper and more honest than silently
-    // overriding it, and it keeps `lines`/commentary consistent with the final move.
-    // This is the Step 6 illegal-move guard.
-    //
-    // Only when it actually NAMED a cell and got it wrong. If there's no move at all
-    // (503 storm, unparseable response), "that cell was illegal" is a nonsense
-    // correction and just doubles the load on an API that's already failing.
+    // Retry once, echoing the mistake back, when the model names an occupied cell — but
+    // only when it actually named one. After a 503 storm there is no move to correct,
+    // and retrying would double the load on an API that is already failing.
     if (Number.isInteger(parsed.move) && !isLegalMove(parsed.move, board)) {
       console.log(`[move] illegal move ${parsed.move}; retrying with correction`);
       const correction =
@@ -54,9 +39,8 @@ export default async function handler(req, res) {
       parsed = await askGemini(board, correction);
     }
 
-    // Pass the model's own analysis through to the client so the UI can show that a
-    // real LLM picked this move. `move` stays the only field the game depends on; if
-    // it is still illegal after the retry, the cart plays its own minimax instead.
+    // The analysis fields are display-only — the panel shows them as evidence that a
+    // real LLM chose this move. Only `move` affects the game.
     return res.status(200).json({
       move: parsed.move,
       winMove: parsed.winMove ?? null,
@@ -65,13 +49,11 @@ export default async function handler(req, res) {
       commentary: parsed.commentary ?? null,
     });
   } catch (e) {
-    // Quota exhaustion is a rate limit, not a failure — surface it as 429 so the UI
-    // says "rate limited" instead of quietly playing a random cell.
     if (e instanceof QuotaError) {
       res.setHeader('Retry-After', String(e.retryAfter));
       return res.status(429).json({ move: null, rateLimited: true, retryAfter: e.retryAfter });
     }
-    // Let the client fall back to a local legal move rather than erroring out.
+    // 200 with no move, not a 5xx: the cart plays its own minimax and the game continues.
     console.log('[move] gemini call FAILED, falling back to null:', e.message);
     return res.status(200).json({ move: null });
   }
@@ -80,31 +62,26 @@ export default async function handler(req, res) {
 const MODEL = 'gemini-3.1-flash-lite';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
-// One full turn from the model: builds the prompt (optionally with a correction note),
-// retries transient overload, and returns the parsed JSON. Throws on unparseable output.
 async function askGemini(board, correction) {
-  // Retry transient overload/rate-limit (503/429) a couple times with a short backoff
-  // — these clear quickly. Attempt count and backoff have to fit inside the client's
-  // request timeout (getAiTurn in ai.js) alongside generation and any legality retry,
-  // or the client gives up mid-retry.
   let r, data;
+  // Attempts and backoff have to fit inside the client's request timeout (getAiTurn in
+  // src/lib/ai.js) alongside generation and a possible legality retry.
   for (let attempt = 0; attempt < 3; attempt++) {
-    await reserveGeminiCall(); // throws QuotaError -> 429; counts retries, not just requests
+    await reserveGeminiCall(); // inside the loop: the quota cap counts calls, not requests
     r = await fetch(GEMINI_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': process.env.GEMINI_API_KEY, // key stays server-side
+        'x-goog-api-key': process.env.GEMINI_API_KEY,
       },
       body: JSON.stringify({
         contents: [{ parts: [{ text: buildPrompt(board, correction) }] }],
-        // Ask for clean JSON back instead of prose/markdown fences. Low temp because
-        // move choice should be near-deterministic, not creative.
+        // JSON out, not prose; low temperature because a move should be near-deterministic.
         generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
       }),
     });
     data = await r.json();
-    if (r.status !== 503 && r.status !== 429) break; // only overload is worth retrying
+    if (r.status !== 503 && r.status !== 429) break; // only transient overload is worth retrying
     console.log(`[move] gemini ${r.status} (attempt ${attempt + 1}), retrying…`);
     await new Promise((res) => setTimeout(res, 400 * (attempt + 1)));
   }
@@ -118,28 +95,22 @@ async function askGemini(board, correction) {
   }
 }
 
-// Reject requests that didn't come from this app's own page. Comparing the Origin's
-// host against the request's own Host means this works unchanged on localhost, preview
-// deployments, and any custom domain — no allowlist to keep in sync.
+// Matching Origin's host against the request's own Host works unchanged on localhost,
+// preview deploys and custom domains — no allowlist to keep in sync. A missing Origin
+// means a non-browser client, since browsers always send it on POST.
 //
-// Browsers always send Origin on POST (even same-origin), so a missing Origin means a
-// non-browser client: curl, a script, someone else's page. Those are exactly what this
-// is meant to turn away.
-//
-// This is a speed bump, NOT security — Origin is trivially forged outside a browser.
-// It cheaply stops drive-by scripts; the rate limits in _ratelimit.js are the real
-// control over quota abuse.
+// A speed bump, not security: Origin is trivially forged outside a browser. The rate
+// limits in _ratelimit.js are the real control.
 function isSameOrigin(req) {
   const origin = req.headers?.origin;
   if (!origin) return false;
 
-  // x-forwarded-host is what the user actually hit when a proxy is in front (Vercel);
-  // host is the direct value. Accept a match on either.
+  // x-forwarded-host is what the user actually hit when Vercel's proxy is in front.
   const hosts = [req.headers['x-forwarded-host'], req.headers.host].filter(Boolean);
   try {
     return hosts.includes(new URL(origin).host);
   } catch {
-    return false; // malformed Origin header
+    return false; // malformed Origin
   }
 }
 
@@ -160,20 +131,13 @@ function isLegalMove(move, board) {
   return Number.isInteger(move) && move >= 0 && move < 9 && board[move] === 0;
 }
 
-// The model reliably transcribes each line's values but is unreliable at counting
-// over what it just wrote (it emitted "[1,4,7]: 0,2,2" and still concluded "no line
-// has two 2s", missing a win). So the schema below makes the count an explicit field
-// per line, and forces it to commit to winMove/blockMove BEFORE choosing `move` —
-// JSON keys generate in order, so each field is conditioned on the ones above it.
+// Every derivation the model needs is an explicit output field, because it miscounts
+// when asked to do the arithmetic in its head — it once emitted "[1,4,7]: 0,2,2" and
+// still concluded no line had two 2s, missing the win.
 //
-// Same reason for "legalCells" right before "move": the model would derive a line's
-// emptyCells correctly and then still pick an occupied square (played the center when
-// the center held an opponent piece). Making it list every legal cell and choose from
-// that list turns "is this empty?" from an in-head check into a lookup it can't skip.
-//
-// That ordering is load-bearing, so keep `commentary` LAST: generated after `move`,
-// it cannot influence the choice. Moving it above `move` would let flavor text steer
-// the game.
+// Key order is load-bearing: JSON generates in order, so each field is conditioned on
+// the ones above it. `commentary` MUST stay last — above `move` it would let flavor
+// text steer the game.
 function buildPrompt(board, correction) {
   return [
     'You are playing tic-tac-toe as player 2 (you are "2").',
