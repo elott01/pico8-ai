@@ -201,7 +201,7 @@ fully restart `vercel dev` after touching either.**
 | What you see | Where it came from |
 |---|---|
 | Always the first empty cell | No-key branch — `firstLegal()` in [api/move.js](api/move.js) |
-| A random legal cell | Gemini returned null/illegal → `validateMove` fallback in [src/lib/ai.js](src/lib/ai.js) |
+| Strong play with a "built-in solver" note in the panel | Gemini was unavailable (rate-limited/timeout/error) → the cart played its own minimax |
 | Blocks and takes wins | Real Gemini |
 
 ### Prompt design (why it looks the way it does)
@@ -269,8 +269,8 @@ three got verified **in real play** rather than by forced testing:
       while `4` was occupied. Two layers now:
       1. **Server** ([api/move.js](api/move.js)) checks legality and retries **once**,
          echoing the mistake back (`"Cell 4 is NOT empty. You may only play …"`).
-      2. **Client** ([validateMove](src/lib/ai.js)) substitutes a random legal cell if
-         an illegal move still gets through.
+      2. **Cart** — if an illegal move still gets through, the page sends `NO_MOVE` and
+         the cart plays its own minimax (see [src/lib/gpio.js](src/lib/gpio.js)).
       An occasional `illegal move N; retrying with correction` in the server log is
       the guard working. The red panel warning means it whiffed *twice*.
 - [x] **Timeout** — verified in the wild, and the original 5s was too tight: turns

@@ -3,7 +3,7 @@
 // what comes back.
 
 // Ask the proxy for a turn. Aborts after `timeoutMs` so a slow/over-quota call never
-// hangs the game — on timeout we return null and let validateMove fall back.
+// hangs the game — on timeout the cart plays its own minimax instead.
 //
 // 10s, not 5s: a turn generates 8 line objects plus commentary before the response
 // completes, which can outrun a 5s budget. Aborting early threw away a move the
@@ -53,13 +53,4 @@ export async function getAiTurn(board, timeoutMs = 10000) {
   } finally {
     clearTimeout(t);
   }
-}
-
-// Always validate — LLMs occasionally return illegal or garbage moves.
-// Falls back to a random legal cell so the game stays playable.
-export function validateMove(move, board) {
-  if (Number.isInteger(move) && board[move] === 0) return move;
-  const legal = board.map((v, i) => (v === 0 ? i : -1)).filter((i) => i >= 0);
-  if (legal.length === 0) return null;
-  return legal[Math.floor(Math.random() * legal.length)];
 }
