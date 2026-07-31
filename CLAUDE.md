@@ -9,7 +9,7 @@ vercel dev                                   # local dev — USE THIS, not `npm 
 npm test                                     # full suite (node:test, no framework)
 node --test tests/ratelimit.test.js          # one file
 node --test tests/a.test.js tests/b.test.js  # several files
-node --test --test-name-pattern="fail-open" tests/   # filter by test name
+node --test --test-name-pattern="fail-open" tests/*.test.js   # filter by test name
 npm run test:watch                           # watch mode
 npm run build                                # production build -> dist/
 ```
