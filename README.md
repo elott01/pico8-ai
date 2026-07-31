@@ -59,7 +59,7 @@ retry several times.
 
 ## Setup
 
-Requires **Node 20.x**, the **Vercel CLI**, and a **Gemini API key** from
+Requires **Node 24.x**, the **Vercel CLI**, and a **Gemini API key** from
 [Google AI Studio](https://aistudio.google.com) (free tier).
 
 ```sh
