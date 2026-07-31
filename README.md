@@ -1,8 +1,13 @@
 # pico-ai
 
+**[▶ Play it](https://pico-ai-five.vercel.app)**
+
 Turn-based PICO-8 games embedded in a React app, played against a Gemini-powered
 opponent. One Vercel deploy: a static Vite/React frontend plus a serverless proxy
 (`api/move.js`) that holds the API key.
+
+The side panel shows the model's own line-by-line analysis for every move, so you can see
+what it saw — and when it fell back to the cart's built-in solver instead.
 
 ## Architecture
 
