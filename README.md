@@ -1,6 +1,6 @@
 # pico-ai
 
-**[▶ Play it](https://pico8-ai.vercel.app)**
+**[▶ Play it](https://pico8-ai.vercel.app)** &nbsp;·&nbsp; [![tests](https://github.com/elott01/pico-ai/actions/workflows/test.yml/badge.svg)](https://github.com/elott01/pico-ai/actions/workflows/test.yml)
 
 Turn-based PICO-8 games embedded in a React app, played against a Gemini-powered
 opponent. One Vercel deploy: a static Vite/React frontend plus a serverless proxy
