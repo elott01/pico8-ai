@@ -15,18 +15,21 @@ One Vercel project: static frontend + serverless proxy sharing an origin (no COR
 URL). The Gemini key lives only in the function's environment, never in the browser.
 
 ```
-┌───────────────────── Vercel (one project, one origin) ─────────────────────┐
-│  Browser                                                                    │
-│  ┌───────────────────────────┐        ┌────────────────────────┐           │
-│  │  React app (static)       │  fetch │  /api/move             │   HTTPS    │
-│  │  ┌─────────────────────┐  │ ─────► │  serverless function   │ ─────► Gemini
-│  │  │ PICO-8 web player   │  │        │  (holds API key)       │ ◄───── API │
-│  │  │  cart ⇄ pico8_gpio  │  │ ◄───── │  returns move+reasoning│           │
-│  │  └─────────────────────┘  │  JSON  └────────────────────────┘           │
-│  │    ▲ poll + read/write    │                                             │
-│  │    │ (JS glue)            │                                             │
-│  └────┴──────────────────────┘                                             │
-└────────────────────────────────────────────────────────────────────────────┘
+┌─ Vercel ─────────────────────────────────────────────────┐
+│                                                          │
+│  Browser                          Serverless             │
+│  ┌───────────────────────┐        ┌───────────────────┐  │
+│  │ React app (static)    │  fetch │ /api/move         │  │
+│  │  ┌─────────────────┐  │ ──────►│ holds the API key │  │
+│  │  │ PICO-8 player   │  │        │ builds the prompt │  │
+│  │  │ cart ⇄ gpio     │  │◄────── │ returns move+why  │  │
+│  │  └─────────────────┘  │  JSON  └─────────┬─────────┘  │
+│  │    ▲ poll + r/w       │                  │            │
+│  └────┴──────────────────┘                  │ HTTPS      │
+│                                             │            │
+└─────────────────────────────────────────────┼────────────┘
+                                              ▼
+                                         Gemini API
 ```
 
 **The core trick:** a PICO-8 cart can't make network calls. It talks to the page through
