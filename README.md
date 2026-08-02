@@ -38,6 +38,11 @@ array (`pico8_gpio`). The cart pokes/peeks; the JS reads/writes the same array a
 networking. The cart is embedded via an iframe, so that array lives on the iframe's
 same-origin `contentWindow`.
 
+Two processes with no shared clock, coordinating through 128 bytes, need a protocol —
+[docs/gpio-protocol.md](docs/gpio-protocol.md) walks the whole handshake end to end: the
+byte layout, why the move byte carries two different values in one exchange, and the
+timeout budget that keeps the cart and the page from both giving up at once.
+
 ## Design decisions
 
 **The LLM is the player, not a solver.** Tic-tac-toe is solved, so a minimax opponent
