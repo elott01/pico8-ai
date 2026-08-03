@@ -1,0 +1,37 @@
+.group {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--ink-dim);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--ink);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  + .button {
+    border-left: 1px solid var(--rule);
+  }
+}
+
+.active {
+  background: var(--surface-raised);
+  color: var(--accent);
+}

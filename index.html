@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PICO-8 + Gemini</title>
+    <script>
+      // Runs before first paint so a stored choice is applied without a flash of the
+      // wrong theme. Deliberately inline and dependency-free — a deferred module would
+      // execute too late. Key must match STORAGE_KEY in ThemeToggle.tsx.
+      (function () {
+        try {
+          var t = localStorage.getItem('theme');
+          if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+        } catch (e) {
+          /* privacy mode: fall through to the OS preference */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

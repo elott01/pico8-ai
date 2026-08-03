@@ -1,8 +1,42 @@
 // Design tokens. Global on purpose — custom properties must land on :root to cascade,
 // so this is NOT a *.module.scss file.
 //
-// Two layers: the literal PICO-8 palette (never referenced directly by components), and
-// semantic tokens that map onto it. Re-theming means repointing the semantic layer only.
+// Three layers: the literal PICO-8 palette (never referenced directly by components),
+// geometry, and a semantic layer that maps onto the palette. Re-theming repoints the
+// semantic layer only.
+
+// The semantic layer is emitted three times — once as the default, once for the OS
+// preference, once for an explicit user choice — so it lives in mixins. This is the one
+// thing here that plain CSS genuinely cannot express without duplicating every value.
+@mixin dark-tokens {
+  --bg: var(--p8-black);
+  --surface: #0d1430;
+  --surface-raised: var(--p8-dark-blue);
+  --ink: var(--p8-white);
+  --ink-dim: var(--p8-lavender);
+  --rule: #2a3766;
+  --accent: var(--p8-blue);
+  --win: var(--p8-green);
+  --threat: var(--p8-red);
+  --notice: var(--p8-orange);
+  --cell-bg: #0a1030;
+  --glow: 0 0 60px -20px var(--p8-blue);
+}
+
+@mixin light-tokens {
+  --bg: var(--p8-white);
+  --surface: #ffffff;
+  --surface-raised: #fbfcfe;
+  --ink: var(--p8-dark-blue);
+  --ink-dim: var(--p8-dark-grey);
+  --rule: var(--p8-light-grey);
+  --accent: #1076c4;
+  --win: var(--p8-dark-green);
+  --threat: var(--p8-red);
+  --notice: var(--p8-brown);
+  --cell-bg: #ffffff;
+  --glow: 0 18px 40px -22px rgba(29, 43, 83, 0.45);
+}
 
 :root {
   // ---- PICO-8's 16 colours, verbatim -------------------------------------------------
@@ -36,36 +70,24 @@
 
   --font-ui: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-  // ---- Semantic layer: dark is the default -------------------------------------------
-  // The cart is a dark canvas; a light page around it is glare. Light is available below
-  // for anyone whose system asks for it.
-  --bg: var(--p8-black);
-  --surface: #0d1430;
-  --surface-raised: var(--p8-dark-blue);
-  --ink: var(--p8-white);
-  --ink-dim: var(--p8-lavender);
-  --rule: #2a3766;
-  --accent: var(--p8-blue);
-  --win: var(--p8-green);
-  --threat: var(--p8-red);
-  --notice: var(--p8-orange);
-  --cell-bg: #0a1030;
-  --glow: 0 0 60px -20px var(--p8-blue);
+  // Dark is the default: the cart is a dark canvas, and a light page around it is glare.
+  @include dark-tokens;
 }
 
+// Follows the OS, but only while the user has expressed no preference of their own. The
+// :not() is what lets an explicit choice below win without a specificity fight.
 @media (prefers-color-scheme: light) {
-  :root {
-    --bg: var(--p8-white);
-    --surface: #ffffff;
-    --surface-raised: #fbfcfe;
-    --ink: var(--p8-dark-blue);
-    --ink-dim: var(--p8-dark-grey);
-    --rule: var(--p8-light-grey);
-    --accent: #1076c4;
-    --win: var(--p8-dark-green);
-    --threat: var(--p8-red);
-    --notice: var(--p8-brown);
-    --cell-bg: #ffffff;
-    --glow: 0 18px 40px -22px rgba(29, 43, 83, 0.45);
+  :root:not([data-theme]) {
+    @include light-tokens;
   }
+}
+
+// An explicit choice, set by ThemeToggle and pre-applied by the inline script in
+// index.html. Must be able to force *either* theme against the OS, hence both blocks.
+:root[data-theme='light'] {
+  @include light-tokens;
+}
+
+:root[data-theme='dark'] {
+  @include dark-tokens;
 }
