@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import { IDX_STATUS, IDX_MOVE, ST_IDLE, ST_REQUEST, ST_THINKING, ST_READY, NO_MOVE, readBoard } from '../lib/gpio.js';
-import { getAiTurn } from '../lib/ai.js';
-import TurnPanel from './TurnPanel.jsx';
+import { IDX_STATUS, IDX_MOVE, ST_IDLE, ST_REQUEST, ST_THINKING, ST_READY, NO_MOVE, readBoard } from '../lib/gpio.ts';
+import type { Board, Gpio } from '../lib/gpio.ts';
+import { getAiTurn } from '../lib/ai.ts';
+import type { AiTurn } from '../lib/ai.ts';
+import TurnPanel from './TurnPanel.tsx';
+import type { Turn } from './TurnPanel.tsx';
+
+type CartStatus = 'loading' | 'ready' | 'missing';
 
 // The cart is embedded as its exported .html in an iframe rather than by injecting the
 // .js: the export expects its own shell (canvas wiring, start button, audio gating), and
 // loading the .html gets that verbatim. Same-origin, so the cart's GPIO memory stays
 // reachable at contentWindow.pico8_gpio.
-export default function Pico8Game({ game }) {
-  const iframeRef = useRef(null);
-  const [status, setStatus] = useState('loading'); // 'loading' | 'ready' | 'missing'
-  const [turns, setTurns] = useState([]);
+export default function Pico8Game({ game }: { game: string }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [status, setStatus] = useState<CartStatus>('loading');
+  const [turns, setTurns] = useState<Turn[]>([]);
 
   useEffect(() => {
     setStatus('loading');
@@ -18,7 +23,7 @@ export default function Pico8Game({ game }) {
   }, [game]);
 
   // The page's half of the GPIO protocol; the cart's half is in tic_tac_toe.p8 and the
-  // byte layout is documented in lib/gpio.js.
+  // byte layout is documented in lib/gpio.ts.
   useEffect(() => {
     let busy = false;
     let pausedUntil = 0; // epoch ms; while in the future we are rate-limited
@@ -33,7 +38,7 @@ export default function Pico8Game({ game }) {
 
         // While rate-limited, skip the API entirely — it would only 429 again — but still
         // answer the cart so the game never hangs.
-        let ai;
+        let ai: AiTurn;
         if (Date.now() < pausedUntil) {
           ai = { move: null, reason: 'rate-limited' };
         } else {
@@ -44,10 +49,16 @@ export default function Pico8Game({ game }) {
           }
         }
 
+        // Narrowing once here is what keeps the analysis fields below unreachable on a
+        // turn the model did not decide.
+        const analysis = ai.reason === null ? ai : null;
+
         // A legal model move gets played; anything else sends NO_MOVE so the cart falls
         // back to its own minimax rather than the page inventing a move.
         const modelMove =
-          ai?.reason == null && Number.isInteger(ai?.move) && board[ai.move] === 0 ? ai.move : null;
+          analysis !== null && Number.isInteger(analysis.move) && board[analysis.move!] === 0
+            ? analysis.move
+            : null;
         gpio[IDX_MOVE] = modelMove ?? NO_MOVE;
         gpio[IDX_STATUS] = ST_READY;
 
@@ -64,12 +75,12 @@ export default function Pico8Game({ game }) {
               n: history.length + 1,
               board,
               move: played, // what the cart played
-              intended: Number.isInteger(ai?.move) ? ai.move : null, // what the model asked for
-              lines: ai?.lines ?? [],
-              winMove: ai?.winMove ?? null,
-              blockMove: ai?.blockMove ?? null,
-              commentary: ai?.commentary ?? null,
-              reason: ai?.reason ?? null,
+              intended: Number.isInteger(ai.move) ? ai.move : null, // what the model asked for
+              lines: analysis?.lines ?? [],
+              winMove: analysis?.winMove ?? null,
+              blockMove: analysis?.blockMove ?? null,
+              commentary: analysis?.commentary ?? null,
+              reason: ai.reason,
               // Only true when the model's own move is the one that got played, so the
               // panel can never credit it with a move the cart substituted.
               fromModel: modelMove !== null && played === modelMove,
@@ -121,17 +132,17 @@ export default function Pico8Game({ game }) {
   );
 }
 
-function filled(board) {
+function filled(board: Board) {
   return board.filter((c) => c !== 0).length;
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // The cart writes the cell it actually played to IDX_MOVE and only then returns to idle,
 // so both conditions have to hold before the value can be trusted — otherwise we read the
 // NO_MOVE sentinel we just wrote. The timeout is an upper bound, not a wait: a normal turn
 // resolves in ~20ms, but the first AI turn of a game has taken ~1.6s to get here.
-async function readCartPlayedMove(gpio, timeoutMs = 3500) {
+async function readCartPlayedMove(gpio: Gpio, timeoutMs = 3500): Promise<number | null> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     if (gpio[IDX_STATUS] === ST_IDLE) {

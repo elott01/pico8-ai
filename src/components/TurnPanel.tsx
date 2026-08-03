@@ -2,6 +2,28 @@
 // evidence that a real LLM chose each move, so a card must never pair the model's
 // commentary with a move it didn't make — hence the fromModel guards below.
 
+import type { Board } from '../lib/gpio.ts';
+import type { AiFailure, Line } from '../lib/ai.ts';
+
+/** One row of the panel: what the model said, and what the cart actually played. */
+export type Turn = {
+  n: number;
+  board: Board;
+  /** The cell the cart played, read back over GPIO; null if the read-back missed. */
+  move: number | null;
+  /** The cell the model asked for, which may differ from `move` or be illegal. */
+  intended: number | null;
+  lines: Line[];
+  winMove: number | null;
+  blockMove: number | null;
+  commentary: string | null;
+  reason: AiFailure | null;
+  /** True only when the model's own move is the one that got played. */
+  fromModel: boolean;
+};
+
+type Badge = { text: string; color: string };
+
 const MARK = ['', 'X', 'O']; // 0 empty, 1 human (X), 2 AI (O)
 
 const C = {
@@ -14,7 +36,7 @@ const C = {
   panel: '#fbfcfe',
 };
 
-export default function TurnPanel({ turns }) {
+export default function TurnPanel({ turns }: { turns: Turn[] }) {
   return (
     <aside
       style={{
@@ -60,8 +82,8 @@ export default function TurnPanel({ turns }) {
   );
 }
 
-function TurnCard({ turn, defaultOpen }) {
-  const { n, board, move, intended, lines, winMove, blockMove, commentary, fromModel } = turn;
+function TurnCard({ turn, defaultOpen }: { turn: Turn; defaultOpen: boolean }) {
+  const { n, board, move, lines, winMove, blockMove, commentary, fromModel } = turn;
   // WIN/BLOCK comes from the model's own analysis, so it may only tag a move it played.
   const tag = fromModel ? classify(turn) : null;
   const note = fromModel ? null : fallbackNote(turn);
@@ -84,7 +106,7 @@ function TurnCard({ turn, defaultOpen }) {
         <p style={{ margin: '0.4rem 0 0', color: note.color, fontSize: 12 }}>{note.text}</p>
       )}
 
-      {fromModel && lines?.length > 0 && (
+      {fromModel && lines.length > 0 && (
         <details open={defaultOpen} style={{ marginTop: '0.4rem' }}>
           <summary style={{ cursor: 'pointer', color: C.dim, fontSize: 12 }}>reasoning</summary>
           <Reasoning board={board} move={move} lines={lines} winMove={winMove} blockMove={blockMove} />
@@ -102,10 +124,25 @@ function TurnCard({ turn, defaultOpen }) {
   );
 }
 
-function Reasoning({ board, move, lines, winMove, blockMove }) {
+function Reasoning({
+  board,
+  move,
+  lines,
+  winMove,
+  blockMove,
+}: {
+  board: Board;
+  move: number | null;
+  lines: Line[];
+  winMove: number | null;
+  blockMove: number | null;
+}) {
   // Only lines with a completed pair drove the decision; the rest collapse to a count
-  // rather than padding every card with eight rows.
-  const loud = lines.filter((l) => lineTag(l));
+  // rather than padding every card with eight rows. Tagging once here keeps the tag and
+  // the filter from drifting apart.
+  const loud = lines
+    .map((l) => ({ l, t: lineTag(l) }))
+    .filter((x): x is { l: Line; t: Badge } => x.t !== null);
   const quiet = lines.length - loud.length;
 
   return (
@@ -115,22 +152,19 @@ function Reasoning({ board, move, lines, winMove, blockMove }) {
         <div style={{ color: C.dim }}>
           winMove: <Val v={winMove} /> · blockMove: <Val v={blockMove} />
         </div>
-        {loud.map((l) => {
-          const t = lineTag(l);
-          return (
-            <div key={l.line.join()}>
-              [{l.line.join(',')}] {l.values.join(',')}{' '}
-              <span style={{ color: t.color }}>→ {t.text}</span>
-            </div>
-          );
-        })}
+        {loud.map(({ l, t }) => (
+          <div key={l.line.join()}>
+            [{l.line.join(',')}] {l.values.join(',')}{' '}
+            <span style={{ color: t.color }}>→ {t.text}</span>
+          </div>
+        ))}
         {quiet > 0 && <div style={{ color: C.dim }}>+ {quiet} quiet lines</div>}
       </div>
     </div>
   );
 }
 
-function MiniBoard({ board, move }) {
+function MiniBoard({ board, move }: { board: Board; move: number | null }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 18px)', gap: 2, flexShrink: 0 }}>
       {board.map((v, i) => (
@@ -156,7 +190,7 @@ function MiniBoard({ board, move }) {
   );
 }
 
-function Tag({ text, color }) {
+function Tag({ text, color }: Badge) {
   return (
     <span style={{ marginLeft: 'auto', color, fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}>
       ● {text}
@@ -164,14 +198,14 @@ function Tag({ text, color }) {
   );
 }
 
-function Val({ v }) {
+function Val({ v }: { v: number | null }) {
   return <span style={{ color: v === null ? C.dim : C.ink }}>{v === null ? 'null' : v}</span>;
 }
 
 // Explains a turn the model didn't decide, where the cart's minimax played instead —
 // so `move` is a real, optimal cell, not a failure. Rate limiting reads amber because it
 // is an expected condition; only genuine failures read red.
-function fallbackNote({ move, intended, board, reason }) {
+function fallbackNote({ move, intended, board, reason }: Turn): Badge {
   const played = Number.isInteger(move) ? `played ${move}` : 'played';
   const solver = `built-in solver ${played}`;
 
@@ -185,19 +219,19 @@ function fallbackNote({ move, intended, board, reason }) {
     return { color: C.threat, text: `⚠ Model unavailable — ${solver}.` };
   }
   // No reason, but not a model turn: it answered with an unusable cell.
-  if (Number.isInteger(intended) && board[intended] !== 0) {
+  if (intended !== null && Number.isInteger(intended) && board[intended] !== 0) {
     return { color: C.threat, text: `⚠ Model chose ${intended} (already taken) — ${solver}.` };
   }
   return { color: C.threat, text: `⚠ Model move rejected — ${solver}.` };
 }
 
-function classify({ move, winMove, blockMove }) {
+function classify({ move, winMove, blockMove }: Turn): Badge | null {
   if (winMove !== null && move === winMove) return { text: 'WIN', color: C.win };
   if (blockMove !== null && move === blockMove) return { text: 'BLOCK', color: C.threat };
   return null;
 }
 
-function lineTag(l) {
+function lineTag(l: Line): Badge | null {
   if (l.twos === 2 && l.ones === 0) return { text: 'WIN', color: C.win };
   if (l.ones === 2 && l.twos === 0) return { text: 'THREAT', color: C.threat };
   return null;
