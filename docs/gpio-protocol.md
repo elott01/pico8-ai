@@ -72,7 +72,7 @@ cart: 3 → 0   "byte 10 now holds what I played"
 **The ack is load-bearing in both directions.**
 
 The page writes it *synchronously*, before any `await`
-([Pico8Game.tsx:35](../src/components/Pico8Game.tsx#L35)). Otherwise the next 100ms poll
+([Pico8Game.tsx:41](../src/components/Pico8Game.tsx#L41)). Otherwise the next 100ms poll
 tick would still see `ST_REQUEST` standing and fire a second Gemini call for the same turn.
 
 The cart uses it to tell two failure modes apart
@@ -129,7 +129,7 @@ Two ordering rules keep it correct:
    `{move, winMove, blockMove, lines, commentary}`.
 
 6. **Page validates and writes.** Only a move that is both legal and came back clean survives
-   ([:58-60](../src/components/Pico8Game.tsx#L58-L60)); anything else becomes `NO_MOVE`.
+   ([:68-70](../src/components/Pico8Game.tsx#L68-L70)); anything else becomes `NO_MOVE`.
    Byte 10 gets the value, then status goes to `3`.
 
 7. **Cart consumes.** `peek(gpio+10)`; if it is 0–8 and that cell is empty, play it —
@@ -140,7 +140,7 @@ Two ordering rules keep it correct:
 8. **Page reads back.** `readCartPlayedMove` has been polling at 16ms; it now sees idle plus a
    valid cell and returns it. The turn record stores `move` (what happened) separately from
    `intended` (what the model asked for), and sets `fromModel` only when those agree
-   ([:86](../src/components/Pico8Game.tsx#L86)).
+   ([:96](../src/components/Pico8Game.tsx#L96)).
 
 9. **Panel renders.** [TurnPanel.tsx](../src/components/TurnPanel.tsx) gates the WIN/BLOCK tag
    and the reasoning dropdown on `fromModel`; when it is false it shows a `fallbackNote`

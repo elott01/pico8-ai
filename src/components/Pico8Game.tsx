@@ -5,6 +5,7 @@ import { getAiTurn } from '../lib/ai.ts';
 import type { AiTurn } from '../lib/ai.ts';
 import TurnPanel from './TurnPanel.tsx';
 import type { Turn } from './TurnPanel.tsx';
+import styles from './Pico8Game.module.scss';
 
 type CartStatus = 'loading' | 'ready' | 'missing';
 
@@ -16,10 +17,15 @@ export default function Pico8Game({ game }: { game: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [status, setStatus] = useState<CartStatus>('loading');
   const [turns, setTurns] = useState<Turn[]>([]);
+  // Distinct from the `busy` latch below: that one guards re-entrancy, this one is the
+  // only thing the UI can see. Without it the panel sits silent for the ~1.6s the model
+  // takes, which reads as a dead page on the very turn the panel exists to evidence.
+  const [thinking, setThinking] = useState(false);
 
   useEffect(() => {
     setStatus('loading');
     setTurns([]); // analysis from the previous cart would be misleading
+    setThinking(false);
   }, [game]);
 
   // The page's half of the GPIO protocol; the cart's half is in tic_tac_toe.p8 and the
@@ -42,7 +48,11 @@ export default function Pico8Game({ game }: { game: string }) {
         if (Date.now() < pausedUntil) {
           ai = { move: null, reason: 'rate-limited' };
         } else {
+          // Flagged only around the network call, so the indicator tracks the model and
+          // not the GPIO read-back that follows it.
+          setThinking(true);
           ai = await getAiTurn(board);
+          setThinking(false);
           if (ai.reason === 'rate-limited') {
             const wait = Math.min(Math.max(ai.retryAfter ?? 60, 5), 15 * 60); // clamped: a bad value must not wedge the game
             pausedUntil = Date.now() + wait * 1000;
@@ -89,6 +99,7 @@ export default function Pico8Game({ game }: { game: string }) {
         });
       } finally {
         busy = false;
+        setThinking(false); // a throw must never strand the indicator on
       }
     }, 100);
     return () => clearInterval(id);
@@ -99,34 +110,23 @@ export default function Pico8Game({ game }: { game: string }) {
   return (
     <div>
       {status === 'missing' && (
-        <p style={{ color: '#b00', maxWidth: 480, margin: '1rem auto' }}>
+        <p className={styles.missing}>
           No cart found at <code>{src}</code>. Export a PICO-8 game to{' '}
           <code>public/games/</code> to play.
         </p>
       )}
-      <div
-        style={{
-          display: 'flex',
-          gap: '1rem',
-          justifyContent: 'center',
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-        }}
-      >
-        <iframe
-          ref={iframeRef}
-          src={src}
-          title={game}
-          onLoad={() => setStatus('ready')}
-          onError={() => setStatus('missing')}
-          style={{
-            display: status === 'missing' ? 'none' : 'block',
-            border: 0,
-            width: 'min(90vw, 640px)',
-            height: 'min(90vw, 640px)',
-          }}
-        />
-        {status !== 'missing' && <TurnPanel turns={turns} />}
+      <div className={styles.layout}>
+        <div className={`${styles.stage} ${status === 'missing' ? styles.hidden : ''}`}>
+          <iframe
+            ref={iframeRef}
+            className={styles.frame}
+            src={src}
+            title={game}
+            onLoad={() => setStatus('ready')}
+            onError={() => setStatus('missing')}
+          />
+        </div>
+        {status !== 'missing' && <TurnPanel turns={turns} thinking={thinking} />}
       </div>
     </div>
   );

@@ -1,0 +1,51 @@
+// Page-level chrome and a minimal reset. Global on purpose (see tokens.scss).
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark light; // makes scrollbars and form controls follow the theme
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+// Wide content (the stage, the panel's monospace rows) scrolls inside its own container;
+// the page itself must never scroll sideways.
+body {
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+code {
+  font-family: var(--font-ui);
+  background: var(--surface-raised);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.35em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

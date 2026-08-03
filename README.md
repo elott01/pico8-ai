@@ -108,8 +108,9 @@ api/move.js               serverless proxy — prompt, Gemini call, response sha
 api/_ratelimit.js         per-IP + global quota limiting, KV-backed, fails open
 carts/*.p8                PICO-8 sources; exported into public/games/
 public/games/*.{html,js}  exported carts; the iframe loads the .html
-src/components/           iframe embed, GPIO poll loop, reasoning panel
+src/components/           iframe embed, GPIO poll loop, reasoning panel, theme toggle
 src/lib/                  gpio.ts (byte protocol) + ai.ts (calls /api/move)
+src/styles/               design tokens (PICO-8 palette, geometry) + global reset
 tests/                    node:test suites
 ```
 

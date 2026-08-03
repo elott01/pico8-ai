@@ -4,6 +4,7 @@
 
 import type { Board } from '../lib/gpio.ts';
 import type { AiFailure, Line } from '../lib/ai.ts';
+import styles from './TurnPanel.module.scss';
 
 /** One row of the panel: what the model said, and what the cart actually played. */
 export type Turn = {
@@ -22,62 +23,33 @@ export type Turn = {
   fromModel: boolean;
 };
 
-type Badge = { text: string; color: string };
+// Badges carry a semantic kind rather than a colour, so the palette lives entirely in the
+// stylesheet and re-theming never touches this file.
+type BadgeKind = 'win' | 'threat' | 'notice';
+type Badge = { text: string; kind: BadgeKind };
 
 const MARK = ['', 'X', 'O']; // 0 empty, 1 human (X), 2 AI (O)
 
-const C = {
-  ink: '#1d2b53', // pico-8 dark blue
-  dim: '#5f6b8a',
-  win: '#00a03a',
-  threat: '#ff004d',
-  notice: '#b07000', // amber: expected condition, not a failure
-  rule: '#dfe3ec',
-  panel: '#fbfcfe',
-};
-
-export default function TurnPanel({ turns }: { turns: Turn[] }) {
+export default function TurnPanel({ turns, thinking }: { turns: Turn[]; thinking: boolean }) {
   return (
-    <aside
-      style={{
-        width: 320,
-        maxHeight: 'min(90vw, 640px)',
-        overflowY: 'auto',
-        textAlign: 'left',
-        border: `1px solid ${C.rule}`,
-        borderRadius: 8,
-        background: C.panel,
-        fontFamily: 'system-ui, sans-serif',
-        fontSize: 13,
-        color: C.ink,
-      }}
-    >
-      <h2
-        style={{
-          margin: 0,
-          padding: '0.6rem 0.75rem',
-          fontSize: 13,
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-          borderBottom: `1px solid ${C.rule}`,
-          position: 'sticky',
-          top: 0,
-          background: C.panel,
-        }}
-      >
-        AI Turns
-      </h2>
+    <aside className={styles.panel}>
+      <h2 className={styles.heading}>AI Turns</h2>
 
-      {turns.length === 0 ? (
-        <p style={{ padding: '0.75rem', color: C.dim, margin: 0 }}>
-          Waiting for the AI's first move…
-        </p>
-      ) : (
-        turns
-          .slice()
-          .reverse()
-          .map((t, i) => <TurnCard key={t.n} turn={t} defaultOpen={i === 0} />)
+      {thinking && (
+        <div className={styles.thinking}>
+          <span className={styles.dot} aria-hidden="true" />
+          <span role="status">Gemini is thinking…</span>
+        </div>
       )}
+
+      {turns.length === 0 && !thinking && (
+        <p className={styles.empty}>Waiting for the AI's first move…</p>
+      )}
+
+      {turns
+        .slice()
+        .reverse()
+        .map((t, i) => <TurnCard key={t.n} turn={t} defaultOpen={i === 0} />)}
     </aside>
   );
 }
@@ -89,26 +61,22 @@ function TurnCard({ turn, defaultOpen }: { turn: Turn; defaultOpen: boolean }) {
   const note = fromModel ? null : fallbackNote(turn);
 
   return (
-    <div style={{ borderBottom: `1px solid ${C.rule}`, padding: '0.6rem 0.75rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div className={styles.card}>
+      <div className={styles.cardHead}>
         <strong>#{n}</strong>
-        <span style={{ color: C.dim }}>played {move ?? '—'}</span>
+        <span className={styles.played}>played {move ?? '—'}</span>
         {tag && <Tag {...tag} />}
       </div>
 
       {/* Generated after `move`, so it narrates a decision already made, never causes
           it. The reasoning below is the actual record. */}
-      {commentary && (
-        <p style={{ margin: '0.4rem 0 0', fontStyle: 'italic' }}>“{commentary}”</p>
-      )}
+      {commentary && <p className={styles.commentary}>“{commentary}”</p>}
 
-      {note && (
-        <p style={{ margin: '0.4rem 0 0', color: note.color, fontSize: 12 }}>{note.text}</p>
-      )}
+      {note && <p className={`${styles.note} ${styles[note.kind]}`}>{note.text}</p>}
 
       {fromModel && lines.length > 0 && (
-        <details open={defaultOpen} style={{ marginTop: '0.4rem' }}>
-          <summary style={{ cursor: 'pointer', color: C.dim, fontSize: 12 }}>reasoning</summary>
+        <details open={defaultOpen} className={styles.details}>
+          <summary className={styles.summary}>reasoning</summary>
           <Reasoning board={board} move={move} lines={lines} winMove={winMove} blockMove={blockMove} />
         </details>
       )}
@@ -116,7 +84,7 @@ function TurnCard({ turn, defaultOpen }: { turn: Turn; defaultOpen: boolean }) {
       {/* Solver turns have no analysis to show, but the board still shows where it
           played. Skipped when the read-back missed, since there is nothing to ring. */}
       {!fromModel && Number.isInteger(move) && (
-        <div style={{ marginTop: '0.5rem' }}>
+        <div className={styles.boardWrap}>
           <MiniBoard board={board} move={move} />
         </div>
       )}
@@ -146,19 +114,19 @@ function Reasoning({
   const quiet = lines.length - loud.length;
 
   return (
-    <div style={{ display: 'flex', gap: 10, marginTop: '0.5rem' }}>
+    <div className={styles.reasoning}>
       <MiniBoard board={board} move={move} />
-      <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, lineHeight: 1.6 }}>
-        <div style={{ color: C.dim }}>
+      <div className={styles.reasoningText}>
+        <div className={styles.meta}>
           winMove: <Val v={winMove} /> · blockMove: <Val v={blockMove} />
         </div>
         {loud.map(({ l, t }) => (
           <div key={l.line.join()}>
             [{l.line.join(',')}] {l.values.join(',')}{' '}
-            <span style={{ color: t.color }}>→ {t.text}</span>
+            <span className={styles[t.kind]}>→ {t.text}</span>
           </div>
         ))}
-        {quiet > 0 && <div style={{ color: C.dim }}>+ {quiet} quiet lines</div>}
+        {quiet > 0 && <div className={styles.quiet}>+ {quiet} quiet lines</div>}
       </div>
     </div>
   );
@@ -166,23 +134,9 @@ function Reasoning({
 
 function MiniBoard({ board, move }: { board: Board; move: number | null }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 18px)', gap: 2, flexShrink: 0 }}>
+    <div className={styles.board}>
       {board.map((v, i) => (
-        <div
-          key={i}
-          style={{
-            width: 18,
-            height: 18,
-            display: 'grid',
-            placeItems: 'center',
-            fontSize: 11,
-            fontFamily: 'ui-monospace, monospace',
-            border: `1px solid ${i === move ? C.win : C.rule}`,
-            background: i === move ? '#e8f8ee' : '#fff',
-            color: i === move ? C.win : C.ink,
-            borderRadius: 2,
-          }}
-        >
+        <div key={i} className={`${styles.cell} ${i === move ? styles.cellPlayed : ''}`}>
           {i === move ? 'O' : MARK[v]}
         </div>
       ))}
@@ -190,49 +144,45 @@ function MiniBoard({ board, move }: { board: Board; move: number | null }) {
   );
 }
 
-function Tag({ text, color }: Badge) {
-  return (
-    <span style={{ marginLeft: 'auto', color, fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}>
-      ● {text}
-    </span>
-  );
+function Tag({ text, kind }: Badge) {
+  return <span className={`${styles.tag} ${styles[kind]}`}>● {text}</span>;
 }
 
 function Val({ v }: { v: number | null }) {
-  return <span style={{ color: v === null ? C.dim : C.ink }}>{v === null ? 'null' : v}</span>;
+  return <span className={v === null ? styles.quiet : undefined}>{v === null ? 'null' : v}</span>;
 }
 
 // Explains a turn the model didn't decide, where the cart's minimax played instead —
-// so `move` is a real, optimal cell, not a failure. Rate limiting reads amber because it
-// is an expected condition; only genuine failures read red.
+// so `move` is a real, optimal cell, not a failure. Rate limiting reads as a notice
+// because it is an expected condition; only genuine failures read as threats.
 function fallbackNote({ move, intended, board, reason }: Turn): Badge {
   const played = Number.isInteger(move) ? `played ${move}` : 'played';
   const solver = `built-in solver ${played}`;
 
   if (reason === 'rate-limited') {
-    return { color: C.notice, text: `⏳ Demo rate limit reached — ${solver}.` };
+    return { kind: 'notice', text: `⏳ Demo rate limit reached — ${solver}.` };
   }
   if (reason === 'timeout') {
-    return { color: C.threat, text: `⚠ Model timed out — ${solver}.` };
+    return { kind: 'threat', text: `⚠ Model timed out — ${solver}.` };
   }
   if (reason === 'error') {
-    return { color: C.threat, text: `⚠ Model unavailable — ${solver}.` };
+    return { kind: 'threat', text: `⚠ Model unavailable — ${solver}.` };
   }
   // No reason, but not a model turn: it answered with an unusable cell.
   if (intended !== null && Number.isInteger(intended) && board[intended] !== 0) {
-    return { color: C.threat, text: `⚠ Model chose ${intended} (already taken) — ${solver}.` };
+    return { kind: 'threat', text: `⚠ Model chose ${intended} (already taken) — ${solver}.` };
   }
-  return { color: C.threat, text: `⚠ Model move rejected — ${solver}.` };
+  return { kind: 'threat', text: `⚠ Model move rejected — ${solver}.` };
 }
 
 function classify({ move, winMove, blockMove }: Turn): Badge | null {
-  if (winMove !== null && move === winMove) return { text: 'WIN', color: C.win };
-  if (blockMove !== null && move === blockMove) return { text: 'BLOCK', color: C.threat };
+  if (winMove !== null && move === winMove) return { text: 'WIN', kind: 'win' };
+  if (blockMove !== null && move === blockMove) return { text: 'BLOCK', kind: 'threat' };
   return null;
 }
 
 function lineTag(l: Line): Badge | null {
-  if (l.twos === 2 && l.ones === 0) return { text: 'WIN', color: C.win };
-  if (l.ones === 2 && l.twos === 0) return { text: 'THREAT', color: C.threat };
+  if (l.twos === 2 && l.ones === 0) return { text: 'WIN', kind: 'win' };
+  if (l.ones === 2 && l.twos === 0) return { text: 'THREAT', kind: 'threat' };
   return null;
 }

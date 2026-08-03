@@ -1,0 +1,26 @@
+.page {
+  padding: clamp(1rem, 3vw, 2rem) 1rem;
+  text-align: center;
+}
+
+// In normal flow rather than fixed/absolute: a floating control would overlap the
+// centred title on narrow viewports.
+.topbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: clamp(0.5rem, 2vw, 1rem);
+}
+
+.title {
+  font-size: clamp(1rem, 3vw, 1.4rem);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.tagline {
+  margin-top: 0.45rem;
+  margin-bottom: clamp(1rem, 3vw, 1.75rem);
+  color: var(--ink-dim);
+  font-size: 13px;
+}
