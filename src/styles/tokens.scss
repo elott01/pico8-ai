@@ -1,0 +1,71 @@
+// Design tokens. Global on purpose — custom properties must land on :root to cascade,
+// so this is NOT a *.module.scss file.
+//
+// Two layers: the literal PICO-8 palette (never referenced directly by components), and
+// semantic tokens that map onto it. Re-theming means repointing the semantic layer only.
+
+:root {
+  // ---- PICO-8's 16 colours, verbatim -------------------------------------------------
+  --p8-black: #000000;
+  --p8-dark-blue: #1d2b53;
+  --p8-dark-purple: #7e2553;
+  --p8-dark-green: #008751;
+  --p8-brown: #ab5236;
+  --p8-dark-grey: #5f574f;
+  --p8-light-grey: #c2c3c7;
+  --p8-white: #fff1e8;
+  --p8-red: #ff004d;
+  --p8-orange: #ffa300;
+  --p8-yellow: #ffec27;
+  --p8-green: #00e436;
+  --p8-blue: #29adff;
+  --p8-lavender: #83769c;
+  --p8-pink: #ff77a8;
+  --p8-light-peach: #ffccaa;
+
+  // ---- Geometry ----------------------------------------------------------------------
+  // The cart renders square. Both the iframe and the panel's height derive from this, so
+  // the two stay in step from one place instead of a magic number copied per component.
+  --stage-size: min(90vw, 640px);
+  --bezel-pad: clamp(10px, 2vw, 18px);
+  --panel-width: 320px;
+
+  --radius-sm: 2px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+
+  --font-ui: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  // ---- Semantic layer: dark is the default -------------------------------------------
+  // The cart is a dark canvas; a light page around it is glare. Light is available below
+  // for anyone whose system asks for it.
+  --bg: var(--p8-black);
+  --surface: #0d1430;
+  --surface-raised: var(--p8-dark-blue);
+  --ink: var(--p8-white);
+  --ink-dim: var(--p8-lavender);
+  --rule: #2a3766;
+  --accent: var(--p8-blue);
+  --win: var(--p8-green);
+  --threat: var(--p8-red);
+  --notice: var(--p8-orange);
+  --cell-bg: #0a1030;
+  --glow: 0 0 60px -20px var(--p8-blue);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: var(--p8-white);
+    --surface: #ffffff;
+    --surface-raised: #fbfcfe;
+    --ink: var(--p8-dark-blue);
+    --ink-dim: var(--p8-dark-grey);
+    --rule: var(--p8-light-grey);
+    --accent: #1076c4;
+    --win: var(--p8-dark-green);
+    --threat: var(--p8-red);
+    --notice: var(--p8-brown);
+    --cell-bg: #ffffff;
+    --glow: 0 18px 40px -22px rgba(29, 43, 83, 0.45);
+  }
+}
