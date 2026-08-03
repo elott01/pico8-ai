@@ -1,4 +1,4 @@
-import Pico8Game from './components/Pico8Game.jsx';
+import Pico8Game from './components/Pico8Game.tsx';
 
 export default function App() {
   return (

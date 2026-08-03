@@ -7,12 +7,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```sh
 vercel dev                                   # local dev — USE THIS, not `npm run dev`
 npm test                                     # full suite (node:test, no framework)
+npm run typecheck                            # tsc --noEmit; the suite does NOT typecheck
 node --test tests/ratelimit.test.js          # one file
 node --test tests/a.test.js tests/b.test.js  # several files
-node --test --test-name-pattern="fail-open" tests/*.test.js   # filter by test name
+node --test --test-name-pattern="fail-open" "tests/**/*.test.{js,ts}"   # filter by name
 npm run test:watch                           # watch mode
 npm run build                                # production build -> dist/
 ```
+
+Tests are a mix of `.ts` (covering `src/`) and `.js` (covering `api/`), so globs must be
+**quoted** and cover both — Node expands them, and zsh would fail on `{js,ts}` first.
 
 **`npm run dev` runs Vite only**, so `/api/move` 404s and the AI silently does nothing. Only
 `vercel dev` runs the serverless functions. It reads `.env.local` and `api/` **at boot** —
@@ -28,17 +32,17 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
 
 - **`carts/tic_tac_toe.p8`** owns all game logic (turns, win detection) and a local minimax.
   On the CPU's turn it publishes the board to GPIO and waits.
-- **`src/components/Pico8Game.jsx`** embeds the cart's *exported `.html`* in an iframe (not the
+- **`src/components/Pico8Game.tsx`** embeds the cart's *exported `.html`* in an iframe (not the
   `.js` — the export needs its own shell) and polls `contentWindow.pico8_gpio` every 100ms.
-- **`src/lib/gpio.js`** is the byte-protocol source of truth; the cart's Lua half must match it.
+- **`src/lib/gpio.ts`** is the byte-protocol source of truth; the cart's Lua half must match it.
 - **`api/move.js`** holds the API key, builds the prompt, calls Gemini, and returns the move
-  plus the model's own analysis, which `TurnPanel.jsx` renders as evidence a real LLM chose it.
+  plus the model's own analysis, which `TurnPanel.tsx` renders as evidence a real LLM chose it.
 
 ### Byte 10 has two meanings in one handshake
 
 The page writes the move to play (or `NO_MOVE`, 255). The cart then **overwrites byte 10 with
 the cell it actually played** before returning to idle, so the page can read back what really
-happened. Understanding this requires `gpio.js`, `Pico8Game.jsx` (`readCartPlayedMove`) and the
+happened. Understanding this requires `gpio.ts`, `Pico8Game.tsx` (`readCartPlayedMove`) and the
 cart's `update_ai()` together.
 
 ### The fallback is the cart's minimax, not a random move
@@ -55,7 +59,7 @@ Breaking any of these fails silently, so verify them when touching the relevant 
 - **JSON key order in `buildPrompt` is load-bearing.** Keys generate in order, so each field is
   conditioned on the ones above it. `commentary` must stay **last**, after `move`, or flavour
   text starts steering the game.
-- **Timeout budget chain:** `getAiTurn` (~10s, `src/lib/ai.js`) must stay *below* the cart's
+- **Timeout budget chain:** `getAiTurn` (~10s, `src/lib/ai.ts`) must stay *below* the cart's
   `ai_max_frames` (~15s). If the cart gives up first it self-plays and the read-back finds
   nothing, so the panel loses the played cell.
 - **The quota cap counts Gemini calls, not requests.** `reserveGeminiCall()` sits *inside* the
@@ -73,6 +77,10 @@ Breaking any of these fails silently, so verify them when touching the relevant 
 - **Files in `api/` become public routes** unless underscore-prefixed — that is why the limiter
   lives in `api/_ratelimit.js`.
 - **Never prefix an env var with `VITE_`** — those are inlined into the browser bundle.
+- **Node runs `.ts` tests by stripping types, not compiling them**, so `npm test` passes on
+  code that does not typecheck, and only *erasable* syntax works — no `enum`, `namespace`,
+  or parameter properties. `erasableSyntaxOnly` in `tsconfig.json` turns that runtime
+  failure into a typecheck error; don't remove it. Type-only imports need `import type`.
 - Diagnostic signature: if the AI always plays the **first empty cell**, `GEMINI_API_KEY` is
   unset and `api/move.js` took its no-key branch.
 - Module state does not survive `vercel dev`'s per-request reload, which is why rate-limit

@@ -12,14 +12,14 @@ Everything interesting happens at that second arrow. Two processes with no share
 callbacks and no events have to agree on whose turn it is to write, using nothing but a
 128-byte block of memory both can see. This document is the walkthrough of that handshake.
 
-**Read this when** touching [src/lib/gpio.js](../src/lib/gpio.js),
+**Read this when** touching [src/lib/gpio.ts](../src/lib/gpio.ts),
 [carts/tic_tac_toe.p8](../carts/tic_tac_toe.p8) (`update_ai` / `request_web_move`), or the
-poll loop in [src/components/Pico8Game.jsx](../src/components/Pico8Game.jsx).
+poll loop in [src/components/Pico8Game.tsx](../src/components/Pico8Game.tsx).
 
 **Not covered here:** prompt construction, rate limiting, and quota accounting. Those live
 in [api/move.js](../api/move.js) and [api/_ratelimit.js](../api/_ratelimit.js).
 
-**Source of truth:** [src/lib/gpio.js](../src/lib/gpio.js) declares the protocol. The Lua
+**Source of truth:** [src/lib/gpio.ts](../src/lib/gpio.ts) declares the protocol. The Lua
 constants at [tic_tac_toe.p8:138-141](../carts/tic_tac_toe.p8#L138-L141) are a
 hand-maintained copy — nothing enforces that they agree, so a mismatch fails silently.
 
@@ -72,7 +72,7 @@ cart: 3 → 0   "byte 10 now holds what I played"
 **The ack is load-bearing in both directions.**
 
 The page writes it *synchronously*, before any `await`
-([Pico8Game.jsx:30](../src/components/Pico8Game.jsx#L30)). Otherwise the next 100ms poll
+([Pico8Game.tsx:35](../src/components/Pico8Game.tsx#L35)). Otherwise the next 100ms poll
 tick would still see `ST_REQUEST` standing and fire a second Gemini call for the same turn.
 
 The cart uses it to tell two failure modes apart
@@ -99,7 +99,7 @@ Two ordering rules keep it correct:
   ([:186-187](../carts/tic_tac_toe.p8#L186-L187)). The page treats `status === IDLE` as the
   signal that byte 10 is trustworthy, so the payload has to land before the flag.
 - **Page requires both conditions** — `status === ST_IDLE` *and* `0 ≤ byte10 ≤ 8`
-  ([Pico8Game.jsx:137-139](../src/components/Pico8Game.jsx#L137-L139)). Checking only the
+  ([Pico8Game.tsx:148-150](../src/components/Pico8Game.tsx#L148-L150)). Checking only the
   range reads back the `255` it just wrote itself; checking neither reads back its own
   suggestion and credits the model for a cell the cart substituted.
 
@@ -116,10 +116,10 @@ Two ordering rules keep it correct:
 
 3. **Page picks it up.** The 100ms poll sees `gpio[0] === 1`, sets a local `busy` latch,
    writes status `2`, and `readBoard()` copies bytes 1–9 into a 0-indexed JS array
-   ([gpio.js:28](../src/lib/gpio.js#L28)).
+   ([gpio.ts:47](../src/lib/gpio.ts#L47)).
 
 4. **Page calls the API.** `getAiTurn(board)` POSTs to `/api/move` with a 10s abort
-   ([ai.js:11](../src/lib/ai.js#L11)). It always resolves to an object, never throws —
+   ([ai.ts:46](../src/lib/ai.ts#L46)). It always resolves to an object, never throws —
    `reason` carries `null` / `'rate-limited'` / `'timeout'` / `'error'`.
 
 5. **Server does the real work.** [api/move.js](../api/move.js): same-origin check, rate
@@ -129,7 +129,7 @@ Two ordering rules keep it correct:
    `{move, winMove, blockMove, lines, commentary}`.
 
 6. **Page validates and writes.** Only a move that is both legal and came back clean survives
-   ([:49-50](../src/components/Pico8Game.jsx#L49-L50)); anything else becomes `NO_MOVE`.
+   ([:58-60](../src/components/Pico8Game.tsx#L58-L60)); anything else becomes `NO_MOVE`.
    Byte 10 gets the value, then status goes to `3`.
 
 7. **Cart consumes.** `peek(gpio+10)`; if it is 0–8 and that cell is empty, play it —
@@ -140,9 +140,9 @@ Two ordering rules keep it correct:
 8. **Page reads back.** `readCartPlayedMove` has been polling at 16ms; it now sees idle plus a
    valid cell and returns it. The turn record stores `move` (what happened) separately from
    `intended` (what the model asked for), and sets `fromModel` only when those agree
-   ([:75](../src/components/Pico8Game.jsx#L75)).
+   ([:86](../src/components/Pico8Game.tsx#L86)).
 
-9. **Panel renders.** [TurnPanel.jsx](../src/components/TurnPanel.jsx) gates the WIN/BLOCK tag
+9. **Panel renders.** [TurnPanel.tsx](../src/components/TurnPanel.tsx) gates the WIN/BLOCK tag
    and the reasoning dropdown on `fromModel`; when it is false it shows a `fallbackNote`
    naming the actual cause — rate limit in amber, genuine failures in red.
 
@@ -169,9 +169,9 @@ above `move` and flavour text starts steering the game.
 
 | Bound | Value | Where |
 |---|---|---|
-| Page poll interval | 100ms | `Pico8Game.jsx` |
+| Page poll interval | 100ms | `Pico8Game.tsx` |
 | Read-back poll / ceiling | 16ms / 3500ms | `readCartPlayedMove` |
-| Page request timeout | ~10s | `getAiTurn`, `ai.js` |
+| Page request timeout | ~10s | `getAiTurn`, `ai.ts` |
 | Cart no-ack fallback | 15 frames (~0.5s) | `ai_ack_frames` |
 | Cart stall fallback | 450 frames (~15s) | `ai_max_frames` |
 
@@ -180,7 +180,7 @@ cart gives up first it self-plays and the read-back finds nothing to report.
 
 ## This doc is stale if…
 
-- `gpio.js` and the Lua constants at `tic_tac_toe.p8:138-141` no longer agree
+- `gpio.ts` and the Lua constants at `tic_tac_toe.p8:138-141` no longer agree
 - byte 11+ gets used, or a second cart joins with a different layout
 - `getAiTurn`'s timeout rises to meet `ai_max_frames`
 - `commentary` starts crossing the bridge instead of arriving over HTTP
