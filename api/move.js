@@ -65,7 +65,7 @@ const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MO
 async function askGemini(board, correction) {
   let r, data;
   // Attempts and backoff have to fit inside the client's request timeout (getAiTurn in
-  // src/lib/ai.js) alongside generation and a possible legality retry.
+  // src/lib/ai.ts) alongside generation and a possible legality retry.
   for (let attempt = 0; attempt < 3; attempt++) {
     await reserveGeminiCall(); // inside the loop: the quota cap counts calls, not requests
     r = await fetch(GEMINI_URL, {

@@ -1,0 +1,36 @@
+{
+  // Types are never emitted by tsc: Vite (esbuild) compiles src/, and Node 24 strips
+  // types from tests/ natively. This config exists purely to typecheck both.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["node", "vite/client"],
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // Both compilers strip types per-file, without cross-file knowledge, so the source
+    // has to stay unambiguous on its own.
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    // Rejects syntax Node cannot strip (enum, namespace, parameter properties). Without
+    // this, `npm test` breaks at runtime on code that typechecks fine.
+    "erasableSyntaxOnly": true,
+
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+
+    // api/ stays JS for now, and .js imports still resolve during the migration.
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["src", "tests", "env.d.ts"],
+  "exclude": ["node_modules", "dist", "api"]
+}

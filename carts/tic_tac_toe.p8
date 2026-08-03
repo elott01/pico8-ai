@@ -129,7 +129,7 @@ function best_move(b, me)
     return bestcell
 end
 
--- gpio bridge to the web page; must stay in sync with src/lib/gpio.js.
+-- gpio bridge to the web page; must stay in sync with src/lib/gpio.ts.
 --   byte 0     status: 0 idle · 1 request · 2 thinking · 3 ready
 --   bytes 1..9 board cells (0 empty, 1 human, 2 ai) -- same coding as `board`
 --   byte 10    move cell, 0-based. the page writes the move to play, or a value >8

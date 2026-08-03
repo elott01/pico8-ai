@@ -24,7 +24,7 @@ import {
   IDX_MOVE,
   NO_MOVE,
   readBoard,
-} from '../src/lib/gpio.js';
+} from '../src/lib/gpio.ts';
 
 const CART = 'carts/tic_tac_toe.p8';
 const lua = readFileSync(new URL(`../${CART}`, import.meta.url), 'utf8');
@@ -34,7 +34,7 @@ const CELLS = 9;
 
 // Parsing, not evaluating: a regex miss means the Lua moved, which must fail loudly rather
 // than yield undefined and let an assertion pass vacuously.
-function parse(re, label) {
+function parse(re: RegExp, label: string) {
   const m = lua.match(re);
   assert.ok(m, `could not parse ${label} from ${CART} — the Lua was reformatted, so this test's parser needs updating (not necessarily a protocol break)`);
   return m.slice(1).map(Number);

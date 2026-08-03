@@ -109,12 +109,12 @@ api/_ratelimit.js         per-IP + global quota limiting, KV-backed, fails open
 carts/*.p8                PICO-8 sources; exported into public/games/
 public/games/*.{html,js}  exported carts; the iframe loads the .html
 src/components/           iframe embed, GPIO poll loop, reasoning panel
-src/lib/                  gpio.js (byte protocol) + ai.js (calls /api/move)
+src/lib/                  gpio.ts (byte protocol) + ai.ts (calls /api/move)
 tests/                    node:test suites
 ```
 
 > `vercel.json` is intentionally empty. A catch-all SPA rewrite breaks `vercel dev` by
-> intercepting Vite's dev modules (`/src/main.jsx`, `/@vite/client`) and returning HTML
+> intercepting Vite's dev modules (`/src/main.tsx`, `/@vite/client`) and returning HTML
 > for them. Only add a dev-safe rewrite if client-side routing is introduced.
 
 ## Roadmap

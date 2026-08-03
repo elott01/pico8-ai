@@ -25,8 +25,30 @@ export const IDX_MOVE = 10;
 // unmistakably not a cell index.
 export const NO_MOVE = 255;
 
-export function readBoard(gpio) {
-  const board = [];
-  for (let i = 0; i < 9; i++) board.push(gpio[IDX_BOARD + i] | 0);
+export type Status = typeof ST_IDLE | typeof ST_REQUEST | typeof ST_THINKING | typeof ST_READY;
+
+/** One board square: 0 empty, 1 human (X), 2 AI (O). */
+export type Cell = 0 | 1 | 2;
+
+/** The 9 board cells, in GPIO order. */
+export type Board = Cell[];
+
+/** The cart's 128 GPIO bytes, mirrored by the web export as a plain JS array. */
+export type Gpio = number[];
+
+declare global {
+  interface Window {
+    // Declared by the PICO-8 web export inside the iframe, so it is absent until the
+    // cart has loaded.
+    pico8_gpio?: Gpio;
+  }
+}
+
+export function readBoard(gpio: Gpio): Board {
+  const board: Board = [];
+  // The cart only ever writes 0..2 to these bytes, so narrowing to Cell is an assertion
+  // about the cart's half of the protocol (checked by tests/gpio-protocol.test.ts), not
+  // a runtime guard.
+  for (let i = 0; i < 9; i++) board.push((gpio[IDX_BOARD + i] | 0) as Cell);
   return board;
 }

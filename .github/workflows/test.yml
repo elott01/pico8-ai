@@ -15,5 +15,8 @@ jobs:
           node-version: 24.x
           cache: npm
       - run: npm ci
+      # Node strips types without checking them, so the suite passes either way — this is
+      # the only thing standing between a type error and main.
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build
