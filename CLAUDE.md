@@ -81,6 +81,14 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   code that does not typecheck, and only *erasable* syntax works — no `enum`, `namespace`,
   or parameter properties. `erasableSyntaxOnly` in `tsconfig.json` turns that runtime
   failure into a typecheck error; don't remove it. Type-only imports need `import type`.
+- **The theme storage key is duplicated on purpose.** `index.html`'s inline pre-paint
+  script and `STORAGE_KEY` in `ThemeToggle.tsx` must stay in agreement. That script cannot
+  be a module — a deferred one runs after first paint, so a stored choice that disagrees
+  with the OS flashes the wrong theme on every load. Changing one side alone silently
+  reintroduces the flash.
+- **Colours belong in `src/styles/`, never in a `.tsx`.** Badges carry a semantic `kind`
+  (`win`/`threat`/`notice`) that maps to a class; a hex code in a component would be
+  invisible to the light/dark switch.
 - Diagnostic signature: if the AI always plays the **first empty cell**, `GEMINI_API_KEY` is
   unset and `api/move.js` took its no-key branch.
 - Module state does not survive `vercel dev`'s per-request reload, which is why rate-limit
