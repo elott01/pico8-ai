@@ -1,0 +1,40 @@
+pico-ai
+Copyright (c) 2026 Ethan Lott
+
+This product is licensed under the MIT License (see LICENSE), with the
+third-party exception noted below.
+
+
+SCOPE OF THE MIT GRANT
+----------------------
+
+The MIT License in LICENSE covers the source authored in this repository:
+
+    api/            serverless proxy and rate limiter
+    carts/          PICO-8 cart source (.p8), including the game's Lua
+    docs/           protocol documentation
+    src/            React client, GPIO bridge, styles
+    tests/          test suites
+    index.html, package.json, vite.config.js, tsconfig.json
+
+
+THIRD-PARTY CONTENT NOT COVERED BY THE MIT GRANT
+------------------------------------------------
+
+Files under public/games/ are PICO-8 export artifacts. They bundle the PICO-8
+web player runtime, which is the copyrighted work of Lexaloffle Games LLP and
+is not the author's to relicense:
+
+    public/games/tic_tac_toe.js     ~1.7 MB   PICO-8 web player runtime
+    public/games/tic_tac_toe.html   ~44 KB    PICO-8 export shell
+
+These files are redistributed under Lexaloffle's terms for distributing
+exported PICO-8 carts, not under the MIT License.
+
+Note that the *game* is not third-party content: the Lua source at
+carts/tic_tac_toe.p8 is the author's work and is MIT-licensed like the rest of
+the repository. Only the surrounding player runtime emitted by PICO-8's HTML
+export belongs to Lexaloffle.
+
+PICO-8 is a product of Lexaloffle Games LLP.
+https://www.lexaloffle.com/pico-8.php

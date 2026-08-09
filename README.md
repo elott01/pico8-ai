@@ -112,6 +112,7 @@ src/components/           iframe embed, GPIO poll loop, reasoning panel, theme t
 src/lib/                  gpio.ts (byte protocol) + ai.ts (calls /api/move)
 src/styles/               design tokens (PICO-8 palette, geometry) + global reset
 tests/                    node:test suites
+LICENSE / NOTICE          MIT, plus the Lexaloffle carve-out for public/games/
 ```
 
 > `vercel.json` is intentionally empty. A catch-all SPA rewrite breaks `vercel dev` by
@@ -127,3 +128,16 @@ tests/                    node:test suites
 - **More carts.** Each game ships a small feature-extractor over a shared contract, so the
   pipeline is written once. Games without an optimal algorithm to fall back on are exactly
   where the LLM genuinely has to play.
+
+## License
+
+[MIT](LICENSE) — with one carve-out, detailed in [NOTICE](NOTICE).
+
+The MIT grant covers the source authored here (`src/`, `api/`, `carts/`, `tests/`,
+`docs/`). It does **not** cover `public/games/`, which holds PICO-8 export artifacts:
+`tic_tac_toe.js` is ~1.7 MB of PICO-8 web player runtime, © Lexaloffle Games LLP,
+redistributed under PICO-8's terms for exported carts rather than relicensed.
+
+The game itself is not third-party content — the Lua at
+[carts/tic_tac_toe.p8](carts/tic_tac_toe.p8) is MIT like the rest of the source. Only the
+player runtime that PICO-8's HTML export wraps around it belongs to Lexaloffle.
