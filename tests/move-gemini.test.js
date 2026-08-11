@@ -7,7 +7,7 @@ process.env.GEMINI_MAX_CALLS_PER_MIN = '999'; // the cap itself is covered in mo
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { default: handler } = await import('../api/move.js');
+const { default: handler } = await import('../api/move.ts');
 
 const HOST = 'pico8-ai.vercel.app';
 

@@ -31,6 +31,6 @@
     "allowJs": true,
     "checkJs": false
   },
-  "include": ["src", "tests", "env.d.ts"],
-  "exclude": ["node_modules", "dist", "api"]
+  "include": ["src", "tests", "api", "env.d.ts"],
+  "exclude": ["node_modules", "dist"]
 }

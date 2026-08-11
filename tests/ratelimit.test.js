@@ -10,7 +10,7 @@ delete process.env.UPSTASH_REDIS_REST_URL;
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { checkRateLimit, reserveGeminiCall, QuotaError } = await import('../api/_ratelimit.js');
+const { checkRateLimit, reserveGeminiCall, QuotaError } = await import('../api/_ratelimit.ts');
 
 const IP_MAX = 40;
 const MINUTE = 60_000;

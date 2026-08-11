@@ -35,7 +35,7 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
 - **`src/components/Pico8Game.tsx`** embeds the cart's *exported `.html`* in an iframe (not the
   `.js` — the export needs its own shell) and polls `contentWindow.pico8_gpio` every 100ms.
 - **`src/lib/gpio.ts`** is the byte-protocol source of truth; the cart's Lua half must match it.
-- **`api/move.js`** holds the API key, builds the prompt, calls Gemini, and returns the move
+- **`api/move.ts`** holds the API key, builds the prompt, calls Gemini, and returns the move
   plus the model's own analysis, which `TurnPanel.tsx` renders as evidence a real LLM chose it.
 
 ### Byte 10 has two meanings in one handshake
@@ -64,10 +64,14 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   nothing, so the panel loses the played cell.
 - **The quota cap counts Gemini calls, not requests.** `reserveGeminiCall()` sits *inside* the
   retry loop in `askGemini` — one request can issue several calls.
-- **`EXPIRE … NX`, never a plain EXPIRE** in `_ratelimit.js`; refreshing the TTL each increment
+- **`EXPIRE … NX`, never a plain EXPIRE** in `_ratelimit.ts`; refreshing the TTL each increment
   would push the window out forever and the counter would never reset.
 - **Rate limiting fails open.** Any KV error degrades to a per-instance memory Map. A limiter
   outage must never break the game.
+- **The `/api/move` wire contract lives in `api/_types.ts` and nowhere else.** `move.ts`
+  annotates its response bodies with it and `src/lib/ai.ts` imports it, so the producer and
+  consumer break together. Restating the shape on either side reintroduces silent drift —
+  that is how `emptyCell` vs `emptyCells` shipped past typecheck, tests and build.
 
 ## Gotchas
 
@@ -75,7 +79,7 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   copying both files into `public/games/`. This cannot be scripted. Comment-only edits to the
   `.p8` need no re-export.
 - **Files in `api/` become public routes** unless underscore-prefixed — that is why the limiter
-  lives in `api/_ratelimit.js`.
+  lives in `api/_ratelimit.ts`.
 - **Never prefix an env var with `VITE_`** — those are inlined into the browser bundle.
 - **Node runs `.ts` tests by stripping types, not compiling them**, so `npm test` passes on
   code that does not typecheck, and only *erasable* syntax works — no `enum`, `namespace`,
@@ -90,7 +94,7 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   (`win`/`threat`/`notice`) that maps to a class; a hex code in a component would be
   invisible to the light/dark switch.
 - Diagnostic signature: if the AI always plays the **first empty cell**, `GEMINI_API_KEY` is
-  unset and `api/move.js` took its no-key branch.
+  unset and `api/move.ts` took its no-key branch.
 - Module state does not survive `vercel dev`'s per-request reload, which is why rate-limit
   counters live in KV rather than memory.
 

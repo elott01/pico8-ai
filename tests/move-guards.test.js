@@ -8,7 +8,7 @@ delete process.env.GEMINI_API_KEY;
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { default: handler } = await import('../api/move.js');
+const { default: handler } = await import('../api/move.ts');
 
 const HOST = 'pico8-ai.vercel.app';
 const SAME_ORIGIN = { host: HOST, origin: `https://${HOST}` };

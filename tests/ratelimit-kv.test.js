@@ -31,7 +31,7 @@ globalThis.fetch = async (_url, opts) => {
   return { ok: true, status: 200, json: async () => results };
 };
 
-const { checkRateLimit, reserveGeminiCall } = await import('../api/_ratelimit.js');
+const { checkRateLimit, reserveGeminiCall } = await import('../api/_ratelimit.ts');
 
 const T0 = 1_700_000_000_000;
 const from = (ip) => ({ headers: { 'x-real-ip': ip } });
