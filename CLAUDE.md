@@ -8,15 +8,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 vercel dev                                   # local dev — USE THIS, not `npm run dev`
 npm test                                     # full suite (node:test, no framework)
 npm run typecheck                            # tsc --noEmit; the suite does NOT typecheck
-node --test tests/ratelimit.test.js          # one file
-node --test tests/a.test.js tests/b.test.js  # several files
+node --test tests/ratelimit.test.ts          # one file
+node --test tests/a.test.ts tests/b.test.ts  # several files
 node --test --test-name-pattern="fail-open" "tests/**/*.test.{js,ts}"   # filter by name
 npm run test:watch                           # watch mode
 npm run build                                # production build -> dist/
 ```
 
-Tests are a mix of `.ts` (covering `src/`) and `.js` (covering `api/`), so globs must be
-**quoted** and cover both — Node expands them, and zsh would fail on `{js,ts}` first.
+Everything under `src/`, `api/` and `tests/` is TypeScript. The test glob still spans
+`{js,ts}` so a stray `.js` test would not be skipped silently, and it must stay **quoted**
+— Node expands it, and zsh would fail on the braces first.
+
+`tests/_mocks.ts` holds the shared `VercelRequest`/`VercelResponse` and `fetch` fakes. It
+is underscore-prefixed and not a `*.test.*` file, so the runner's glob skips it.
 
 **`npm run dev` runs Vite only**, so `/api/move` 404s and the AI silently does nothing. Only
 `vercel dev` runs the serverless functions. It reads `.env.local` and `api/` **at boot** —

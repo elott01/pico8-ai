@@ -25,11 +25,11 @@ const CALLS_PER_DAY = Number(process.env.GEMINI_MAX_CALLS_PER_DAY) || 800;
  *  to the per-instance Map (in which case the global cap is no longer global). */
 export type Store = 'kv' | 'mem';
 
-export type RateLimitResult = {
-  limited: boolean;
-  retryAfter?: number;
-  store: Store;
-};
+// Discriminated on `limited`, so `retryAfter` is reachable only on the branch that
+// actually has one — callers cannot forget to check before reading it.
+export type RateLimitResult =
+  | { limited: false; store: Store }
+  | { limited: true; retryAfter: number; store: Store };
 
 export class QuotaError extends Error {
   retryAfter: number;

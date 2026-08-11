@@ -10,23 +10,26 @@ delete process.env.UPSTASH_REDIS_REST_URL;
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { mockReq } from './_mocks.ts';
+
 const { checkRateLimit, reserveGeminiCall, QuotaError } = await import('../api/_ratelimit.ts');
 
 const IP_MAX = 40;
 const MINUTE = 60_000;
 const DAY = 86_400_000;
 const T0 = 1_700_000_000_000;
-const from = (ip) => ({ headers: { 'x-real-ip': ip } });
+const from = (ip: string) => mockReq({ headers: { 'x-real-ip': ip } });
 
 describe('per-IP limit', () => {
   it('allows up to the cap, then limits', async () => {
     const req = from('10.0.0.1');
-    let last;
-    for (let i = 0; i < IP_MAX; i++) last = await checkRateLimit(req, T0);
+    let last = await checkRateLimit(req, T0);
+    for (let i = 1; i < IP_MAX; i++) last = await checkRateLimit(req, T0);
     assert.equal(last.limited, false);
 
     const over = await checkRateLimit(req, T0);
-    assert.equal(over.limited, true);
+    // The union means retryAfter is only reachable once `limited` is known true.
+    assert.ok(over.limited, 'expected the cap to be exceeded');
     assert.ok(over.retryAfter > 0 && over.retryAfter <= 600, `retryAfter=${over.retryAfter}`);
   });
 
@@ -66,7 +69,7 @@ describe('global Gemini-call cap', () => {
     for (let i = 0; i < 6; i++) await reserveGeminiCall(t);
     await assert.rejects(
       () => reserveGeminiCall(t),
-      (e) => e instanceof QuotaError && e.retryAfter > 0 && e.retryAfter <= 60,
+      (e: unknown) => e instanceof QuotaError && e.retryAfter > 0 && e.retryAfter <= 60,
     );
   });
 
@@ -80,9 +83,9 @@ describe('global Gemini-call cap', () => {
 
 describe('privacy', () => {
   it('never logs a raw IP', async () => {
-    const seen = [];
+    const seen: string[] = [];
     const original = console.log;
-    console.log = (...args) => seen.push(args.join(' '));
+    console.log = (...args: unknown[]) => seen.push(args.join(' '));
     try {
       await checkRateLimit(from('203.0.113.55'), T0 + 5 * DAY);
     } finally {

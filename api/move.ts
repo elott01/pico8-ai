@@ -13,7 +13,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // a model failure, or a working AI looks broken.
   const limit = await checkRateLimit(req);
   if (limit.limited) {
-    const body: MoveRateLimited = { move: null, rateLimited: true, retryAfter: limit.retryAfter! };
+    const body: MoveRateLimited = { move: null, rateLimited: true, retryAfter: limit.retryAfter };
     res.setHeader('Retry-After', String(body.retryAfter));
     return res.status(429).json(body);
   }
