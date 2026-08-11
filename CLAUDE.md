@@ -85,6 +85,14 @@ Breaking any of these fails silently, so verify them when touching the relevant 
 - **Files in `api/` become public routes** unless underscore-prefixed — that is why the limiter
   lives in `api/_ratelimit.ts`.
 - **Never prefix an env var with `VITE_`** — those are inlined into the browser bundle.
+- **`allowImportingTsExtensions` and `rewriteRelativeImportExtensions` are a pair.**
+  Imports carry explicit `.ts`/`.tsx` extensions so Node resolves them while stripping
+  types for `npm test`. Vercel's builder *emits* `.js`, and TypeScript never rewrites
+  specifiers on its own — so without the rewrite flag the emitted `api/move.js` still
+  imports `./_ratelimit.ts`, a file that does not exist in the bundle, and every request
+  dies with `FUNCTION_INVOCATION_FAILED` before the handler runs. Drop either flag and one
+  of the two runtimes breaks. `npm test`, `typecheck`, `build` and `vercel dev` all pass
+  either way; only a real deploy fails.
 - **TypeScript must stay on 5.x.** Vercel's serverless builder compiles `api/*.ts` with
   the project's *local* TypeScript ("Using TypeScript X (local user-provided)" in the build
   log). TypeScript 7 is the Go rewrite and does not expose the compiler-host API the
