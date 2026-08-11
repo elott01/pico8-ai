@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 
 const { default: handler } = await import('../api/move.js');
 
-const HOST = 'pico-ai.vercel.app';
+const HOST = 'pico8-ai.vercel.app';
 
 // A well-formed Gemini response; `fields` overrides the parts the test cares about.
 const geminiReply = (fields) => ({

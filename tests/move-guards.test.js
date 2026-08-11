@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 const { default: handler } = await import('../api/move.js');
 
-const HOST = 'pico-ai.vercel.app';
+const HOST = 'pico8-ai.vercel.app';
 const SAME_ORIGIN = { host: HOST, origin: `https://${HOST}` };
 
 function mockRes() {

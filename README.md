@@ -1,4 +1,4 @@
-# pico-ai
+# PICO-8 + Gemini
 
 **[▶ Play it](https://pico8-ai.vercel.app)** &nbsp;·&nbsp; [![tests](https://github.com/elott01/pico8-ai/actions/workflows/test.yml/badge.svg)](https://github.com/elott01/pico8-ai/actions/workflows/test.yml)
 
