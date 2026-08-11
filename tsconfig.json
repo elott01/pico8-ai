@@ -25,7 +25,13 @@
     "noEmit": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
+    // Imports carry explicit .ts/.tsx extensions so Node can resolve them when it strips
+    // types for `npm test`. Vercel's function builder *emits* .js files, though, and
+    // TypeScript never rewrites specifiers on its own — a `.ts` specifier would survive
+    // compilation and fail to resolve at runtime. rewriteRelativeImportExtensions turns
+    // them into .js on emit, so both runtimes resolve. Removing either flag breaks one.
     "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
 
     // api/ stays JS for now, and .js imports still resolve during the migration.
     "allowJs": true,
