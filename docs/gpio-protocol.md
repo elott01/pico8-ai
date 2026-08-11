@@ -17,7 +17,7 @@ callbacks and no events have to agree on whose turn it is to write, using nothin
 poll loop in [src/components/Pico8Game.tsx](../src/components/Pico8Game.tsx).
 
 **Not covered here:** prompt construction, rate limiting, and quota accounting. Those live
-in [api/move.js](../api/move.js) and [api/_ratelimit.js](../api/_ratelimit.js).
+in [api/move.ts](../api/move.ts) and [api/_ratelimit.ts](../api/_ratelimit.ts).
 
 **Source of truth:** [src/lib/gpio.ts](../src/lib/gpio.ts) declares the protocol. The Lua
 constants at [tic_tac_toe.p8:138-141](../carts/tic_tac_toe.p8#L138-L141) are a
@@ -122,7 +122,7 @@ Two ordering rules keep it correct:
    ([ai.ts:46](../src/lib/ai.ts#L46)). It always resolves to an object, never throws —
    `reason` carries `null` / `'rate-limited'` / `'timeout'` / `'error'`.
 
-5. **Server does the real work.** [api/move.js](../api/move.js): same-origin check, rate
+5. **Server does the real work.** [api/move.ts](../api/move.ts): same-origin check, rate
    limit, board validation, then `askGemini` — quota reservation *inside* the retry loop,
    JSON-mode generation at temp 0.1, up to 3 attempts on 503/429, plus one correction retry
    if the model names an occupied cell. Returns
@@ -160,7 +160,7 @@ It renders in the sidebar *next to* the iframe, not inside it. **GPIO carries ex
 things: a board snapshot going out, and one cell index coming back.**
 
 The commentary is still constrained, just not by bytes. In
-[buildPrompt](../api/move.js#L141) the JSON key order is deliberate — tokens generate in
+[buildPrompt](../api/move.ts#L141) the JSON key order is deliberate — tokens generate in
 sequence, so each field is conditioned on the ones above it, and `commentary` sits **last,
 after `move`**. It narrates a decision already made rather than participating in it. Move it
 above `move` and flavour text starts steering the game.

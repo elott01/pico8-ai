@@ -4,7 +4,7 @@
 
 Turn-based PICO-8 games embedded in a React app, played against a Gemini-powered
 opponent. One Vercel deploy: a static Vite/React frontend plus a serverless proxy
-(`api/move.js`) that holds the API key.
+(`api/move.ts`) that holds the API key.
 
 The side panel shows the model's own line-by-line analysis for every move, so you can see
 what it saw — and when it fell back to the cart's built-in solver instead.
@@ -77,7 +77,7 @@ vercel login
 cp .env.example .env.local  # paste your GEMINI_API_KEY into it
 ```
 
-Without a key, `api/move.js` answers with the first empty cell — enough to exercise the
+Without a key, `api/move.ts` answers with the first empty cell — enough to exercise the
 whole loop, and obviously not the model.
 
 ## Commands
@@ -104,8 +104,9 @@ whole loop, and obviously not the model.
 ## Project layout
 
 ```
-api/move.js               serverless proxy — prompt, Gemini call, response shaping
-api/_ratelimit.js         per-IP + global quota limiting, KV-backed, fails open
+api/move.ts               serverless proxy — prompt, Gemini call, response shaping
+api/_ratelimit.ts         per-IP + global quota limiting, KV-backed, fails open
+api/_types.ts             the /api/move wire contract, shared with the client
 carts/*.p8                PICO-8 sources; exported into public/games/
 public/games/*.{html,js}  exported carts; the iframe loads the .html
 src/components/           iframe embed, GPIO poll loop, reasoning panel, theme toggle

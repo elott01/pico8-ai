@@ -7,14 +7,16 @@ process.env.GEMINI_MAX_CALLS_PER_MIN = '2';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { default: handler } = await import('../api/move.js');
+import { asResponse, mockReq, mockRes, rateLimitedBody } from './_mocks.ts';
+
+const { default: handler } = await import('../api/move.ts');
 
 const HOST = 'pico8-ai.vercel.app';
 let geminiCalls = 0;
 
-globalThis.fetch = async () => {
+globalThis.fetch = (async () => {
   geminiCalls++;
-  return {
+  return asResponse({
     status: 200,
     ok: true,
     json: async () => ({
@@ -37,35 +39,18 @@ globalThis.fetch = async () => {
         },
       ],
     }),
-  };
-};
+  });
+}) as typeof globalThis.fetch;
 
 let seq = 0;
 async function call() {
-  const out = { headers: {} };
-  const res = {
-    setHeader(k, v) {
-      out.headers[k.toLowerCase()] = v;
-      return this;
-    },
-    status(code) {
-      out.code = code;
-      return this;
-    },
-    json(body) {
-      out.body = body;
-      return this;
-    },
-  };
+  const { res, out } = mockRes();
   // A fresh IP every time, so only the GLOBAL cap can be responsible for a 429.
-  await handler(
-    {
-      method: 'POST',
-      headers: { host: HOST, origin: `https://${HOST}`, 'x-real-ip': `quota-${seq++}` },
-      body: { board: Array(9).fill(0) },
-    },
-    res,
-  );
+  const req = mockReq({
+    headers: { host: HOST, origin: `https://${HOST}`, 'x-real-ip': `quota-${seq++}` },
+    body: { board: Array(9).fill(0) },
+  });
+  await handler(req, res);
   return out;
 }
 
@@ -77,8 +62,10 @@ describe('global Gemini-call cap', () => {
 
     const capped = await call();
     assert.equal(capped.code, 429, 'a different IP must not bypass a global cap');
-    assert.equal(capped.body.rateLimited, true);
-    assert.equal(capped.body.move, null);
+
+    const body = rateLimitedBody(capped.body);
+    assert.equal(body.rateLimited, true);
+    assert.equal(body.move, null);
     assert.equal(geminiCalls, 2, 'no Gemini call may leak once capped');
 
     const retryAfter = Number(capped.headers['retry-after']);

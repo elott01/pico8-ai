@@ -8,33 +8,42 @@ process.env.GEMINI_MAX_CALLS_PER_MIN = '1000'; // keep the global cap out of the
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-const redis = new Map();
-let mode = 'ok';
-let lastPipeline = null;
+import { asResponse, mockReq } from './_mocks.ts';
 
-globalThis.fetch = async (_url, opts) => {
+type Mode = 'ok' | 'throw' | 'timeout' | 'http500';
+/** An Upstash pipeline body: a list of [command, ...args]. */
+type Pipeline = (string | number)[][];
+
+const redis = new Map<string, number>();
+let mode: Mode = 'ok';
+let lastPipeline: Pipeline | null = null;
+
+// Assigned before the dynamic import below, because _ratelimit reads its KV config at
+// module scope — importing it first would capture the real fetch.
+globalThis.fetch = (async (_url: RequestInfo | URL, opts?: RequestInit) => {
   if (mode === 'throw') throw new Error('ECONNREFUSED');
   if (mode === 'timeout') {
     const e = new Error('timed out');
     e.name = 'TimeoutError';
     throw e;
   }
-  if (mode === 'http500') return { ok: false, status: 500, json: async () => ({}) };
+  if (mode === 'http500') return asResponse({ ok: false, status: 500, json: async () => ({}) });
 
-  lastPipeline = JSON.parse(opts.body);
-  const results = lastPipeline.map(([cmd, key]) => {
+  const pipeline = JSON.parse(String(opts?.body)) as Pipeline;
+  lastPipeline = pipeline;
+  const results = pipeline.map(([cmd, key]) => {
     if (cmd !== 'INCR') return { result: 1 };
-    const n = (redis.get(key) ?? 0) + 1;
-    redis.set(key, n);
+    const n = (redis.get(String(key)) ?? 0) + 1;
+    redis.set(String(key), n);
     return { result: n };
   });
-  return { ok: true, status: 200, json: async () => results };
-};
+  return asResponse({ ok: true, status: 200, json: async () => results });
+}) as typeof globalThis.fetch;
 
-const { checkRateLimit, reserveGeminiCall } = await import('../api/_ratelimit.js');
+const { checkRateLimit, reserveGeminiCall } = await import('../api/_ratelimit.ts');
 
 const T0 = 1_700_000_000_000;
-const from = (ip) => ({ headers: { 'x-real-ip': ip } });
+const from = (ip: string) => mockReq({ headers: { 'x-real-ip': ip } });
 
 describe('KV-backed store', () => {
   beforeEach(() => {
@@ -47,23 +56,25 @@ describe('KV-backed store', () => {
 
   it('pipelines INCR + EXPIRE NX so the window cannot be pushed out', async () => {
     await checkRateLimit(from('10.0.0.2'), T0);
-    assert.equal(lastPipeline[0][0], 'INCR');
-    assert.equal(lastPipeline[1][0], 'EXPIRE');
-    assert.equal(lastPipeline[1][3], 'NX');
+    const sent = lastPipeline;
+    assert.ok(sent, 'expected a pipeline to have been sent');
+    assert.equal(sent[0][0], 'INCR');
+    assert.equal(sent[1][0], 'EXPIRE');
+    assert.equal(sent[1][3], 'NX');
   });
 
   it('treats the shared count as authoritative across separate requests', async () => {
     // Distinct request objects, same IP -> one KV key. This is the behaviour an
     // in-memory counter in a per-request-fresh module could never provide.
-    let last;
-    for (let i = 0; i <= 40; i++) last = await checkRateLimit(from('10.0.0.3'), T0);
+    let last = await checkRateLimit(from('10.0.0.3'), T0);
+    for (let i = 1; i <= 40; i++) last = await checkRateLimit(from('10.0.0.3'), T0);
     assert.equal(last.limited, true);
     assert.equal(last.store, 'kv');
   });
 });
 
 describe('fail-open when KV is unavailable', () => {
-  let warn;
+  let warn: typeof console.warn;
   before(() => {
     warn = console.warn;
     console.warn = () => {}; // the fail-open path logs by design; keep test output clean
@@ -72,7 +83,7 @@ describe('fail-open when KV is unavailable', () => {
     console.warn = warn;
   });
 
-  for (const failure of ['http500', 'throw', 'timeout']) {
+  for (const failure of ['http500', 'throw', 'timeout'] as const) {
     it(`allows the request on ${failure}, degrading to memory`, async () => {
       mode = failure;
       const r = await checkRateLimit(from(`fail-${failure}`), T0);

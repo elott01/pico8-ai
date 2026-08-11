@@ -8,36 +8,23 @@ delete process.env.GEMINI_API_KEY;
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { default: handler } = await import('../api/move.js');
+import { mockReq, mockRes, rateLimitedBody } from './_mocks.ts';
+
+const { default: handler } = await import('../api/move.ts');
 
 const HOST = 'pico8-ai.vercel.app';
 const SAME_ORIGIN = { host: HOST, origin: `https://${HOST}` };
 
-function mockRes() {
-  const out = { headers: {} };
-  return {
-    out,
-    setHeader(k, v) {
-      out.headers[k.toLowerCase()] = v;
-      return this;
-    },
-    status(code) {
-      out.code = code;
-      return this;
-    },
-    json(body) {
-      out.body = body;
-      return this;
-    },
-  };
-}
-
 let seq = 0;
-async function call(headers, { method = 'POST', body = { board: 'not-a-board' } } = {}) {
-  const res = mockRes();
+async function call(
+  headers: Record<string, string>,
+  { method = 'POST', body = { board: 'not-a-board' } }: { method?: string; body?: unknown } = {},
+) {
+  const { res, out } = mockRes();
   // Unique IP per call so the per-IP limiter only interferes where a test wants it to.
-  await handler({ method, headers: { 'x-real-ip': `guard-${seq++}`, ...headers }, body }, res);
-  return res.out;
+  const req = mockReq({ method, headers: { 'x-real-ip': `guard-${seq++}`, ...headers }, body });
+  await handler(req, res);
+  return out;
 }
 
 describe('method guard', () => {
@@ -47,7 +34,7 @@ describe('method guard', () => {
 });
 
 describe('origin guard', () => {
-  const rejected = {
+  const rejected: Record<string, Record<string, string>> = {
     'a missing Origin (curl or a script)': { host: HOST },
     'a foreign Origin': { host: HOST, origin: 'https://evil.example.com' },
     'a lookalike host': { host: HOST, origin: `https://${HOST}.evil.com` },
@@ -61,7 +48,7 @@ describe('origin guard', () => {
     });
   }
 
-  const allowed = {
+  const allowed: Record<string, Record<string, string>> = {
     production: SAME_ORIGIN,
     'vercel dev on localhost': { host: 'localhost:3000', origin: 'http://localhost:3000' },
     'a proxied request (x-forwarded-host)': {
@@ -82,11 +69,13 @@ describe('per-IP limit', () => {
   const headers = { ...SAME_ORIGIN, 'x-real-ip': '198.51.100.1' };
 
   it('returns 429 with Retry-After once the cap is exceeded', async () => {
-    let last;
-    for (let i = 0; i < 41; i++) last = await call(headers);
+    let last = await call(headers);
+    for (let i = 1; i < 41; i++) last = await call(headers);
     assert.equal(last.code, 429);
-    assert.equal(last.body.rateLimited, true);
-    assert.equal(last.body.move, null);
+
+    const body = rateLimitedBody(last.body);
+    assert.equal(body.rateLimited, true);
+    assert.equal(body.move, null);
     assert.ok(Number(last.headers['retry-after']) > 0);
   });
 

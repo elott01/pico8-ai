@@ -1,31 +1,21 @@
 // Client-side glue to the /api/move proxy.
 
 import type { Board } from './gpio.ts';
+// The response shape is defined once, by the endpoint that produces it. Importing it
+// rather than restating it is what stops the two halves drifting — they previously
+// disagreed about `emptyCell` vs `emptyCells` and nothing caught it.
+import type { Line, MoveSuccess } from '../../api/_types.ts';
+
+export type { Line };
 
 /** Why there is no model move. `null` means the model answered normally. */
 export type AiFailure = 'rate-limited' | 'timeout' | 'error';
 
-/** One of the 8 winning lines, as scored by the model in its own analysis. */
-export type Line = {
-  line: number[];
-  values: number[];
-  ones: number;
-  twos: number;
-  /** Cells still open on this line. Present in the model's output; unused by the panel. */
-  emptyCells?: number[];
-};
-
-// A 200 does NOT guarantee a move: api/move.js answers 200 with `move: null` when the
-// model returned nothing usable, and 200 with a bare `move` (no analysis) on the no-key
-// branch. Callers must still check `move` — hence `number | null` and optional analysis.
-export type AiSuccess = {
-  reason: null;
-  move: number | null;
-  lines?: Line[];
-  winMove?: number | null;
-  blockMove?: number | null;
-  commentary?: string | null;
-};
+// The server's 200 body plus the discriminant this module adds. A 200 does NOT guarantee
+// a move: /api/move answers 200 with `move: null` when the model returned nothing usable,
+// and 200 with a bare `move` (no analysis) on the no-key branch. Callers must still check
+// `move` — hence MoveSuccess declaring `number | null` and optional analysis.
+export type AiSuccess = MoveSuccess & { reason: null };
 
 // Discriminated on `reason`, so the analysis fields are unreachable on a turn the model
 // did not decide — the panel cannot accidentally pair commentary with a fallback move.
@@ -66,9 +56,10 @@ export async function getAiTurn(board: Board, timeoutMs = 10000): Promise<AiTurn
     }
     if (!r.ok) return { move: null, reason: 'error' };
 
-    // Unvalidated: the response is trusted to match api/move.js's contract. The caller
-    // re-checks `move` against the live board before playing it either way.
-    return { ...((await r.json()) as Omit<AiSuccess, 'reason'>), reason: null };
+    // Unvalidated at runtime, but the cast is now to the endpoint's own published type
+    // rather than a local guess. The caller re-checks `move` against the live board
+    // before playing it either way.
+    return { ...((await r.json()) as MoveSuccess), reason: null };
   } catch (e) {
     // Duck-typed rather than `instanceof Error`, because an abort surfaces as a
     // DOMException and the exact prototype chain varies by runtime.
