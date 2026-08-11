@@ -85,6 +85,13 @@ Breaking any of these fails silently, so verify them when touching the relevant 
 - **Files in `api/` become public routes** unless underscore-prefixed — that is why the limiter
   lives in `api/_ratelimit.ts`.
 - **Never prefix an env var with `VITE_`** — those are inlined into the browser bundle.
+- **TypeScript must stay on 5.x.** Vercel's serverless builder compiles `api/*.ts` with
+  the project's *local* TypeScript ("Using TypeScript X (local user-provided)" in the build
+  log). TypeScript 7 is the Go rewrite and does not expose the compiler-host API the
+  builder calls, so the deploy dies with `Cannot read properties of undefined (reading
+  'readFile')` — after `vite build` has already succeeded, which makes it look like a
+  frontend problem. `npm test`, `npm run typecheck` and `npm run build` all pass on 7;
+  only `vercel build` fails. Reproduce deploy issues with `vercel build`, not `npm run build`.
 - **Node runs `.ts` tests by stripping types, not compiling them**, so `npm test` passes on
   code that does not typecheck, and only *erasable* syntax works — no `enum`, `namespace`,
   or parameter properties. `erasableSyntaxOnly` in `tsconfig.json` turns that runtime
