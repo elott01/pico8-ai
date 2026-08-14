@@ -1,0 +1,542 @@
+{
+  "summary": {
+    "label": "before",
+    "when": "2026-08-13T23:59:44.928Z",
+    "model": "gemini-3.1-flash-lite",
+    "runs": 8,
+    "positions": 6,
+    "totalCalls": 48,
+    "latency": {
+      "p50": 4939,
+      "p95": 11023,
+      "mean": 5475
+    },
+    "outputTokens": {
+      "mean": 544
+    },
+    "accuracy": 0.8333333333333334,
+    "winMoveAccuracy": 1,
+    "blockMoveAccuracy": 1,
+    "parseErrors": 0,
+    "byPosition": [
+      {
+        "position": "empty",
+        "accuracy": 1,
+        "meanMs": 5738,
+        "meanTokens": 505
+      },
+      {
+        "position": "win-only",
+        "accuracy": 1,
+        "meanMs": 6280,
+        "meanTokens": 587
+      },
+      {
+        "position": "block-only",
+        "accuracy": 1,
+        "meanMs": 4878,
+        "meanTokens": 587
+      },
+      {
+        "position": "win-or-block",
+        "accuracy": 1,
+        "meanMs": 5888,
+        "meanTokens": 573
+      },
+      {
+        "position": "quiet",
+        "accuracy": 0,
+        "meanMs": 5022,
+        "meanTokens": 478
+      },
+      {
+        "position": "near-full",
+        "accuracy": 1,
+        "meanMs": 5046,
+        "meanTokens": 536
+      }
+    ]
+  },
+  "samples": [
+    {
+      "position": "empty",
+      "ms": 6174,
+      "outputTokens": 505,
+      "move": 4,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "empty",
+      "ms": 9783,
+      "outputTokens": 505,
+      "move": 4,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "empty",
+      "ms": 2603,
+      "outputTokens": 505,
+      "move": 4,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "empty",
+      "ms": 3193,
+      "outputTokens": 505,
+      "move": 4,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "empty",
+      "ms": 10729,
+      "outputTokens": 502,
+      "move": 4,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "empty",
+      "ms": 4130,
+      "outputTokens": 505,
+      "move": 4,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "empty",
+      "ms": 4047,
+      "outputTokens": 505,
+      "move": 4,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "empty",
+      "ms": 5245,
+      "outputTokens": 505,
+      "move": 4,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-only",
+      "ms": 3798,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-only",
+      "ms": 5595,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-only",
+      "ms": 12859,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-only",
+      "ms": 9086,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-only",
+      "ms": 3399,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-only",
+      "ms": 7076,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-only",
+      "ms": 2342,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-only",
+      "ms": 6088,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "block-only",
+      "ms": 2666,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "block-only",
+      "ms": 4939,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "block-only",
+      "ms": 5596,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "block-only",
+      "ms": 4982,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "block-only",
+      "ms": 4468,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "block-only",
+      "ms": 6106,
+      "outputTokens": 586,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "block-only",
+      "ms": 4620,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "block-only",
+      "ms": 5650,
+      "outputTokens": 587,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-or-block",
+      "ms": 3654,
+      "outputTokens": 572,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-or-block",
+      "ms": 6514,
+      "outputTokens": 573,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-or-block",
+      "ms": 4980,
+      "outputTokens": 573,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-or-block",
+      "ms": 4676,
+      "outputTokens": 573,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-or-block",
+      "ms": 4572,
+      "outputTokens": 573,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-or-block",
+      "ms": 12355,
+      "outputTokens": 573,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-or-block",
+      "ms": 5599,
+      "outputTokens": 573,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "win-or-block",
+      "ms": 4751,
+      "outputTokens": 573,
+      "move": 2,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "quiet",
+      "ms": 6538,
+      "outputTokens": 478,
+      "move": 4,
+      "correct": false,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "quiet",
+      "ms": 4472,
+      "outputTokens": 478,
+      "move": 4,
+      "correct": false,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "quiet",
+      "ms": 4430,
+      "outputTokens": 478,
+      "move": 4,
+      "correct": false,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "quiet",
+      "ms": 6246,
+      "outputTokens": 478,
+      "move": 4,
+      "correct": false,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "quiet",
+      "ms": 4867,
+      "outputTokens": 478,
+      "move": 4,
+      "correct": false,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "quiet",
+      "ms": 5196,
+      "outputTokens": 478,
+      "move": 4,
+      "correct": false,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "quiet",
+      "ms": 4570,
+      "outputTokens": 478,
+      "move": 4,
+      "correct": false,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "quiet",
+      "ms": 3858,
+      "outputTokens": 478,
+      "move": 4,
+      "correct": false,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "near-full",
+      "ms": 11023,
+      "outputTokens": 536,
+      "move": 8,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "near-full",
+      "ms": 6212,
+      "outputTokens": 536,
+      "move": 8,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "near-full",
+      "ms": 4562,
+      "outputTokens": 536,
+      "move": 8,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "near-full",
+      "ms": 5605,
+      "outputTokens": 536,
+      "move": 8,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "near-full",
+      "ms": 3262,
+      "outputTokens": 536,
+      "move": 8,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "near-full",
+      "ms": 2808,
+      "outputTokens": 536,
+      "move": 8,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "near-full",
+      "ms": 4163,
+      "outputTokens": 535,
+      "move": 8,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    },
+    {
+      "position": "near-full",
+      "ms": 2730,
+      "outputTokens": 536,
+      "move": 8,
+      "correct": true,
+      "winMoveCorrect": true,
+      "blockMoveCorrect": true,
+      "parseError": false
+    }
+  ]
+}
