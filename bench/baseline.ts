@@ -4,34 +4,29 @@
 //   node bench/baseline.ts before          # writes bench/results/before.json
 //   node bench/baseline.ts after --runs 5
 //
-// Reads GEMINI_API_KEY from .env.local. Costs POSITIONS x runs Gemini calls (default 18).
+// Reads GEMINI_API_KEY from .env.local. Costs POSITIONS x runs Gemini calls (default 27).
+//
+// Transport and methodology are shared with ab.ts through _shared.ts — same retry on
+// 429/503, same "score HTTP 200 only" rule, same default gap. That sharing is the point:
+// both runners write into results/, and numbers gathered under different throttling
+// discipline cannot be compared. See results/README.md.
 
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { buildPrompt } from '../api/_prompt.ts';
-import type { ModelReply } from '../api/_types.ts';
+import { GENERATION_CONFIG } from '../api/_gemini.ts';
 import { POSITIONS, truth } from './positions.ts';
+import { apiKey, callGemini, mean, pct, sleep, MODEL } from './_shared.ts';
 
 const label = process.argv[2] ?? 'run';
 const runsArg = process.argv.indexOf('--runs');
 const RUNS = runsArg > -1 ? Number(process.argv[runsArg + 1]) : 3;
 
-// Calls run back to back at ~5s each, which sits close to the free tier's per-minute
-// ceiling. A short gap keeps throttling (503/429) out of the latency data — those would
-// otherwise show up as "slow calls" and corrupt the very number being measured.
+// Matches ab.ts. The old 750ms default sat right under the free tier's per-minute ceiling,
+// so throttled calls landed in the latency data as "slow calls" and corrupted the very
+// number being measured — the pre-fix results/before.json reports a p95 of 11023ms for the
+// same prompt and model that ab.ts measures at 5494ms.
 const gapArg = process.argv.indexOf('--gap');
-const GAP_MS = gapArg > -1 ? Number(process.argv[gapArg + 1]) : 750;
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-const MODEL = 'gemini-3.1-flash-lite';
-// Not named URL — that would shadow the global constructor used for the file paths below.
-const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-
-function apiKey(): string {
-  const env = readFileSync(new URL('../.env.local', import.meta.url), 'utf8');
-  const key = env.match(/GEMINI_API_KEY\s*=\s*"?([^"\n\r]+)"?/)?.[1]?.trim();
-  if (!key) throw new Error('GEMINI_API_KEY not found in .env.local');
-  return key;
-}
+const GAP_MS = gapArg > -1 ? Number(process.argv[gapArg + 1]) : 3000;
 
 type Sample = {
   position: string;
@@ -43,39 +38,9 @@ type Sample = {
   winMoveCorrect: boolean;
   blockMoveCorrect: boolean;
   parseError: boolean;
+  status: number;
+  attempts: number;
 };
-
-const pct = (xs: number[], p: number) => {
-  if (!xs.length) return 0;
-  const s = [...xs].sort((a, b) => a - b);
-  return s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))];
-};
-const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
-
-async function one(key: string, board: (typeof POSITIONS)[number]['board']) {
-  const t = Date.now();
-  const r = await fetch(ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: buildPrompt(board) }] }],
-      generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
-    }),
-  });
-  const ms = Date.now() - t;
-  const data = (await r.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
-    usageMetadata?: { candidatesTokenCount?: number };
-  };
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  let reply: ModelReply | null = null;
-  try {
-    reply = JSON.parse(text) as ModelReply;
-  } catch {
-    /* left null; counted as a parse error */
-  }
-  return { ms, reply, outputTokens: data?.usageMetadata?.candidatesTokenCount ?? null, status: r.status };
-}
 
 const key = apiKey();
 const samples: Sample[] = [];
@@ -86,64 +51,97 @@ for (const pos of POSITIONS) {
   const t = truth(pos.board);
   for (let i = 0; i < RUNS; i++) {
     if (samples.length) await sleep(GAP_MS);
-    const { ms, reply, outputTokens, status } = await one(key, pos.board);
-    const move = typeof reply?.move === 'number' ? reply.move : null;
+    const call = await callGemini(key, buildPrompt(pos.board), GENERATION_CONFIG);
+    const raw = call.reply?.move;
+    const move = typeof raw === 'number' && Number.isInteger(raw) ? raw : null;
+
     samples.push({
       position: pos.name,
-      ms,
-      outputTokens,
+      ms: call.ms,
+      outputTokens: call.outputTokens,
       move,
       correct: move !== null && pos.expect.includes(move),
-      winMoveCorrect: (reply?.winMove ?? null) === t.winMove,
-      blockMoveCorrect: (reply?.blockMove ?? null) === t.blockMove,
-      parseError: reply === null,
+      winMoveCorrect: (call.reply?.winMove ?? null) === t.winMove,
+      blockMoveCorrect: (call.reply?.blockMove ?? null) === t.blockMove,
+      parseError: call.reply === null,
+      status: call.status,
+      attempts: call.attempts,
     });
+
     process.stdout.write(
-      `  ${pos.name.padEnd(13)} run ${i + 1}/${RUNS}  ${String(ms).padStart(5)}ms  ` +
-        `tok=${String(outputTokens ?? '?').padStart(4)}  move=${move ?? '-'}  ` +
+      `  ${pos.name.padEnd(13)} run ${i + 1}/${RUNS}  ${String(call.ms).padStart(5)}ms  ` +
+        `tok=${String(call.outputTokens ?? '?').padStart(4)}  move=${move ?? '-'}  ` +
         `${move !== null && pos.expect.includes(move) ? 'ok' : 'MISS'}` +
-        `${status !== 200 ? `  http=${status}` : ''}\n`,
+        `${call.status !== 200 ? `  http=${call.status}` : ''}\n`,
     );
   }
 }
 
 // ---- summary ----------------------------------------------------------------------
 
+// Metrics are computed over HTTP 200 samples ONLY, exactly as ab.ts does. A 429 is the
+// rate limiter talking, not the model; scoring it as a wrong answer once turned a
+// rate-limited run into a confident-looking table that was 53% noise.
+const scored = samples.filter((x) => x.status === 200);
+const valid = scored.length;
+const validity = samples.length ? valid / samples.length : 0;
+const TRUSTWORTHY = 0.9;
+
+const share = (predicate: (x: Sample) => boolean) =>
+  valid ? scored.filter(predicate).length / valid : 0;
+
 const byPosition = POSITIONS.map((p) => {
-  const s = samples.filter((x) => x.position === p.name);
+  const s = scored.filter((x) => x.position === p.name);
   return {
     position: p.name,
-    accuracy: s.filter((x) => x.correct).length / s.length,
-    meanMs: Math.round(mean(s.map((x) => x.ms))),
-    meanTokens: Math.round(mean(s.map((x) => x.outputTokens ?? 0))),
+    calls: s.length,
+    accuracy: s.length ? s.filter((x) => x.correct).length / s.length : null,
+    meanMs: s.length ? Math.round(mean(s.map((x) => x.ms))) : null,
+    meanTokens: s.length ? Math.round(mean(s.map((x) => x.outputTokens ?? 0))) : null,
   };
 });
 
-const allMs = samples.map((x) => x.ms);
+const allMs = scored.map((x) => x.ms);
 const summary = {
   label,
   when: new Date().toISOString(),
   model: MODEL,
   runs: RUNS,
+  gapMs: GAP_MS,
   positions: POSITIONS.length,
   totalCalls: samples.length,
+  valid,
+  trustworthy: validity >= TRUSTWORTHY,
   latency: { p50: pct(allMs, 50), p95: pct(allMs, 95), mean: Math.round(mean(allMs)) },
-  outputTokens: { mean: Math.round(mean(samples.map((x) => x.outputTokens ?? 0))) },
-  accuracy: samples.filter((x) => x.correct).length / samples.length,
-  winMoveAccuracy: samples.filter((x) => x.winMoveCorrect).length / samples.length,
-  blockMoveAccuracy: samples.filter((x) => x.blockMoveCorrect).length / samples.length,
-  parseErrors: samples.filter((x) => x.parseError).length,
+  outputTokens: { mean: Math.round(mean(scored.map((x) => x.outputTokens ?? 0))) },
+  accuracy: share((x) => x.correct),
+  winMoveAccuracy: share((x) => x.winMoveCorrect),
+  blockMoveAccuracy: share((x) => x.blockMoveCorrect),
+  parseErrors: scored.filter((x) => x.parseError).length,
   byPosition,
 };
+
+console.log(`\nvalid samples: ${valid}/${samples.length} (${(validity * 100).toFixed(0)}%)`);
+if (validity < TRUSTWORTHY) {
+  console.log('\n' + '!'.repeat(88));
+  console.log(`RESULTS NOT TRUSTWORTHY — ${samples.length - valid} calls failed (rate limit / overload).`);
+  console.log('Numbers below are computed over the survivors and may be badly skewed.');
+  console.log('Re-run with a larger --gap, or wait for the quota window to reset.');
+  console.log('!'.repeat(88));
+}
 
 console.log('\n' + '-'.repeat(64));
 console.log(`latency        p50 ${summary.latency.p50}ms   p95 ${summary.latency.p95}ms   mean ${summary.latency.mean}ms`);
 console.log(`output tokens  mean ${summary.outputTokens.mean}`);
-console.log(`move accuracy  ${(summary.accuracy * 100).toFixed(0)}%  (${samples.filter((x) => x.correct).length}/${samples.length})`);
+console.log(`move accuracy  ${(summary.accuracy * 100).toFixed(0)}%  (${scored.filter((x) => x.correct).length}/${valid})`);
 console.log(`winMove right  ${(summary.winMoveAccuracy * 100).toFixed(0)}%   blockMove right ${(summary.blockMoveAccuracy * 100).toFixed(0)}%`);
 console.log(`parse errors   ${summary.parseErrors}`);
 console.log('-'.repeat(64));
 for (const p of byPosition) {
+  if (p.accuracy === null) {
+    console.log(`  ${p.position.padEnd(13)} no data`);
+    continue;
+  }
   console.log(`  ${p.position.padEnd(13)} acc ${(p.accuracy * 100).toFixed(0).padStart(3)}%  ${String(p.meanMs).padStart(5)}ms  ${String(p.meanTokens).padStart(4)} tok`);
 }
 
