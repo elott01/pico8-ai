@@ -33,10 +33,11 @@
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
 
-    // api/ stays JS for now, and .js imports still resolve during the migration.
+    // Kept on so a stray .js file (or a .js import specifier) still resolves; nothing in
+    // src/, api/ or tests/ is JavaScript any more.
     "allowJs": true,
     "checkJs": false
   },
-  "include": ["src", "tests", "api", "env.d.ts"],
+  "include": ["src", "tests", "api", "bench", "env.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

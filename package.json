@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "test": "node --test \"tests/**/*.test.{js,ts}\"",
     "test:watch": "node --test --watch \"tests/**/*.test.{js,ts}\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bench": "node bench/baseline.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
