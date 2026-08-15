@@ -4,6 +4,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { checkRateLimit, reserveGeminiCall, QuotaError, firstHeader, errorMessage } from './_ratelimit.ts';
 import { buildPrompt } from './_prompt.ts';
+import { GEMINI_URL, GENERATION_CONFIG } from './_gemini.ts';
 import type { Board, ModelReply, MoveSuccess, MoveRateLimited } from './_types.ts';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -67,9 +68,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-const MODEL = 'gemini-3.1-flash-lite';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-
 /** Only the sliver of Gemini's response this code reads. */
 type GeminiResponse = {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
@@ -94,8 +92,7 @@ async function askGemini(board: Board, correction?: string): Promise<ModelReply>
       },
       body: JSON.stringify({
         contents: [{ parts: [{ text: buildPrompt(board, correction) }] }],
-        // JSON out, not prose; low temperature because a move should be near-deterministic.
-        generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
+        generationConfig: GENERATION_CONFIG,
       }),
     });
     data = (await r.json()) as GeminiResponse;

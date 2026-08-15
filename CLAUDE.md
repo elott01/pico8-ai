@@ -13,7 +13,14 @@ node --test tests/a.test.ts tests/b.test.ts  # several files
 node --test --test-name-pattern="fail-open" "tests/**/*.test.{js,ts}"   # filter by name
 npm run test:watch                           # watch mode
 npm run build                                # production build -> dist/
+npm run bench                                # prompt benchmark; SPENDS Gemini quota
+node bench/ab.ts --variants current,perception   # A/B prompt variants
 ```
+
+`bench/` calls Gemini for real, reading `GEMINI_API_KEY` straight out of `.env.local`. It is
+a local tool only — CI never runs it, and it burns free-tier quota, so `--runs`/`--gap` are
+worth setting deliberately. Results land in `bench/results/`; see the README there before
+comparing two files.
 
 Everything under `src/`, `api/` and `tests/` is TypeScript. The test glob still spans
 `{js,ts}` so a stray `.js` test would not be skipped silently, and it must stay **quoted**
@@ -39,8 +46,10 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
 - **`src/components/Pico8Game.tsx`** embeds the cart's *exported `.html`* in an iframe (not the
   `.js` — the export needs its own shell) and polls `contentWindow.pico8_gpio` every 100ms.
 - **`src/lib/gpio.ts`** is the byte-protocol source of truth; the cart's Lua half must match it.
-- **`api/move.ts`** holds the API key, builds the prompt, calls Gemini, and returns the move
-  plus the model's own analysis, which `TurnPanel.tsx` renders as evidence a real LLM chose it.
+- **`api/move.ts`** holds the API key, calls Gemini, and returns the move plus the model's own
+  analysis, which `TurnPanel.tsx` renders as evidence a real LLM chose it.
+- **`api/_prompt.ts`** owns `buildPrompt`. It lives outside `move.ts` so the benchmark harness
+  in `bench/` can import the *real* prompt instead of keeping a copy that would drift.
 
 ### Byte 10 has two meanings in one handshake
 
@@ -60,9 +69,10 @@ model's.
 
 Breaking any of these fails silently, so verify them when touching the relevant code:
 
-- **JSON key order in `buildPrompt` is load-bearing.** Keys generate in order, so each field is
-  conditioned on the ones above it. `commentary` must stay **last**, after `move`, or flavour
-  text starts steering the game.
+- **JSON key order in `buildPrompt` (`api/_prompt.ts`) is load-bearing.** Keys generate in
+  order, so each field is conditioned on the ones above it. `commentary` must stay **last**,
+  after `move`, or flavour text starts steering the game. `bench/ab.ts` checks this per call
+  and reports it as `commentaryLastAlways`.
 - **Timeout budget chain:** `getAiTurn` (~10s, `src/lib/ai.ts`) must stay *below* the cart's
   `ai_max_frames` (~15s). If the cart gives up first it self-plays and the read-back finds
   nothing, so the panel loses the played cell.
@@ -72,6 +82,10 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   would push the window out forever and the counter would never reset.
 - **Rate limiting fails open.** Any KV error degrades to a per-instance memory Map. A limiter
   outage must never break the game.
+- **The model id and decoding settings live in `api/_gemini.ts` and nowhere else.** `move.ts`
+  and `bench/_shared.ts` both import them, so the harness cannot benchmark a different model
+  than production serves. `bench/variants.ts` builds its `current` control by spreading
+  `GENERATION_CONFIG`; restating `temperature` there would make the control not a control.
 - **The `/api/move` wire contract lives in `api/_types.ts` and nowhere else.** `move.ts`
   annotates its response bodies with it and `src/lib/ai.ts` imports it, so the producer and
   consumer break together. Restating the shape on either side reintroduces silent drift —

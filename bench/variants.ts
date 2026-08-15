@@ -6,6 +6,7 @@
 // perception one, and these variants isolate that.
 
 import type { Board } from '../api/_types.ts';
+import { GENERATION_CONFIG } from '../api/_gemini.ts';
 import { truth } from './positions.ts';
 import { buildPerceptionPrompt } from './perception.ts';
 
@@ -20,7 +21,9 @@ export type Variant = {
   prompt?: (board: Board) => string;
 };
 
-const BASE = { temperature: 0.1, responseMimeType: 'application/json' };
+// Production's decoding settings, imported rather than restated — otherwise the `current`
+// variant would drift away from the thing it is supposed to be the control for.
+const BASE = { ...GENERATION_CONFIG };
 
 /** Gemini enums are strings, so legal cells go in as "0".."8" and are parsed back. */
 const legalEnum = (board: Board) => truth(board).legalCells.map(String);

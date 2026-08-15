@@ -2,12 +2,30 @@
 // for "helper, not an entry point".
 
 import { readFileSync } from 'node:fs';
+import { MODEL, GEMINI_URL } from '../api/_gemini.ts';
 
-export const MODEL = 'gemini-3.1-flash-lite';
-const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+// Re-exported so the runners import the model id from one place. It comes from api/, not
+// from here, so the harness cannot benchmark a different model than production serves.
+export { MODEL };
+const ENDPOINT = GEMINI_URL;
 
+/**
+ * Prefers the environment, falls back to .env.local.
+ *
+ * The env var comes first so the key can be supplied without writing it to disk; the file
+ * fallback keeps a bare `npm run bench` working, since .env.local is where `vercel dev`
+ * already reads it from and is gitignored.
+ */
 export function apiKey(): string {
-  const env = readFileSync(new URL('../.env.local', import.meta.url), 'utf8');
+  const fromEnv = process.env.GEMINI_API_KEY?.trim();
+  if (fromEnv) return fromEnv;
+
+  let env: string;
+  try {
+    env = readFileSync(new URL('../.env.local', import.meta.url), 'utf8');
+  } catch {
+    throw new Error('GEMINI_API_KEY is unset and .env.local could not be read');
+  }
   const key = env.match(/GEMINI_API_KEY\s*=\s*"?([^"\n\r]+)"?/)?.[1]?.trim();
   if (!key) throw new Error('GEMINI_API_KEY not found in .env.local');
   return key;

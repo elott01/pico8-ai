@@ -24,7 +24,7 @@ export type Line = {
 };
 
 /** What the model is asked to return. Every field is its own output so it never has to
- *  do the arithmetic in its head — see buildPrompt in move.ts. */
+ *  do the arithmetic in its head — see buildPrompt in _prompt.ts. */
 export type ModelReply = {
   move?: number | null;
   winMove?: number | null;
