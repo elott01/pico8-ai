@@ -1,0 +1,70 @@
+A/B [connect_four] — 2 variants x 7 positions x 3 runs = 42 calls
+
+  facts          computed facts + priority rules — the control
+  facts+parity   the control plus the odd/even threat-parity paragraph
+
+  [  1/42] facts          opening            812ms tok=  40 column=3     ok
+  [  2/42] facts          opening            754ms tok=  40 column=3     ok
+  [  3/42] facts          opening            709ms tok=  40 column=3     ok
+  [  4/42] facts          win-across         555ms tok=  41 column=4     ok
+  [  5/42] facts          win-across         533ms tok=  41 column=4     ok
+  [  6/42] facts          win-across         682ms tok=  41 column=4     ok
+  [  7/42] facts          block-across       834ms tok=  56 column=3     MISS
+  [  8/42] facts          block-across       758ms tok=  54 column=4     ok
+  [  9/42] facts          block-across       655ms tok=  56 column=3     MISS
+  [ 10/42] facts          win-over-block     736ms tok=  42 column=3     ok
+  [ 11/42] facts          win-over-block     653ms tok=  43 column=3     ok
+  [ 12/42] facts          win-over-block     703ms tok=  48 column=3     ok
+  [ 13/42] facts          block-vertical     692ms tok=  41 column=3     ok
+  [ 14/42] facts          block-vertical     715ms tok=  40 column=3     ok
+  [ 15/42] facts          block-vertical     671ms tok=  38 column=3     ok
+  [ 16/42] facts          double-threat      528ms tok=  41 column=3     MISS
+  [ 17/42] facts          double-threat      680ms tok=  41 column=3     MISS
+  [ 18/42] facts          double-threat      669ms tok=  41 column=3     MISS
+  [ 19/42] facts          avoid-gift         549ms tok=  55 column=4     MISS
+  [ 20/42] facts          avoid-gift         637ms tok=  48 column=1     ok
+  [ 21/42] facts          avoid-gift         652ms tok=  48 column=1     ok
+  [ 22/42] facts+parity   opening            699ms tok=  42 column=3     ok
+  [ 23/42] facts+parity   opening            685ms tok=  40 column=3     ok
+  [ 24/42] facts+parity   opening            613ms tok=  41 column=3     ok
+  [ 25/42] facts+parity   win-across         703ms tok=  55 column=4     ok
+  [ 26/42] facts+parity   win-across         634ms tok=  55 column=4     ok
+  [ 27/42] facts+parity   win-across         744ms tok=  55 column=4     ok
+  [ 28/42] facts+parity   block-across       607ms tok=  54 column=3     MISS
+  [ 29/42] facts+parity   block-across       640ms tok=  46 column=3     MISS
+  [ 30/42] facts+parity   block-across       652ms tok=  54 column=3     MISS
+  [ 31/42] facts+parity   win-over-block     664ms tok=  45 column=3     ok
+  [ 32/42] facts+parity   win-over-block     634ms tok=  45 column=3     ok
+  [ 33/42] facts+parity   win-over-block     582ms tok=  45 column=3     ok
+  [ 34/42] facts+parity   block-vertical     598ms tok=  43 column=3     ok
+  [ 35/42] facts+parity   block-vertical     821ms tok=  42 column=3     ok
+  [ 36/42] facts+parity   block-vertical     578ms tok=  42 column=3     ok
+  [ 37/42] facts+parity   double-threat      526ms tok=  40 column=3     MISS
+  [ 38/42] facts+parity   double-threat      711ms tok=  41 column=3     MISS
+  [ 39/42] facts+parity   double-threat      710ms tok=  41 column=3     MISS
+  [ 40/42] facts+parity   avoid-gift         601ms tok=  46 column=4     MISS
+  [ 41/42] facts+parity   avoid-gift         764ms tok=  46 column=4     MISS
+  [ 42/42] facts+parity   avoid-gift         724ms tok=  46 column=4     MISS
+
+valid samples: 42/42 (100%)
+
+==========================================================================================
+variant         p50     p95    tokens  illegal  accuracy  winMove  cmtLast  parseErr
+------------------------------------------------------------------------------------------
+facts            680ms    812ms     45        0       71%      n/a     true         0
+facts+parity     652ms    764ms     46        0       57%      n/a     true         0
+==========================================================================================
+
+accuracy by position
+position                   facts   facts+parity
+opening               100% (n=3)     100% (n=3)
+win-across            100% (n=3)     100% (n=3)
+block-across           33% (n=3)       0% (n=3)
+win-over-block        100% (n=3)     100% (n=3)
+block-vertical        100% (n=3)     100% (n=3)
+double-threat           0% (n=3)       0% (n=3)
+avoid-gift             67% (n=3)       0% (n=3)
+
+wrote bench/results/ab-connect_four.json
+
+
