@@ -3,8 +3,9 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { checkRateLimit, reserveGeminiCall, QuotaError, firstHeader, errorMessage } from './_ratelimit.ts';
-import { buildPrompt } from './_prompt.ts';
-import { GEMINI_URL, GENERATION_CONFIG } from './_gemini.ts';
+import { GEMINI_URL } from './_gemini.ts';
+import { GAMES, DEFAULT_GAME, isGameId } from './_games.ts';
+import type { GameSpec } from './_games.ts';
 import type { Board, ModelReply, MoveSuccess, MoveRateLimited } from './_types.ts';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -20,40 +21,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(429).json(body);
   }
 
-  const { board } = req.body ?? {};
-  if (!isValidBoard(board)) {
-    return res.status(400).json({ error: 'board must be a 9-element array of 0/1/2' });
+  const { board, game } = req.body ?? {};
+
+  // An unknown game is rejected rather than defaulted: silently answering a Connect Four
+  // request with a tic-tac-toe prompt would look like a bad model, not a bad request.
+  if (game !== undefined && !isGameId(game)) {
+    return res.status(400).json({ error: `unknown game "${game}"` });
+  }
+  const spec = GAMES[isGameId(game) ? game : DEFAULT_GAME];
+
+  if (!isValidBoard(board, spec)) {
+    return res
+      .status(400)
+      .json({ error: `board must be a ${spec.cells}-element array of 0/1/2 for ${spec.id}` });
   }
 
   // No key (fresh checkout): still answer, so the cart/page loop can be exercised.
   if (!process.env.GEMINI_API_KEY) {
-    const body: MoveSuccess = { move: firstLegal(board) };
+    const body: MoveSuccess = { move: spec.legalMoves(board)[0] ?? null };
     return res.status(200).json(body);
   }
 
   try {
-    let parsed = await askGemini(board);
+    let parsed = await askGemini(spec, board);
+    let move = spec.parseMove(parsed.move);
 
-    // Retry once, echoing the mistake back, when the model names an occupied cell — but
-    // only when it actually named one. After a 503 storm there is no move to correct,
+    // Retry once, echoing the mistake back, when the model names an unplayable move — but
+    // only when it actually named one. After a 503 storm there is nothing to correct,
     // and retrying would double the load on an API that is already failing.
-    if (Number.isInteger(parsed.move) && !isLegalMove(parsed.move, board)) {
-      console.log(`[move] illegal move ${parsed.move}; retrying with correction`);
+    if (move !== null && !spec.isLegalMove(board, move)) {
+      console.log(`[move] illegal ${spec.moveUnit} ${move}; retrying with correction`);
       const correction =
-        `Cell ${parsed.move} is NOT empty. You may only play one of these cells: ` +
-        `${JSON.stringify(legalCells(board))}. Choose one of them.`;
-      parsed = await askGemini(board, correction);
+        `${spec.moveUnit === 'column' ? 'Column' : 'Cell'} ${move} is NOT playable. ` +
+        `You may only play one of these ${spec.moveUnit}s: ` +
+        `${JSON.stringify(spec.legalMoves(board))}. Choose one of them.`;
+      parsed = await askGemini(spec, board, correction);
+      move = spec.parseMove(parsed.move);
     }
 
     // Annotated with the shared contract, so the client's view of this response and the
-    // server's construction of it cannot drift apart silently.
-    const body: MoveSuccess = {
-      move: parsed.move ?? null,
-      winMove: parsed.winMove ?? null,
-      blockMove: parsed.blockMove ?? null,
-      lines: parsed.lines ?? [],
-      commentary: parsed.commentary ?? null,
-    };
+    // server's construction of it cannot drift apart silently. The analysis fields are the
+    // game's own — neither cart sends the other's.
+    const body: MoveSuccess = { move, ...spec.analysis(parsed) };
     return res.status(200).json(body);
   } catch (e) {
     if (e instanceof QuotaError) {
@@ -73,7 +82,7 @@ type GeminiResponse = {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
 };
 
-async function askGemini(board: Board, correction?: string): Promise<ModelReply> {
+async function askGemini(spec: GameSpec, board: Board, correction?: string): Promise<ModelReply> {
   // The handler guards this, but askGemini is separately callable and the fetch header
   // needs a string rather than string | undefined.
   const apiKey = process.env.GEMINI_API_KEY;
@@ -91,8 +100,10 @@ async function askGemini(board: Board, correction?: string): Promise<ModelReply>
         'x-goog-api-key': apiKey,
       },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: buildPrompt(board, correction) }] }],
-        generationConfig: GENERATION_CONFIG,
+        contents: [{ parts: [{ text: spec.buildPrompt(board, correction) }] }],
+        // Per-board, not per-game: Connect Four's schema enumerates the legal columns, so
+        // an illegal one is unrepresentable rather than merely discouraged.
+        generationConfig: spec.config(board),
       }),
     });
     data = (await r.json()) as GeminiResponse;
@@ -131,21 +142,12 @@ function isSameOrigin(req: VercelRequest): boolean {
   }
 }
 
-function isValidBoard(board: unknown): board is Board {
+// Length is checked against the declared game, so a Connect Four board sent without
+// `game` is a 400 rather than 42 cells silently read as tic-tac-toe.
+function isValidBoard(board: unknown, spec: GameSpec): board is Board {
   return (
-    Array.isArray(board) && board.length === 9 && board.every((c) => c === 0 || c === 1 || c === 2)
+    Array.isArray(board) &&
+    board.length === spec.cells &&
+    board.every((c) => c === 0 || c === 1 || c === 2)
   );
-}
-
-function firstLegal(board: Board): number | null {
-  const i = board.indexOf(0);
-  return i >= 0 ? i : null;
-}
-
-function legalCells(board: Board): number[] {
-  return board.map((v, i) => (v === 0 ? i : -1)).filter((i) => i >= 0);
-}
-
-function isLegalMove(move: unknown, board: Board): boolean {
-  return typeof move === 'number' && Number.isInteger(move) && move >= 0 && move < 9 && board[move] === 0;
 }

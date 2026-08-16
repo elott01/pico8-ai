@@ -30,10 +30,12 @@ import {
   WINDOWS,
   counts,
   gravityHolds,
-  buildC4Prompt,
   C4_POSITIONS,
   C4_VARIANTS,
 } from '../bench/connect_four.ts';
+// The prompt itself is production code now; the bench only chooses which variant of it to
+// send, so the tests exercise it from api/ where it lives.
+import { buildConnectFourPrompt } from '../api/_connect_four.ts';
 import type { C4Board } from '../bench/connect_four.ts';
 
 const EMPTY: C4Board = new Array(CELLS).fill(0);
@@ -340,32 +342,47 @@ describe('prompt variants', () => {
     h..h...
   `);
 
-  it('differ only by the parity paragraph', () => {
-    const control = buildC4Prompt(board, { parity: false });
-    const parity = buildC4Prompt(board, { parity: true });
+  it('ships the threats block by default', () => {
+    assert.ok(buildConnectFourPrompt(board).includes('LINES ONE DISC FROM FOUR'));
+    assert.ok(!buildConnectFourPrompt(board, { withThreats: false }).includes('LINES ONE DISC FROM FOUR'));
+  });
 
-    assert.ok(parity.includes('THREAT PARITY'));
-    assert.ok(!control.includes('THREAT PARITY'));
-    // Removing the added block must give back the control exactly, or the A/B is testing
-    // more than one thing at once.
-    const stripped = parity.split('\nTHREAT PARITY')[0];
-    assert.ok(
-      control.startsWith(stripped),
-      'the parity variant must be the control plus one block, nothing else',
-    );
+  it('differs from the control only by the threats block', () => {
+    const control = buildConnectFourPrompt(board, { withThreats: false });
+    const shipped = buildConnectFourPrompt(board);
+    // Removing the added block must give back the control exactly, or the A/B measured
+    // more than one change at once.
+    const stripped = shipped.split('\n\nLINES ONE DISC FROM FOUR')[0];
+    assert.ok(control.startsWith(stripped));
+  });
+
+  it('names the gap column, not the column containing the line', () => {
+    // The failure this block exists to fix: the model played column 3, the last column
+    // CONTAINING the human's three, instead of column 4 which completes it.
+    const p = C4_POSITIONS.find((x) => x.name === 'block-across')!;
+    const text = buildConnectFourPrompt(p.board);
+    assert.match(text, /opponent: column 4 \(row 1, reachable THIS TURN\)/);
+    assert.ok(!/opponent:.*column 3/.test(text), 'must not name the column containing the line');
   });
 
   it('keeps commentary last, after move', () => {
-    for (const parity of [false, true]) {
-      const p = buildC4Prompt(board, { parity });
-      assert.ok(p.indexOf('"commentary"') > p.indexOf('"move"'), `commentary before move (parity=${parity})`);
+    for (const withThreats of [false, true]) {
+      const t = buildConnectFourPrompt(board, { withThreats });
+      assert.ok(t.indexOf('"commentary"') > t.indexOf('"move"'));
     }
   });
 
+  it('carries a correction after the priority rules', () => {
+    const t = buildConnectFourPrompt(board, { correction: 'Column 3 is NOT playable.' });
+    assert.ok(t.includes('IMPORTANT: Column 3 is NOT playable.'));
+    assert.ok(t.indexOf('IMPORTANT:') > t.indexOf('CHOOSE YOUR MOVE'));
+    assert.ok(!buildConnectFourPrompt(board).includes('IMPORTANT:'));
+  });
+
   it('states the legal columns and the landing rows', () => {
-    const p = buildC4Prompt(board, { parity: false });
-    assert.ok(p.includes('Legal columns: [0,1,2,3,4,5,6]'));
-    assert.ok(p.includes('0→1'), 'an empty column should land on row 1');
+    const t = buildConnectFourPrompt(board);
+    assert.ok(t.includes('Legal columns: [0,1,2,3,4,5,6]'));
+    assert.ok(t.includes('0\u21921'), 'an empty column should land on row 1');
   });
 
   it('constrains the move enum to the legal columns, excluding a full one', () => {

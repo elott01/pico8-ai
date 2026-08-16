@@ -1,6 +1,6 @@
 // Client-side glue to the /api/move proxy.
 
-import type { Board } from './gpio.ts';
+import type { Board, CartId } from './gpio.ts';
 // The response shape is defined once, by the endpoint that produces it. Importing it
 // rather than restating it is what stops the two halves drifting — they previously
 // disagreed about `emptyCell` vs `emptyCells` and nothing caught it.
@@ -34,14 +34,21 @@ export type AiTurn =
 // timeoutMs must stay *below* the cart's own fallback window (ai_max_frames in
 // tic_tac_toe.p8, ~15s), so the page always gets to answer and read back the played
 // cell; if the cart gives up first it self-plays and the read-back finds nothing.
-export async function getAiTurn(board: Board, timeoutMs = 10000): Promise<AiTurn> {
+export async function getAiTurn(
+  board: Board,
+  game: CartId = 'tic_tac_toe',
+  timeoutMs = 10000,
+): Promise<AiTurn> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const r = await fetch('/api/move', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ board }),
+      // `game` is sent explicitly rather than inferred from board length: the endpoint
+      // checks the two against each other, so a mismatch is a loud 400 instead of a board
+      // read as the wrong game.
+      body: JSON.stringify({ board, game }),
       signal: ctrl.signal,
     });
 

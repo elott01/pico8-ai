@@ -27,11 +27,14 @@ nothing at runtime enforces that they agree, so
 Lua and checks them against `PROTOCOLS` for **both** carts. This document is the prose
 version; `gpio.ts` wins if they ever disagree.
 
-**Connect Four is wired page-side but not model-side.** `gpio.ts` and `Pico8Game.tsx` speak
-its protocol — 42 board bytes, a column at byte 43, gravity resolved by `landingCell` — but
-`/api/move` still validates a 9-cell board and builds a tic-tac-toe prompt, so every
-Connect Four turn currently falls through to the cart's own opponent. The bridge is real;
-there is just nothing intelligent on the far end of it yet.
+**Connect Four is wired end to end.** `gpio.ts` and `Pico8Game.tsx` speak its protocol — 42
+board bytes, a column at byte 43, gravity resolved by `landingCell` — and `/api/move` serves
+it through `api/_games.ts`, with its own prompt, its own decoding schema and its own
+analysis fields. What is still missing is only the cart switcher: `App.tsx` hardcodes
+`tic_tac_toe`, so nothing routes to Connect Four in the browser yet.
+
+The request carries `game` explicitly and the endpoint checks the board length against it,
+so a mismatch is a 400 rather than 42 cells quietly read as a 9-cell board.
 
 *Last verified 2026-08-15.*
 
@@ -241,7 +244,8 @@ shrinks by the animation length on every turn.
 
 - a cart's Lua constants and its `PROTOCOLS` entry no longer agree (the protocol test
   catches this, so a red suite is the signal — not a careful reading of this file)
-- `/api/move` learns to play Connect Four, which retires the caveat at the top
+- a third cart joins, which should mean one `GAMES` entry and one `PROTOCOLS` entry — if it
+  also needs an edit inside `move.ts`, that dispatch table has stopped doing its job
 - byte 11+ is used by tic-tac-toe, byte 44+ by Connect Four, or a third cart joins
 - `getAiTurn`'s timeout rises to meet `ai_max_frames`
 - `commentary` starts crossing the bridge instead of arriving over HTTP

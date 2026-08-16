@@ -49,9 +49,14 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
   each cart's Lua half must match its entry, and `tests/gpio-protocol.test.ts` parses the Lua
   to check that it does. Nothing outside this file may hardcode a byte offset or board size.
 - **`api/move.ts`** holds the API key, calls Gemini, and returns the move plus the model's own
-  analysis, which `TurnPanel.tsx` renders as evidence a real LLM chose it.
-- **`api/_prompt.ts`** owns `buildPrompt`. It lives outside `move.ts` so the benchmark harness
-  in `bench/` can import the *real* prompt instead of keeping a copy that would drift.
+  analysis, which `TurnPanel.tsx` renders as evidence a real LLM chose it. It is
+  **game-agnostic**: everything per-cart comes from `api/_games.ts`.
+- **`api/_games.ts`** is the per-cart dispatch table — board size, prompt, decoding config,
+  move parsing, legality, and which analysis fields that game returns. Adding a cart should
+  mean one entry here plus one in `PROTOCOLS`, and no edit to `move.ts`.
+- **`api/_prompt.ts`** (tic-tac-toe) and **`api/_connect_four.ts`** own the prompts. They live
+  outside `move.ts` so `bench/` can import the *real* prompt instead of a copy that would
+  drift.
 
 ### Byte 10 has two meanings in one handshake
 
@@ -88,6 +93,13 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   and `bench/_shared.ts` both import them, so the harness cannot benchmark a different model
   than production serves. `bench/variants.ts` builds its `current` control by spreading
   `GENERATION_CONFIG`; restating `temperature` there would make the control not a control.
+- **Analysis fields are per-game, and each game sends only its own.** Tic-tac-toe fills
+  `lines`/`winMove`/`blockMove`; Connect Four fills `reasoning`. `TurnPanel` picks its layout
+  from which is present, so a game emitting both would render two contradictory records of
+  one move. `spec.analysis()` in `_games.ts` is the single place that decides.
+- **`game` is sent explicitly and checked against the board length.** Never infer the cart
+  from `board.length` — a third cart with 42 cells would then be silently misread. A
+  mismatch is a 400.
 - **The `/api/move` wire contract lives in `api/_types.ts` and nowhere else.** `move.ts`
   annotates its response bodies with it and `src/lib/ai.ts` imports it, so the producer and
   consumer break together. Restating the shape on either side reintroduces silent drift —

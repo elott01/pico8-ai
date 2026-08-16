@@ -63,7 +63,7 @@ export default function Pico8Game({ game }: { game: CartId }) {
           // Flagged only around the network call, so the indicator tracks the model and
           // not the GPIO read-back that follows it.
           setThinking(true);
-          ai = await getAiTurn(board);
+          ai = await getAiTurn(board, game);
           setThinking(false);
           if (ai.reason === 'rate-limited') {
             const wait = Math.min(Math.max(ai.retryAfter ?? 60, 5), 15 * 60); // clamped: a bad value must not wedge the game
@@ -104,6 +104,9 @@ export default function Pico8Game({ game }: { game: CartId }) {
               lines: analysis?.lines ?? [],
               winMove: analysis?.winMove ?? null,
               blockMove: analysis?.blockMove ?? null,
+              // Connect Four's account of its move is one sentence rather than 69 scored
+              // lines, so exactly one of these two is populated per game.
+              reasoning: analysis?.reasoning ?? null,
               commentary: analysis?.commentary ?? null,
               reason: ai.reason,
               // Only true when the model's own move is the one that got played, so the

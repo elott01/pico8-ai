@@ -10,6 +10,8 @@
 // byte offset or a board size: that is how the page and a cart drift apart silently, and
 // tests/gpio-protocol.test.ts checks both carts' Lua against these values.
 
+import type { GameId } from '../../api/_types.ts';
+
 export const ST_IDLE = 0;
 export const ST_REQUEST = 1;
 export const ST_THINKING = 2;
@@ -33,7 +35,10 @@ export type Board = Cell[];
 /** The cart's 128 GPIO bytes, mirrored by the web export as a plain JS array. */
 export type Gpio = number[];
 
-export type CartId = 'tic_tac_toe' | 'connect_four';
+// Imported rather than redeclared: the id now travels to /api/move in the request body,
+// so it is part of the wire contract and _types.ts owns it. A local copy here would be a
+// second definition of one concept — the drift this repo keeps paying for.
+export type CartId = GameId;
 
 /**
  * What a move value names.

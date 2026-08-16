@@ -19,9 +19,13 @@ export type Turn = {
   move: number | null;
   /** What the model asked for, which may differ from `move` or be illegal. */
   intended: number | null;
+  /** Tic-tac-toe's structured analysis. Empty for games that do not score lines. */
   lines: Line[];
   winMove: number | null;
   blockMove: number | null;
+  /** Connect Four's one-sentence account of the rule it applied. Null for tic-tac-toe,
+   *  whose reasoning is `lines`. Exactly one of the two is populated. */
+  reasoning: string | null;
   commentary: string | null;
   reason: AiFailure | null;
   /** True only when the model's own move is the one that got played. */
@@ -60,7 +64,8 @@ export default function TurnPanel({ turns, thinking }: { turns: Turn[]; thinking
 }
 
 function TurnCard({ turn, defaultOpen }: { turn: Turn; defaultOpen: boolean }) {
-  const { n, board, protocol, move, lines, winMove, blockMove, commentary, fromModel } = turn;
+  const { n, board, protocol, move, lines, winMove, blockMove, reasoning, commentary, fromModel } =
+    turn;
   // WIN/BLOCK comes from the model's own analysis, so it may only tag a move it played.
   const tag = fromModel ? classify(turn) : null;
   const note = fromModel ? null : fallbackNote(turn);
@@ -79,6 +84,10 @@ function TurnCard({ turn, defaultOpen }: { turn: Turn; defaultOpen: boolean }) {
 
       {note && <p className={`${styles.note} ${styles[note.kind]}`}>{note.text}</p>}
 
+      {/* Two shapes of evidence for the same claim. Tic-tac-toe scores all 8 lines, so the
+          board plus the counts is the record. Connect Four names the rule it applied in one
+          sentence — 69 lines would be a wall of JSON nobody reads. Both are gated on
+          fromModel, so neither can be shown for a move the cart substituted. */}
       {fromModel && lines.length > 0 && (
         <details open={defaultOpen} className={styles.details}>
           <summary className={styles.summary}>reasoning</summary>
@@ -90,6 +99,16 @@ function TurnCard({ turn, defaultOpen }: { turn: Turn; defaultOpen: boolean }) {
             winMove={winMove}
             blockMove={blockMove}
           />
+        </details>
+      )}
+
+      {fromModel && lines.length === 0 && reasoning && (
+        <details open={defaultOpen} className={styles.details}>
+          <summary className={styles.summary}>reasoning</summary>
+          <div className={styles.reasoning}>
+            <MiniBoard board={board} protocol={protocol} move={move} />
+            <div className={styles.reasoningText}>{reasoning}</div>
+          </div>
         </details>
       )}
 
