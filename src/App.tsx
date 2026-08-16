@@ -10,7 +10,9 @@ export default function App() {
       </div>
       <h1 className={styles.title}>PICO-8 + Gemini</h1>
       <p className={styles.tagline}>Turn-based carts with a Gemini-powered AI opponent.</p>
-      {/* Single game for now; a multi-game menu comes later (milestone 7). */}
+      {/* Single game for now; the cart switcher comes later. `connect_four` is already a
+          valid CartId and the page speaks its protocol, but /api/move still builds a
+          tic-tac-toe prompt, so it would fall back on every turn. */}
       <Pico8Game game="tic_tac_toe" />
     </main>
   );

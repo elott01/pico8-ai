@@ -45,7 +45,9 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
   On the CPU's turn it publishes the board to GPIO and waits.
 - **`src/components/Pico8Game.tsx`** embeds the cart's *exported `.html`* in an iframe (not the
   `.js` — the export needs its own shell) and polls `contentWindow.pico8_gpio` every 100ms.
-- **`src/lib/gpio.ts`** is the byte-protocol source of truth; the cart's Lua half must match it.
+- **`src/lib/gpio.ts`** is the byte-protocol source of truth, one `PROTOCOLS` entry per cart;
+  each cart's Lua half must match its entry, and `tests/gpio-protocol.test.ts` parses the Lua
+  to check that it does. Nothing outside this file may hardcode a byte offset or board size.
 - **`api/move.ts`** holds the API key, calls Gemini, and returns the move plus the model's own
   analysis, which `TurnPanel.tsx` renders as evidence a real LLM chose it.
 - **`api/_prompt.ts`** owns `buildPrompt`. It lives outside `move.ts` so the benchmark harness
@@ -96,6 +98,14 @@ Breaking any of these fails silently, so verify them when touching the relevant 
 - **Cart edits require a manual PICO-8 re-export** (`load`, then `export tic_tac_toe.html`) and
   copying both files into `public/games/`. This cannot be scripted. Comment-only edits to the
   `.p8` need no re-export.
+- **`carts/` is the only copy of a cart that counts.** PICO-8 resolves a bare `load
+  tic_tac_toe.p8` against its *own* carts folder, not this repo — the path looks
+  repo-relative and is not. That already produced two copies of the tic-tac-toe cart which
+  drifted apart unnoticed across two migrations. The failure is quiet and asymmetric: edit in
+  the repo but export from PICO-8's folder and you ship a build that does not match the
+  source; edit in PICO-8's folder and export, and the next copy-back silently overwrites your
+  repo edits. Always open the repo file explicitly — point PICO-8 at this repo
+  (`pico8 -root_path <repo>/carts`), drag the file in, or pass it on the command line.
 - **Files in `api/` become public routes** unless underscore-prefixed — that is why the limiter
   lives in `api/_ratelimit.ts`.
 - **Never prefix an env var with `VITE_`** — those are inlined into the browser bundle.

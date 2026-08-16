@@ -144,16 +144,18 @@
   margin-top: 0.5rem;
 }
 
+// --board-cols and --cell-size are set per cart by MiniBoard; the fallbacks keep the
+// 3x3 tic-tac-toe geometry if the properties are ever absent.
 .board {
   display: grid;
-  grid-template-columns: repeat(3, 18px);
+  grid-template-columns: repeat(var(--board-cols, 3), var(--cell-size, 18px));
   gap: 2px;
   flex-shrink: 0;
 }
 
 .cell {
-  width: 18px;
-  height: 18px;
+  width: var(--cell-size, 18px);
+  height: var(--cell-size, 18px);
   display: grid;
   place-items: center;
   font-size: 11px;
