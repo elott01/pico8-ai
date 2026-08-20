@@ -80,9 +80,13 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   order, so each field is conditioned on the ones above it. `commentary` must stay **last**,
   after `move`, or flavour text starts steering the game. `bench/ab.ts` checks this per call
   and reports it as `commentaryLastAlways`.
-- **Timeout budget chain:** `getAiTurn` (~10s, `src/lib/ai.ts`) must stay *below* the cart's
-  `ai_max_frames` (~15s). If the cart gives up first it self-plays and the read-back finds
-  nothing, so the panel loses the played cell.
+- **Timeout budget chain:** `getAiTurn` (12s, `src/lib/ai.ts`) must stay *below* the cart's
+  `ai_max_frames` (450 frames ≈ 15s). If the cart gives up first it self-plays and the
+  read-back finds nothing, so the panel loses the played cell. `CLIENT_ABORT_MS` in
+  `api/move.ts` is a third copy of the same number — it only drives the `TOO-LATE` log
+  marker, but if it disagrees the logs misreport which turns the player actually saw.
+  Raising the client side past ~13s means raising `ai_max_frames` too, which costs a manual
+  cart re-export.
 - **The quota cap counts Gemini calls, not requests.** `reserveGeminiCall()` sits *inside* the
   retry loop in `askGemini` — one request can issue several calls.
 - **`EXPIRE … NX`, never a plain EXPIRE** in `_ratelimit.ts`; refreshing the TTL each increment

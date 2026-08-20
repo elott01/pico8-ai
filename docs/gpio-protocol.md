@@ -27,16 +27,16 @@ nothing at runtime enforces that they agree, so
 Lua and checks them against `PROTOCOLS` for **both** carts. This document is the prose
 version; `gpio.ts` wins if they ever disagree.
 
-**Connect Four is wired end to end.** `gpio.ts` and `Pico8Game.tsx` speak its protocol — 42
-board bytes, a column at byte 43, gravity resolved by `landingCell` — and `/api/move` serves
-it through `api/_games.ts`, with its own prompt, its own decoding schema and its own
-analysis fields. What is still missing is only the cart switcher: `App.tsx` hardcodes
-`tic_tac_toe`, so nothing routes to Connect Four in the browser yet.
+**Connect Four is wired end to end and playable.** `gpio.ts` and `Pico8Game.tsx` speak its
+protocol — 42 board bytes, a column at byte 43, gravity resolved by `landingCell` — and
+`/api/move` serves it through `api/_games.ts`, with its own prompt, its own decoding schema
+and its own analysis fields. `App.tsx` is currently pinned to `connect_four` to measure real
+play; the switcher that makes it a choice is planned in `cart-switcher-plan.md`.
 
 The request carries `game` explicitly and the endpoint checks the board length against it,
 so a mismatch is a 400 rather than 42 cells quietly read as a 9-cell board.
 
-*Last verified 2026-08-15.*
+*Last verified 2026-08-18.*
 
 ---
 
@@ -106,11 +106,15 @@ else centre-out ([:150-183](../carts/connect_four.p8#L150-L183)). It is delibera
 exists for availability, and a fallback strong enough to be interesting would undermine the
 claim that the LLM is the player.
 
-That weakness is load-bearing in a way it is not for tic-tac-toe, because the fallback fires
-far more often here. A game is 15–20 AI turns rather than ~4, so with `/api/move` latency
-sitting close to the page's 10s abort, at least one fallback turn per game is expected rather
-than exceptional. **The lever for that is the abort budget or the panel's labelling, both
-page-side — not a stronger cart opponent.** The real rate has not been measured yet.
+That weakness is load-bearing in a way it is not for tic-tac-toe, because a game is 15–20 AI
+turns rather than ~4, so any per-turn failure rate compounds.
+
+**Now measured, over live play.** Our own stack costs a flat ~210ms; the rest is Gemini, and
+its latency has a fat tail — median ~1.5s, but 29% of calls over 5s and ~7% over the old 10s
+abort. That is roughly one timeout-driven fallback turn per game. The response was to widen
+the client budget to 12s, **not** to strengthen the cart: the lever for this is the abort
+budget or the panel's labelling, both page-side. A fallback strong enough to be interesting
+would undermine the claim that the LLM is the player.
 
 ## The status byte is a four-state handshake
 
@@ -176,7 +180,7 @@ Two ordering rules keep it correct:
    writes status `2`, and `readBoard()` copies bytes 1–9 into a 0-indexed JS array
    ([gpio.ts:47](../src/lib/gpio.ts#L47)).
 
-4. **Page calls the API.** `getAiTurn(board)` POSTs to `/api/move` with a 10s abort
+4. **Page calls the API.** `getAiTurn(board, game)` POSTs to `/api/move` with a 12s abort
    ([ai.ts:46](../src/lib/ai.ts#L46)). It always resolves to an object, never throws —
    `reason` carries `null` / `'rate-limited'` / `'timeout'` / `'error'`.
 
@@ -229,7 +233,7 @@ above `move` and flavour text starts steering the game.
 |---|---|---|
 | Page poll interval | 100ms | `Pico8Game.tsx` |
 | Read-back poll / ceiling | 16ms / 3500ms | `readCartPlayedMove` |
-| Page request timeout | ~10s | `getAiTurn`, `ai.ts` |
+| Page request timeout | 12s | `getAiTurn`, `ai.ts` |
 | Cart no-ack fallback | 15 frames (~0.5s) | `ai_ack_frames` |
 | Cart stall fallback | 450 frames (~15s) | `ai_max_frames` |
 

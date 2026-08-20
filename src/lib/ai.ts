@@ -31,13 +31,20 @@ export type AiTurn =
 // Keeping those distinct is what lets the UI say "rate limited" instead of silently
 // showing a fallback move and looking broken. Everything but `move` is display-only.
 //
-// timeoutMs must stay *below* the cart's own fallback window (ai_max_frames in
-// tic_tac_toe.p8, ~15s), so the page always gets to answer and read back the played
-// cell; if the cart gives up first it self-plays and the read-back finds nothing.
+// timeoutMs must stay *below* the cart's own fallback window (ai_max_frames in both carts,
+// 450 frames ≈ 15s), so the page always gets to answer and read back the played cell; if the
+// cart gives up first it self-plays and the read-back finds nothing.
+//
+// 12s, not 10s. Measured over live Connect Four play, Gemini's latency has a fat tail: the
+// median is ~1.5s but 29% of calls exceed 5s and ~7% exceeded the old 10s budget — turns the
+// server answered successfully a few hundred ms after the page had already given up and told
+// the player the model timed out. The variance is inside Google's call (our own stack costs a
+// flat ~210ms), so it cannot be engineered away; the budget has to absorb it. 12s keeps ~3s
+// of margin against the cart, which polls at 100ms and still has to read the move back.
 export async function getAiTurn(
   board: Board,
   game: CartId = 'tic_tac_toe',
-  timeoutMs = 10000,
+  timeoutMs = 12000,
 ): Promise<AiTurn> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
