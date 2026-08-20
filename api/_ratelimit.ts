@@ -14,10 +14,32 @@ import { createHash } from 'node:crypto';
 import type { VercelRequest } from '@vercel/node';
 
 const IP_WINDOW_SEC = 10 * 60;
-const IP_MAX = 40; // a game is ~5 requests, so ~8 games back to back
+// Sized for Connect Four, not tic-tac-toe: a game is 15-20 AI turns, so 40 is ~2 games
+// back to back. This is also what limits a single abuser (~240/hour), which is why the
+// per-minute cap below does not have to.
+const IP_MAX = 40;
 
 // Caps on actual Gemini calls, not /api/move requests — one request can issue several
 // via retries. Env-tunable against the real quota in AI Studio.
+//
+// 12 was sized for tic-tac-toe, where ~4 AI turns per game cannot reach it. Connect Four
+// is 15-20 turns and a brisk player produces 12-20 calls a minute alone, so a single
+// legitimate player was tripping the cap mid-game — observed as "13/12 calls this minute"
+// on the third game of a sitting.
+//
+// Raising this does NOT increase total spend: CALLS_PER_DAY is the budget guard and is
+// unchanged. This one only shapes bursts.
+//
+// MUST stay below Google's own RPM for the key, which for the free tier on
+// gemini-3.1-flash-lite is **15** (AI Studio → Rate Limit). Going above it does not fail
+// loudly: Google queues the excess rather than rejecting it, so requests still succeed with
+// ~100% success rate while latency collapses. Measured directly — paced at 10/min the p50
+// was 1.5s; bursting to 15-20/min during live play the p50 was 8s with a 21s outlier, and
+// not one upstream 429 was logged either time.
+//
+// So this cap is not really about our budget, it is the thing that keeps us inside Google's
+// quality-of-service. 12 leaves room for the extra calls a 503 retry can issue within the
+// same minute. Raise it only alongside a paid key with a higher RPM.
 const CALLS_PER_MIN = Number(process.env.GEMINI_MAX_CALLS_PER_MIN) || 12;
 const CALLS_PER_DAY = Number(process.env.GEMINI_MAX_CALLS_PER_DAY) || 800;
 

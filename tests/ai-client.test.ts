@@ -81,7 +81,7 @@ describe('getAiTurn', () => {
           reject(e);
         });
       })) as typeof globalThis.fetch;
-    assert.equal((await getAiTurn(BOARD, 20)).reason, 'timeout');
+    assert.equal((await getAiTurn(BOARD, 'tic_tac_toe', 20)).reason, 'timeout');
   });
 
   it('reports network failures and non-OK responses as errors', async () => {

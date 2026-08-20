@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { IDX_STATUS, IDX_MOVE, ST_IDLE, ST_REQUEST, ST_THINKING, ST_READY, NO_MOVE, readBoard } from '../lib/gpio.ts';
-import type { Board, Gpio } from '../lib/gpio.ts';
+import {
+  IDX_STATUS,
+  ST_IDLE,
+  ST_REQUEST,
+  ST_THINKING,
+  ST_READY,
+  NO_MOVE,
+  PROTOCOLS,
+  readBoard,
+  isLegalMove,
+} from '../lib/gpio.ts';
+import type { Board, CartId, Gpio, Protocol } from '../lib/gpio.ts';
 import { getAiTurn } from '../lib/ai.ts';
 import type { AiTurn } from '../lib/ai.ts';
 import TurnPanel from './TurnPanel.tsx';
@@ -13,7 +23,8 @@ type CartStatus = 'loading' | 'ready' | 'missing';
 // .js: the export expects its own shell (canvas wiring, start button, audio gating), and
 // loading the .html gets that verbatim. Same-origin, so the cart's GPIO memory stays
 // reachable at contentWindow.pico8_gpio.
-export default function Pico8Game({ game }: { game: string }) {
+export default function Pico8Game({ game }: { game: CartId }) {
+  const protocol = PROTOCOLS[game];
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [status, setStatus] = useState<CartStatus>('loading');
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -28,8 +39,9 @@ export default function Pico8Game({ game }: { game: string }) {
     setThinking(false);
   }, [game]);
 
-  // The page's half of the GPIO protocol; the cart's half is in tic_tac_toe.p8 and the
-  // byte layout is documented in lib/gpio.ts.
+  // The page's half of the GPIO protocol; the cart's half is in carts/<game>.p8 and both
+  // byte layouts are declared in lib/gpio.ts. Nothing below may hardcode an offset — the
+  // effect re-runs when `game` changes, so it reads the whole layout off `protocol`.
   useEffect(() => {
     let busy = false;
     let pausedUntil = 0; // epoch ms; while in the future we are rate-limited
@@ -40,7 +52,7 @@ export default function Pico8Game({ game }: { game: string }) {
       busy = true;
       gpio[IDX_STATUS] = ST_THINKING; // ack synchronously, or the cart keeps re-requesting
       try {
-        const board = readBoard(gpio);
+        const board = readBoard(gpio, protocol);
 
         // While rate-limited, skip the API entirely — it would only 429 again — but still
         // answer the cart so the game never hangs.
@@ -51,7 +63,7 @@ export default function Pico8Game({ game }: { game: string }) {
           // Flagged only around the network call, so the indicator tracks the model and
           // not the GPIO read-back that follows it.
           setThinking(true);
-          ai = await getAiTurn(board);
+          ai = await getAiTurn(board, game);
           setThinking(false);
           if (ai.reason === 'rate-limited') {
             const wait = Math.min(Math.max(ai.retryAfter ?? 60, 5), 15 * 60); // clamped: a bad value must not wedge the game
@@ -64,15 +76,17 @@ export default function Pico8Game({ game }: { game: string }) {
         const analysis = ai.reason === null ? ai : null;
 
         // A legal model move gets played; anything else sends NO_MOVE so the cart falls
-        // back to its own minimax rather than the page inventing a move.
+        // back to its own opponent rather than the page inventing a move. Legality goes
+        // through the protocol because the move is a cell in one cart and a column in the
+        // other — indexing the board directly would silently mean "top row" in Connect Four.
         const modelMove =
-          analysis !== null && Number.isInteger(analysis.move) && board[analysis.move!] === 0
+          analysis !== null && analysis.move !== null && isLegalMove(board, analysis.move, protocol)
             ? analysis.move
             : null;
-        gpio[IDX_MOVE] = modelMove ?? NO_MOVE;
+        gpio[protocol.idxMove] = modelMove ?? NO_MOVE;
         gpio[IDX_STATUS] = ST_READY;
 
-        const played = await readCartPlayedMove(gpio);
+        const played = await readCartPlayedMove(gpio, protocol);
 
         setTurns((prev) => {
           // Marks only accumulate within a game, so fewer filled cells than last turn
@@ -84,11 +98,15 @@ export default function Pico8Game({ game }: { game: string }) {
             {
               n: history.length + 1,
               board,
+              protocol, // the panel needs it to render the board and resolve a column
               move: played, // what the cart played
               intended: Number.isInteger(ai.move) ? ai.move : null, // what the model asked for
               lines: analysis?.lines ?? [],
               winMove: analysis?.winMove ?? null,
               blockMove: analysis?.blockMove ?? null,
+              // Connect Four's account of its move is one sentence rather than 69 scored
+              // lines, so exactly one of these two is populated per game.
+              reasoning: analysis?.reasoning ?? null,
               commentary: analysis?.commentary ?? null,
               reason: ai.reason,
               // Only true when the model's own move is the one that got played, so the
@@ -103,7 +121,7 @@ export default function Pico8Game({ game }: { game: string }) {
       }
     }, 100);
     return () => clearInterval(id);
-  }, [game]);
+  }, [game, protocol]);
 
   const src = `/games/${game}.html`;
 
@@ -138,18 +156,24 @@ function filled(board: Board) {
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-// The cart writes the cell it actually played to IDX_MOVE and only then returns to idle,
-// so both conditions have to hold before the value can be trusted — otherwise we read the
-// NO_MOVE sentinel we just wrote. The timeout is an upper bound, not a wait: a normal turn
-// resolves in ~20ms, but the first AI turn of a game has taken ~1.6s to get here.
-async function readCartPlayedMove(gpio: Gpio, timeoutMs = 3500): Promise<number | null> {
+// The cart writes the move it actually played to the move byte and only then returns to
+// idle, so both conditions have to hold before the value can be trusted — otherwise we read
+// the NO_MOVE sentinel we just wrote. The accepted range is per-cart (0..8 cells for
+// tic-tac-toe, 0..6 columns for Connect Four), so it comes off the protocol rather than
+// being spelled out here. The timeout is an upper bound, not a wait: a normal turn resolves
+// in ~20ms, but the first AI turn of a game has taken ~1.6s to get here.
+async function readCartPlayedMove(
+  gpio: Gpio,
+  p: Protocol,
+  timeoutMs = 3500,
+): Promise<number | null> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     if (gpio[IDX_STATUS] === ST_IDLE) {
-      const cell = gpio[IDX_MOVE];
-      if (cell >= 0 && cell <= 8) return cell;
+      const move = gpio[p.idxMove];
+      if (move >= 0 && move <= p.maxMove) return move;
     }
     await sleep(16);
   }
-  return null; // no cart listening, or it never wrote a cell; the panel shows no move
+  return null; // no cart listening, or it never wrote a move; the panel shows no move
 }

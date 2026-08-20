@@ -71,6 +71,31 @@ describe('illegal-move retry', () => {
     assert.equal(res.code, 200);
   });
 
+  it('does not retry an upstream 429, and reports it as a rate limit', async () => {
+    // 429 and 503 must not share a retry path. Retrying a quota error is pointless, and
+    // three attempts plus backoff turn an instant honest "rate limited" into a multi-second
+    // request that can blow the client's 10s abort and read as a *timeout* instead — the
+    // wrong cause shown to the player, and the cart's fallback labelled wrongly with it.
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return asResponse({
+        status: 429,
+        ok: false,
+        json: async () => ({}),
+        headers: { get: (k: string) => (k.toLowerCase() === 'retry-after' ? '30' : null) },
+      });
+    }) as typeof globalThis.fetch;
+
+    const res = await call(Array(9).fill(0));
+
+    assert.equal(calls, 1, 'an upstream quota error must not be retried');
+    assert.equal(res.code, 429, 'the player should see a rate limit, not a slow failure');
+    const body = res.body as { rateLimited?: boolean; retryAfter?: number };
+    assert.equal(body.rateLimited, true);
+    assert.equal(body.retryAfter, 30, "Google's own Retry-After should be honoured");
+  });
+
   it('does not retry when the model returned no move at all', async () => {
     // A 503 storm leaves no cell to correct, so "that cell was illegal" is nonsense and
     // would only double the load on an API that is already failing.

@@ -10,5 +10,8 @@ dist
 .vercel
 
 *.log
+# …except bench run logs, which are measurement records rather than stray output. One is
+# the only surviving evidence of a run whose JSON was overwritten; see results/README.md.
+!bench/results/*.log
 .DS_Store
 .env*

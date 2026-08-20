@@ -10,7 +10,8 @@ export default function App() {
       </div>
       <h1 className={styles.title}>PICO-8 + Gemini</h1>
       <p className={styles.tagline}>Turn-based carts with a Gemini-powered AI opponent.</p>
-      {/* Single game for now; a multi-game menu comes later (milestone 7). */}
+      {/* Both carts work end to end; only the routing is hardcoded. Flip this to
+          "connect_four" to play it until the switcher lands — see cart-switcher-plan.md. */}
       <Pico8Game game="tic_tac_toe" />
     </main>
   );

@@ -2,7 +2,9 @@
 // evidence that a real LLM chose each move, so a card must never pair the model's
 // commentary with a move it didn't make — hence the fromModel guards below.
 
-import type { Board } from '../lib/gpio.ts';
+import type { CSSProperties } from 'react';
+import { landingCell, isLegalMove } from '../lib/gpio.ts';
+import type { Board, Protocol } from '../lib/gpio.ts';
 import type { AiFailure, Line } from '../lib/ai.ts';
 import styles from './TurnPanel.module.scss';
 
@@ -10,13 +12,20 @@ import styles from './TurnPanel.module.scss';
 export type Turn = {
   n: number;
   board: Board;
-  /** The cell the cart played, read back over GPIO; null if the read-back missed. */
+  /** Which cart's layout `board`, `move` and `intended` are expressed in. */
+  protocol: Protocol;
+  /** What the cart played, read back over GPIO; null if the read-back missed. A cell in
+   *  tic-tac-toe, a column in Connect Four — see `protocol.moveUnit`. */
   move: number | null;
-  /** The cell the model asked for, which may differ from `move` or be illegal. */
+  /** What the model asked for, which may differ from `move` or be illegal. */
   intended: number | null;
+  /** Tic-tac-toe's structured analysis. Empty for games that do not score lines. */
   lines: Line[];
   winMove: number | null;
   blockMove: number | null;
+  /** Connect Four's one-sentence account of the rule it applied. Null for tic-tac-toe,
+   *  whose reasoning is `lines`. Exactly one of the two is populated. */
+  reasoning: string | null;
   commentary: string | null;
   reason: AiFailure | null;
   /** True only when the model's own move is the one that got played. */
@@ -55,7 +64,8 @@ export default function TurnPanel({ turns, thinking }: { turns: Turn[]; thinking
 }
 
 function TurnCard({ turn, defaultOpen }: { turn: Turn; defaultOpen: boolean }) {
-  const { n, board, move, lines, winMove, blockMove, commentary, fromModel } = turn;
+  const { n, board, protocol, move, lines, winMove, blockMove, reasoning, commentary, fromModel } =
+    turn;
   // WIN/BLOCK comes from the model's own analysis, so it may only tag a move it played.
   const tag = fromModel ? classify(turn) : null;
   const note = fromModel ? null : fallbackNote(turn);
@@ -74,10 +84,31 @@ function TurnCard({ turn, defaultOpen }: { turn: Turn; defaultOpen: boolean }) {
 
       {note && <p className={`${styles.note} ${styles[note.kind]}`}>{note.text}</p>}
 
+      {/* Two shapes of evidence for the same claim. Tic-tac-toe scores all 8 lines, so the
+          board plus the counts is the record. Connect Four names the rule it applied in one
+          sentence — 69 lines would be a wall of JSON nobody reads. Both are gated on
+          fromModel, so neither can be shown for a move the cart substituted. */}
       {fromModel && lines.length > 0 && (
         <details open={defaultOpen} className={styles.details}>
           <summary className={styles.summary}>reasoning</summary>
-          <Reasoning board={board} move={move} lines={lines} winMove={winMove} blockMove={blockMove} />
+          <Reasoning
+            board={board}
+            protocol={protocol}
+            move={move}
+            lines={lines}
+            winMove={winMove}
+            blockMove={blockMove}
+          />
+        </details>
+      )}
+
+      {fromModel && lines.length === 0 && reasoning && (
+        <details open={defaultOpen} className={styles.details}>
+          <summary className={styles.summary}>reasoning</summary>
+          <div className={styles.reasoning}>
+            <MiniBoard board={board} protocol={protocol} move={move} />
+            <div className={styles.reasoningText}>{reasoning}</div>
+          </div>
         </details>
       )}
 
@@ -85,7 +116,7 @@ function TurnCard({ turn, defaultOpen }: { turn: Turn; defaultOpen: boolean }) {
           played. Skipped when the read-back missed, since there is nothing to ring. */}
       {!fromModel && Number.isInteger(move) && (
         <div className={styles.boardWrap}>
-          <MiniBoard board={board} move={move} />
+          <MiniBoard board={board} protocol={protocol} move={move} />
         </div>
       )}
     </div>
@@ -94,12 +125,14 @@ function TurnCard({ turn, defaultOpen }: { turn: Turn; defaultOpen: boolean }) {
 
 function Reasoning({
   board,
+  protocol,
   move,
   lines,
   winMove,
   blockMove,
 }: {
   board: Board;
+  protocol: Protocol;
   move: number | null;
   lines: Line[];
   winMove: number | null;
@@ -115,7 +148,7 @@ function Reasoning({
 
   return (
     <div className={styles.reasoning}>
-      <MiniBoard board={board} move={move} />
+      <MiniBoard board={board} protocol={protocol} move={move} />
       <div className={styles.reasoningText}>
         <div className={styles.meta}>
           winMove: <Val v={winMove} /> · blockMove: <Val v={blockMove} />
@@ -132,12 +165,33 @@ function Reasoning({
   );
 }
 
-function MiniBoard({ board, move }: { board: Board; move: number | null }) {
+// `board` is the position *before* the move, so the ringed cell has to be derived rather
+// than read: in Connect Four `move` is a column and gravity decides the row. landingCell
+// answers both carts, so the highlight can never point at a cell the cart did not fill.
+function MiniBoard({
+  board,
+  protocol,
+  move,
+}: {
+  board: Board;
+  protocol: Protocol;
+  move: number | null;
+}) {
+  const played = move === null ? null : landingCell(board, move, protocol);
+
+  // Column count is data, not styling, so it rides in as a custom property rather than a
+  // per-cart class — the palette stays entirely in the stylesheet either way. Wider boards
+  // get smaller cells so a 7-wide grid still fits the panel.
+  const vars = {
+    '--board-cols': protocol.cols,
+    '--cell-size': protocol.cols > 4 ? '14px' : '18px',
+  } as CSSProperties;
+
   return (
-    <div className={styles.board}>
+    <div className={styles.board} style={vars}>
       {board.map((v, i) => (
-        <div key={i} className={`${styles.cell} ${i === move ? styles.cellPlayed : ''}`}>
-          {i === move ? 'O' : MARK[v]}
+        <div key={i} className={`${styles.cell} ${i === played ? styles.cellPlayed : ''}`}>
+          {i === played ? 'O' : MARK[v]}
         </div>
       ))}
     </div>
@@ -155,7 +209,7 @@ function Val({ v }: { v: number | null }) {
 // Explains a turn the model didn't decide, where the cart's minimax played instead —
 // so `move` is a real, optimal cell, not a failure. Rate limiting reads as a notice
 // because it is an expected condition; only genuine failures read as threats.
-function fallbackNote({ move, intended, board, reason }: Turn): Badge {
+function fallbackNote({ move, intended, board, protocol, reason }: Turn): Badge {
   const played = Number.isInteger(move) ? `played ${move}` : 'played';
   const solver = `built-in solver ${played}`;
 
@@ -168,9 +222,11 @@ function fallbackNote({ move, intended, board, reason }: Turn): Badge {
   if (reason === 'error') {
     return { kind: 'threat', text: `⚠ Model unavailable — ${solver}.` };
   }
-  // No reason, but not a model turn: it answered with an unusable cell.
-  if (intended !== null && Number.isInteger(intended) && board[intended] !== 0) {
-    return { kind: 'threat', text: `⚠ Model chose ${intended} (already taken) — ${solver}.` };
+  // No reason, but not a model turn: it answered with an unusable move. Why it was unusable
+  // depends on the cart — an occupied cell, or a column with no room left.
+  if (intended !== null && !isLegalMove(board, intended, protocol)) {
+    const why = protocol.moveUnit === 'column' ? 'column full' : 'already taken';
+    return { kind: 'threat', text: `⚠ Model chose ${intended} (${why}) — ${solver}.` };
   }
   return { kind: 'threat', text: `⚠ Model move rejected — ${solver}.` };
 }
