@@ -96,7 +96,17 @@ if (!suite) {
 }
 
 const RUNS = Number(arg('--runs') ?? 4);
-const GAP_MS = Number(arg('--gap') ?? 3000);
+
+// 5s ≈ 12 calls/minute, deliberately under Google's free-tier 15 RPM for
+// gemini-3.1-flash-lite. The old 3s default was 20/min — above the limit — and Google
+// queues the excess rather than rejecting it, so the harness was throttling itself and
+// reporting the result as latency. Accuracy numbers were unaffected (only HTTP 200s are
+// scored) but every p50/p95 measured at 3s is inflated.
+//
+// Latency comparisons between variants are confounded regardless: variants run
+// sequentially, so a later one carries more accumulated queueing. Use bench/latency.ts for
+// timing questions and treat these columns as a smoke test.
+const GAP_MS = Number(arg('--gap') ?? 5000);
 
 // --variants facts,facts+parity  — narrow the comparison once a variant is ruled out.
 const WANTED = arg('--variants')?.split(',') ?? null;

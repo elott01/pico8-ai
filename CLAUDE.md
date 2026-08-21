@@ -97,6 +97,13 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   and `bench/_shared.ts` both import them, so the harness cannot benchmark a different model
   than production serves. `bench/variants.ts` builds its `current` control by spreading
   `GENERATION_CONFIG`; restating `temperature` there would make the control not a control.
+- **The panel may only present as evidence what the model actually produced.** `TurnPanel`
+  exists to show a real LLM chose the move, so anything it renders as reasoning must have
+  been *generated*, not supplied. Tic-tac-toe's `lines` qualify — the model derives them.
+  Connect Four's threat lines do **not**: `api/_connect_four.ts` computes them and puts them
+  in the prompt, so echoing them back would be our own numbers dressed as the model's. Only
+  its `reasoning` string is the model's own. Any future cart that moves more derivation into
+  code moves the same content out of the evidence column, and the panel has to follow.
 - **Analysis fields are per-game, and each game sends only its own.** Tic-tac-toe fills
   `lines`/`winMove`/`blockMove`; Connect Four fills `reasoning`. `TurnPanel` picks its layout
   from which is present, so a game emitting both would render two contradictory records of
@@ -157,7 +164,17 @@ Breaking any of these fails silently, so verify them when touching the relevant 
 - Module state does not survive `vercel dev`'s per-request reload, which is why rate-limit
   counters live in KV rather than memory.
 
-## Known limitation
+## Known limitation — two-ply sight, in both carts
 
 The move priority (win → block → center → corner) has no concept of forks, so a player taking
-two opposite corners can still win. See the Roadmap in `README.md`.
+two opposite corners can still win at tic-tac-toe. See the Roadmap in `README.md`.
+
+This is not a tic-tac-toe quirk. Connect Four reproduces it exactly: the `double-threat`
+fixture, where one column creates two winning threats at once, is **0/9 across every prompt
+variant tested** — always answered with the centre column. Two carts, two prompt styles, the
+same blind spot, measured (`bench/results/README.md`).
+
+Treat it as a property of the model rather than a prompt that needs more work. The only
+variant that ever solved a fork did so by having the answer computed for it — which is a
+decision about how much the code plays, not a prompt fix. The cart's own fallback shares the
+blind spot, which is one reason strengthening it would misrepresent where the intelligence is.

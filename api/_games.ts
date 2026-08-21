@@ -6,8 +6,7 @@
 // here and a PROTOCOLS entry in src/lib/gpio.ts, and touching move.ts not at all.
 
 import type { Board, GameId, ModelReply, MoveSuccess } from './_types.ts';
-import { buildPrompt } from './_prompt.ts';
-import { GENERATION_CONFIG } from './_gemini.ts';
+import { buildPrompt, ticTacToeConfig } from './_prompt.ts';
 import {
   CELLS as C4_CELLS,
   buildConnectFourPrompt,
@@ -43,7 +42,7 @@ const ticTacToe: GameSpec = {
   cells: 9,
   moveUnit: 'cell',
   buildPrompt,
-  config: () => GENERATION_CONFIG,
+  config: ticTacToeConfig,
   parseMove: asNumber,
   legalMoves: (board) => board.map((v, i) => (v === 0 ? i : -1)).filter((i) => i >= 0),
   isLegalMove: (board, move) => move >= 0 && move < 9 && board[move] === 0,
