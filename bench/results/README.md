@@ -52,6 +52,60 @@ and degraded two (`block-across` 33%→0%, `avoid-gift` 67%→0%). At n=21 the a
 only 3 samples, so the number is not an effect size — but the direction was consistent, and
 the variant was dropped on that basis. Kept as a record so the idea is not re-tried blind.
 
+## The four-variant tic-tac-toe run (2026-08-12)
+
+Predates `--label`, so `ab.json` was later overwritten and holds only two of these four.
+The full table is kept here because it is the only surviving record, and because two of the
+variants it rules out are the obvious things to re-try.
+
+Nine positions, 3 runs each, direct to Gemini. Rate-limited calls excluded.
+
+| position | `current` | `schema-full` | `schema-min` | `perception` |
+| --- | --- | --- | --- | --- |
+| empty / win-only / block-only / win-or-block / near-full | 100% | 100% | 100% | 100% |
+| **quiet** (centre occupied) | 0% *(illegal)* | 0% | **100%** | 67% |
+| **block-edge** (block is an edge) | 100% | 100% | 100% | **0%** |
+| **fork-create** | 0% | 0% | 0% | **100%** |
+| **fork-block** (the documented weakness) | 100% | 100% | 0% | 0% |
+| illegal moves | **3/27** | **0** | 0 | 0 |
+| output tokens | 535 | 567 | 30 | 50 |
+
+Three findings worth not re-deriving:
+
+- **`schema-full` eliminates illegal moves at no accuracy cost.** Confirmed and shipped —
+  see `ab-tic_tac_toe-enum.json` below.
+- **Computing the line facts made play worse, not better.** The premise was that the model
+  is bad at the arithmetic; it is not — `winMove`/`blockMove` were 100% correct on every
+  variant that emitted them. Generating the derivation buys *attention*, not arithmetic:
+  writing out all eight lines forces the model to look at all eight. Handed the same facts
+  as a table it skims, and `perception` missed an immediate block it had been given
+  (*"No winning or blocking moves available, so I am choosing a corner"*).
+- **Forks are the one thing the model cannot derive.** Only `perception` ever solved
+  `fork-create`. Connect Four independently reproduced the same blind spot: `double-threat`
+  is 0/9 across every variant tested there, always answered with centre. Two carts, two
+  prompt styles, same failure — treat two-ply sight as a property of the model, not of a
+  prompt that needs more work.
+
+## `ab-tic_tac_toe-enum.json` — the confirming run (2026-08-18)
+
+`current` (no schema) against `schema-full`, 9 positions x 3 runs, before shipping the enum.
+Decision rule fixed in advance: ship only if illegal reaches 0 **and** no position regresses.
+
+| | current | schema-full |
+| --- | --- | --- |
+| illegal | 3 | **0** |
+| accuracy | 78% | 78% |
+| output tokens | 543 | 567 (+4.4%) |
+
+Per-position accuracy was **identical on all nine**, `fork-block` and `block-edge` included.
+The 3/27 illegal reproduced exactly six days after the first run, which is the more useful
+result: the fixture suite is stable enough to detect a change of this size.
+
+**Ignore the latency columns in that file.** It ran at the old 3s gap — 20 calls/minute,
+above the free tier's 15 RPM — so the harness was queueing itself, and variants run
+sequentially, so the second one carries more of it. The default gap is now 5s. Use
+`bench/latency.ts` for timing questions.
+
 ## `ab.json` holds only the variants of its last run
 
 `--variants` filters which of the four in `variants.ts` actually execute. The committed

@@ -7,6 +7,7 @@
 
 import type { Board } from '../api/_types.ts';
 import { GENERATION_CONFIG } from '../api/_gemini.ts';
+import { ticTacToeConfig } from '../api/_prompt.ts';
 import { truth } from './positions.ts';
 import { buildPerceptionPrompt } from './perception.ts';
 
@@ -30,8 +31,10 @@ const legalEnum = (board: Board) => truth(board).legalCells.map(String);
 
 export const VARIANTS: Variant[] = [
   {
+    // No longer what production sends — api/ now ships the schema. Kept as the control so
+    // the A/B that justified that change can be re-run against whatever ships next.
     name: 'current',
-    describe: 'production prompt, no schema — the control',
+    describe: 'prompt with no schema — the pre-enum control',
     emitsAnalysis: true,
     config: () => ({ ...BASE }),
   },
@@ -39,38 +42,9 @@ export const VARIANTS: Variant[] = [
     name: 'schema-full',
     describe: 'same prompt + schema; move constrained to legal cells, analysis retained',
     emitsAnalysis: true,
-    config: (board) => ({
-      ...BASE,
-      responseSchema: {
-        type: 'OBJECT',
-        // Mirrors the current key order exactly. `commentary` MUST stay last — above
-        // `move` it would let flavour text steer the game.
-        propertyOrdering: ['lines', 'winMove', 'blockMove', 'legalCells', 'move', 'commentary'],
-        properties: {
-          lines: {
-            type: 'ARRAY',
-            items: {
-              type: 'OBJECT',
-              propertyOrdering: ['line', 'values', 'twos', 'ones', 'emptyCells'],
-              properties: {
-                line: { type: 'ARRAY', items: { type: 'INTEGER' } },
-                values: { type: 'ARRAY', items: { type: 'INTEGER' } },
-                twos: { type: 'INTEGER' },
-                ones: { type: 'INTEGER' },
-                emptyCells: { type: 'ARRAY', items: { type: 'INTEGER' } },
-              },
-              required: ['line', 'values', 'twos', 'ones', 'emptyCells'],
-            },
-          },
-          winMove: { type: 'INTEGER', nullable: true },
-          blockMove: { type: 'INTEGER', nullable: true },
-          legalCells: { type: 'ARRAY', items: { type: 'INTEGER' } },
-          move: { type: 'STRING', enum: legalEnum(board) },
-          commentary: { type: 'STRING' },
-        },
-        required: ['lines', 'winMove', 'blockMove', 'legalCells', 'move', 'commentary'],
-      },
-    }),
+    // Imported, not restated: this is the config api/ now ships, so the A/B measures the
+    // real thing. A copy here could drift and quietly make the comparison meaningless.
+    config: ticTacToeConfig,
   },
   {
     name: 'schema-min',

@@ -102,12 +102,32 @@ describe('each game gets its own prompt and decoding config', () => {
     assert.deepEqual(schema.properties.move.enum, ['0', '1', '2', '3', '4', '5', '6']);
   });
 
-  it('sends the tic-tac-toe prompt with no schema', async () => {
-    const sent = captureRequest({ move: 4, lines: [], winMove: null, blockMove: null, commentary: 'x' });
-    await call({ board: TTT_BOARD, game: 'tic_tac_toe' });
+  it('sends the tic-tac-toe prompt, with the move enum constrained to legal cells', async () => {
+    const board = [...TTT_BOARD];
+    board[4] = 1; // centre taken, so the enum must exclude it
+    const sent = captureRequest({ move: '0', lines: [], winMove: null, blockMove: null, commentary: 'x' });
+    await call({ board, game: 'tic_tac_toe' });
 
     assert.match(sent[0].prompt, /tic-tac-toe/);
-    assert.equal(sent[0].config.responseSchema, undefined);
+    const schema = sent[0].config.responseSchema as {
+      propertyOrdering: string[];
+      properties: { move: { enum: string[] } };
+    };
+    assert.deepEqual(schema.properties.move.enum, ['0', '1', '2', '3', '5', '6', '7', '8']);
+    // The schema's ordering has to mirror the prompt's, or the load-bearing key order is
+    // enforced in one place and contradicted in the other.
+    assert.equal(schema.propertyOrdering[schema.propertyOrdering.length - 1], 'commentary');
+    assert.ok(
+      schema.propertyOrdering.indexOf('move') < schema.propertyOrdering.indexOf('commentary'),
+    );
+  });
+
+  it("parses tic-tac-toe's enum move back to a number", async () => {
+    // Same string round trip Connect Four makes: the enum returns "4", and a string reaching
+    // the page would fail the cart's `m >= 0 and m <= 8` guard and become a fallback turn.
+    captureRequest({ move: '4', lines: [], winMove: null, blockMove: null, commentary: 'x' });
+    const res = await call({ board: TTT_BOARD, game: 'tic_tac_toe' });
+    assert.strictEqual(successBody(res.body).move, 4);
   });
 
   it('parses Connect Four\'s enum move back to a number', async () => {

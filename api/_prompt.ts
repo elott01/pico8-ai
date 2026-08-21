@@ -3,10 +3,14 @@
 //
 // Extracted from move.ts so the benchmark harness can import the *real* prompt rather than
 // keeping a copy — a duplicated prompt would drift, which is the same failure mode that let
-// `emptyCell` vs `emptyCells` ship. This is also where `describeState` will land when the
-// perception layer arrives.
+// `emptyCell` vs `emptyCells` ship.
+//
+// A perception layer was designed for this cart, benchmarked, and rejected: computing the
+// line facts in code made play *worse*, because generating the derivation buys attention
+// rather than arithmetic. See bench/results/README.md.
 
 import type { Board } from './_types.ts';
+import { GENERATION_CONFIG } from './_gemini.ts';
 
 // Every derivation the model needs is an explicit output field, because it miscounts
 // when asked to do the arithmetic in its head — it once emitted "[1,4,7]: 0,2,2" and
@@ -53,4 +57,55 @@ export function buildPrompt(board: Board, correction?: string): string {
     '{"lines": [...8 objects...], "winMove": <index|null>, "blockMove": <index|null>,',
     '"legalCells": [...], "move": <index>, "commentary": "<one sentence>"}.',
   ].join(' ');
+}
+/**
+ * Decoding config: the same prompt, plus a schema that makes an illegal cell
+ * unrepresentable rather than merely discouraged.
+ *
+ * Measured (bench/results/README.md, 2026-08-12): the unconstrained prompt named an
+ * occupied cell 3 times in 27, each costing a legality-retry round trip or a fallback turn.
+ * The schema took that to 0 with identical per-position accuracy, for about 6% more output
+ * tokens.
+ *
+ * The property ordering mirrors the prompt's key order exactly, and is load-bearing for the
+ * same reason: JSON generates in order, so `commentary` must stay last or flavour text
+ * starts conditioning the move.
+ *
+ * Gemini enums are strings, so `move` arrives as "0".."8" and is parsed back by the game
+ * spec — the same round trip Connect Four already makes.
+ */
+export function ticTacToeConfig(board: Board): Record<string, unknown> {
+  const legalCells = board.map((v, i) => (v === 0 ? i : -1)).filter((i) => i >= 0);
+  const intArray = { type: 'ARRAY', items: { type: 'INTEGER' } };
+
+  return {
+    ...GENERATION_CONFIG,
+    responseSchema: {
+      type: 'OBJECT',
+      propertyOrdering: ['lines', 'winMove', 'blockMove', 'legalCells', 'move', 'commentary'],
+      properties: {
+        lines: {
+          type: 'ARRAY',
+          items: {
+            type: 'OBJECT',
+            propertyOrdering: ['line', 'values', 'twos', 'ones', 'emptyCells'],
+            properties: {
+              line: intArray,
+              values: intArray,
+              twos: { type: 'INTEGER' },
+              ones: { type: 'INTEGER' },
+              emptyCells: intArray,
+            },
+            required: ['line', 'values', 'twos', 'ones', 'emptyCells'],
+          },
+        },
+        winMove: { type: 'INTEGER', nullable: true },
+        blockMove: { type: 'INTEGER', nullable: true },
+        legalCells: intArray,
+        move: { type: 'STRING', enum: legalCells.map(String) },
+        commentary: { type: 'STRING' },
+      },
+      required: ['lines', 'winMove', 'blockMove', 'legalCells', 'move', 'commentary'],
+    },
+  };
 }
