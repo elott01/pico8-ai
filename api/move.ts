@@ -62,7 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    let parsed = await askGemini(spec, board, stats);
+    let parsed = await askGemini(spec, board, stats, started);
     let move = spec.parseMove(parsed.move);
 
     // Retry once, echoing the mistake back, when the model names an unplayable move — but
@@ -74,7 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `${spec.moveUnit === 'column' ? 'Column' : 'Cell'} ${move} is NOT playable. ` +
         `You may only play one of these ${spec.moveUnit}s: ` +
         `${JSON.stringify(spec.legalMoves(board))}. Choose one of them.`;
-      parsed = await askGemini(spec, board, stats, correction);
+      parsed = await askGemini(spec, board, stats, started, correction);
       move = spec.parseMove(parsed.move);
     }
 
@@ -118,6 +118,7 @@ async function askGemini(
   spec: GameSpec,
   board: Board,
   stats: CallStats,
+  started: number,
   correction?: string,
 ): Promise<ModelReply> {
   // The handler guards this, but askGemini is separately callable and the fetch header
@@ -130,6 +131,16 @@ async function askGemini(
   // Attempts and backoff have to fit inside the client's request timeout (getAiTurn in
   // src/lib/ai.ts) alongside generation and a possible legality retry.
   for (let attempt = 0; attempt < 3; attempt++) {
+    // Attempts are capped by a DEADLINE, not just a count. Google has been observed holding
+    // a request for 18-24s and then answering 503; retrying after that pushed the function
+    // past 30s and spent quota on an answer the client abandoned at CLIENT_ABORT_MS. A
+    // retry is only worth making if its result can still be read.
+    if (attempt > 0 && Date.now() - started >= CLIENT_ABORT_MS) {
+      console.log(
+        `[move] giving up after ${Date.now() - started}ms — past the client's ${CLIENT_ABORT_MS}ms budget, a retry cannot be read`,
+      );
+      break;
+    }
     await reserveGeminiCall(); // inside the loop: the quota cap counts calls, not requests
     callStart = Date.now();
     stats.calls++;
