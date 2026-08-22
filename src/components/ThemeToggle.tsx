@@ -53,6 +53,9 @@ export default function ThemeToggle() {
           key={value}
           type="button"
           className={`${styles.button} ${choice === value ? styles.active : ''}`}
+          // See CartCard: WebKit skips buttons in the tab order by default, so this is
+          // required for the toggle to be keyboard-reachable in Safari.
+          tabIndex={0}
           aria-pressed={choice === value}
           onClick={() => setChoice(value)}
         >

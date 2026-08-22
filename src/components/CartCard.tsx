@@ -32,6 +32,11 @@ export default function CartCard({
       className={`${styles.cart} ${selected ? styles.selected : ''}`}
       // aria-pressed rather than aria-selected: these are toggle buttons, not tabs or
       // listbox options, and a wrong role is worse than none.
+      // Explicit tabIndex, which looks redundant on a <button> and is not: WebKit omits
+      // buttons and links from the tab order unless macOS keyboard navigation is switched
+      // on, so on default Safari this control is unreachable by keyboard without it.
+      // Verified in Playwright's WebKit — Tab cycled iframe/body only until this was added.
+      tabIndex={0}
       aria-pressed={selected}
       disabled={busy && !selected}
       onClick={() => !selected && onSelect(id)}
