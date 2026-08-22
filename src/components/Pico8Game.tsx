@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   IDX_STATUS,
   ST_IDLE,
@@ -23,9 +23,20 @@ type CartStatus = 'loading' | 'ready' | 'missing';
 // .js: the export expects its own shell (canvas wiring, start button, audio gating), and
 // loading the .html gets that verbatim. Same-origin, so the cart's GPIO memory stays
 // reachable at contentWindow.pico8_gpio.
-export default function Pico8Game({ game }: { game: CartId }) {
+export default function Pico8Game({
+  game,
+  onReady,
+}: {
+  game: CartId;
+  /** Fired when the cart is loaded and the poll loop is live — the switcher uses it to
+   *  release its latch, since a 1.6MB runtime does not arrive instantly. */
+  onReady?: () => void;
+}) {
   const protocol = PROTOCOLS[game];
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // The poll loop reads status every 100ms but must not be torn down and rebuilt each time
+  // it changes, so it goes through a ref rather than the effect's dependency list.
+  const statusRef = useRef<CartStatus>('loading');
   const [status, setStatus] = useState<CartStatus>('loading');
   const [turns, setTurns] = useState<Turn[]>([]);
   // Distinct from the `busy` latch below: that one guards re-entrancy, this one is the
@@ -33,11 +44,28 @@ export default function Pico8Game({ game }: { game: CartId }) {
   // takes, which reads as a dead page on the very turn the panel exists to evidence.
   const [thinking, setThinking] = useState(false);
 
+  // One setter for both, so the ref the poll loop reads cannot drift from the state the
+  // UI renders.
+  // Held in a ref and read at call time, so `applyStatus` can have empty deps. Depending on
+  // `onReady` directly would make it a new function whenever the parent re-renders, which
+  // re-runs the reset effect below, which calls setTurns([]) with a fresh array, which
+  // re-renders — an infinite loop that only appears once a parent passes an inline arrow.
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+
+  const applyStatus = useCallback((next: CartStatus) => {
+    statusRef.current = next;
+    setStatus(next);
+    // 'missing' counts as settled too: a cart that will never load must not leave the
+    // switcher latched and every card disabled.
+    if (next !== 'loading') onReadyRef.current?.();
+  }, []);
+
   useEffect(() => {
-    setStatus('loading');
+    applyStatus('loading');
     setTurns([]); // analysis from the previous cart would be misleading
     setThinking(false);
-  }, [game]);
+  }, [game, applyStatus]);
 
   // The page's half of the GPIO protocol; the cart's half is in carts/<game>.p8 and both
   // byte layouts are declared in lib/gpio.ts. Nothing below may hardcode an offset — the
@@ -46,6 +74,13 @@ export default function Pico8Game({ game }: { game: CartId }) {
     let busy = false;
     let pausedUntil = 0; // epoch ms; while in the future we are rate-limited
     const id = setInterval(async () => {
+      // Gated on `ready`, not just on gpio existing. Once carts can be switched, this
+      // effect holds the NEW protocol the moment `game` changes while the iframe may still
+      // hold the OLD cart — so an ungated tick would read byte 43 of a 9-cell tic-tac-toe
+      // board. The iframe is keyed on `game` below so it remounts rather than reusing the
+      // element, and `status` returns to 'loading' until the new cart fires onLoad.
+      if (statusRef.current !== 'ready') return;
+
       const gpio = iframeRef.current?.contentWindow?.pico8_gpio;
       if (!gpio || busy || gpio[IDX_STATUS] !== ST_REQUEST) return;
 
@@ -136,12 +171,15 @@ export default function Pico8Game({ game }: { game: CartId }) {
       <div className={styles.layout}>
         <div className={`${styles.stage} ${status === 'missing' ? styles.hidden : ''}`}>
           <iframe
+            // Keyed so switching carts remounts the element. Reusing it with a new `src`
+            // leaves the old cart's pico8_gpio reachable during the swap.
+            key={game}
             ref={iframeRef}
             className={styles.frame}
             src={src}
             title={game}
-            onLoad={() => setStatus('ready')}
-            onError={() => setStatus('missing')}
+            onLoad={() => applyStatus('ready')}
+            onError={() => applyStatus('missing')}
           />
         </div>
         {status !== 'missing' && <TurnPanel turns={turns} thinking={thinking} />}
