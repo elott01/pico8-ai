@@ -45,9 +45,15 @@ export async function getAiTurn(
   board: Board,
   game: CartId = 'tic_tac_toe',
   timeoutMs = 12000,
+  signal?: AbortSignal,
 ): Promise<AiTurn> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  // A cart switch aborts the turn outright. Without this the request runs to completion and
+  // bills a Gemini call for an answer no panel will ever show — which matters on a 15 RPM
+  // free tier where one slow turn can be the only call that minute. An abort surfaces as
+  // `reason: 'timeout'` through the existing catch; the caller discards it either way.
+  signal?.addEventListener('abort', () => ctrl.abort(), { once: true });
   try {
     const r = await fetch('/api/move', {
       method: 'POST',

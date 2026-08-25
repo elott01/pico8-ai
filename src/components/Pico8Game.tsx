@@ -72,6 +72,14 @@ export default function Pico8Game({
   // effect re-runs when `game` changes, so it reads the whole layout off `protocol`.
   useEffect(() => {
     let busy = false;
+    // `clearInterval` stops future ticks but cannot cancel one already suspended at an
+    // `await`. That tick still holds the OLD cart's gpio, protocol and game, so on resume it
+    // would append the cart-you-just-left's final turn into the new cart's empty panel —
+    // observed as a phantom turn #1 with the previous game's commentary. The cleanup below
+    // and the suspended tick close over this same variable, which is how the tick learns its
+    // cart is gone.
+    let cancelled = false;
+    const abort = new AbortController();
     let pausedUntil = 0; // epoch ms; while in the future we are rate-limited
     const id = setInterval(async () => {
       // Gated on `ready`, not just on gpio existing. Once carts can be switched, this
@@ -98,7 +106,8 @@ export default function Pico8Game({
           // Flagged only around the network call, so the indicator tracks the model and
           // not the GPIO read-back that follows it.
           setThinking(true);
-          ai = await getAiTurn(board, game);
+          ai = await getAiTurn(board, game, undefined, abort.signal);
+          if (cancelled) return; // switched mid-request; this turn belongs to the old cart
           setThinking(false);
           if (ai.reason === 'rate-limited') {
             const wait = Math.min(Math.max(ai.retryAfter ?? 60, 5), 15 * 60); // clamped: a bad value must not wedge the game
@@ -121,7 +130,11 @@ export default function Pico8Game({
         gpio[protocol.idxMove] = modelMove ?? NO_MOVE;
         gpio[IDX_STATUS] = ST_READY;
 
+        // Skipped when cancelled: `gpio` belongs to an iframe React has already unmounted,
+        // so this would poll a dead document for its full 3.5s only to return null.
+        if (cancelled) return;
         const played = await readCartPlayedMove(gpio, protocol);
+        if (cancelled) return;
 
         setTurns((prev) => {
           // Marks only accumulate within a game, so fewer filled cells than last turn
@@ -155,7 +168,11 @@ export default function Pico8Game({
         setThinking(false); // a throw must never strand the indicator on
       }
     }, 100);
-    return () => clearInterval(id);
+    return () => {
+      cancelled = true;
+      abort.abort();
+      clearInterval(id);
+    };
   }, [game, protocol]);
 
   const src = `/games/${game}.html`;
