@@ -2,6 +2,12 @@
 // light/dark switch reaches it — a hex code here would be invisible to the toggle.
 
 .cart {
+  // Equal widths regardless of content. Each card sizes to its label otherwise, and the
+  // 7x6 mini-board makes Connect Four visibly wider than Tic-Tac-Toe — which reads as a
+  // layout bug rather than a difference in the games. `basis: 0` is what makes them equal:
+  // with `auto` they would grow from unequal content widths and stay unequal.
+  flex: 1 1 0;
+  min-width: 13rem;
   display: flex;
   align-items: center;
   gap: 0.75rem;
