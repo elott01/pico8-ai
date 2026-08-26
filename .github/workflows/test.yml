@@ -6,7 +6,9 @@ on:
   pull_request:
 
 jobs:
-  test:
+  # Fast checks: no browsers, no server, ~30s. Kept as its own job so a browser download
+  # never delays the signal on a type error.
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,3 +22,50 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  # Browser suite. Runs in parallel with `unit` rather than after it: the two fail for
+  # unrelated reasons, and waiting would only delay whichever signal you actually needed.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+
+      # Browsers are ~200MB (WebKit is most of it), so they are cached against the exact
+      # Playwright version — a stale browser for a newer runner is a confusing failure.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      # WebKit is the reason this job exists: the cart switcher was keyboard-unreachable in
+      # Safari while passing every Chromium check. Dropping it to save a minute would put
+      # the suite back to being unable to catch the bug it was written for.
+      - name: Install browsers
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium webkit
+
+      # The cache restores binaries but not the system libraries they link against.
+      - name: Install browser system deps
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium webkit
+
+      # Starts Vite itself (see playwright.config.ts). No GEMINI_API_KEY, no quota:
+      # /api/move is stubbed in-page for the one test that needs a model response.
+      - run: npm run test:e2e
+
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
