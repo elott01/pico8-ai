@@ -21,7 +21,10 @@ const focused = (page: import('@playwright/test').Page) =>
   });
 
 test.describe('keyboard', () => {
-  test.skip(({ isMobile }) => !!isMobile, 'no hardware keyboard on the touch project');
+  // Skipped on the touch project because it is the SAME WebKit engine as the `webkit`
+  // project — tab order would be identical, so it would cost runtime for no new coverage.
+  // Not because keyboards are impossible on mobile.
+  test.skip(({ isMobile }) => !!isMobile, 'duplicate engine coverage — see the webkit project');
 
   test('Tab reaches both cart cards', async ({ page }) => {
     await page.goto('/');

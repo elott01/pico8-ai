@@ -15,7 +15,14 @@ npm run test:watch                           # watch mode
 npm run build                                # production build -> dist/
 npm run bench                                # prompt benchmark; SPENDS Gemini quota
 node bench/ab.ts --variants current,perception   # A/B prompt variants
+npm run test:e2e                             # browser suite; boots Vite itself, no API key
+npx playwright test --project=webkit         # the engine that catches the real bugs
 ```
+
+`e2e/` is a separate Playwright suite from `npm test` — three engines, ~10s, needs
+`npx playwright install chromium webkit` once. **WebKit is not redundant with Chromium**:
+the cart switcher was keyboard-unreachable in Safari while passing every Chromium check.
+See `e2e/README.md`.
 
 `bench/` calls Gemini for real, reading `GEMINI_API_KEY` straight out of `.env.local`. It is
 a local tool only — CI never runs it, and it burns free-tier quota, so `--runs`/`--gap` are
