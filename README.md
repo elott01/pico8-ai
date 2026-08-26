@@ -6,8 +6,16 @@ Turn-based PICO-8 games embedded in a React app, played against a Gemini-powered
 opponent. One Vercel deploy: a static Vite/React frontend plus a serverless proxy
 (`api/move.ts`) that holds the API key.
 
-The side panel shows the model's own line-by-line analysis for every move, so you can see
-what it saw — and when it fell back to the cart's built-in solver instead.
+Two carts, switchable in the browser:
+
+| cart | why it is here |
+| --- | --- |
+| **Tic-tac-toe** | 3×3. Solved by 40 lines of minimax, so it proves the pipeline — not the model |
+| **Connect Four** | 7×6. No cheap perfect play, so the model's judgement does real work |
+
+The side panel shows the model's own analysis for every move, so you can see what it saw —
+and when it fell back to the cart's built-in solver instead. Which prompt each cart ships
+was **chosen by measurement**, not taste: see [`bench/`](bench/results/README.md).
 
 ## Architecture
 
@@ -86,7 +94,9 @@ whole loop, and obviously not the model.
 |---|---|
 | `vercel dev` | **Local dev — use this.** Serves the frontend *and* the `api/` functions on `localhost:3000`. The only local command where the AI works. |
 | `npm run dev` | Frontend only. `/api/move` 404s, so no AI — fine for pure UI work. |
-| `npm test` | Run the test suite (`node --test`). Add `--watch` via `npm run test:watch`. |
+| `npm test` | Unit suite (`node --test`), ~3s, needs nothing. `npm run test:watch` to watch. |
+| `npm run test:playwright` | Browser suite across Chromium, WebKit and mobile Safari. Boots Vite itself; no API key needed. |
+| `npm run bench` | Prompt benchmark against the real model. **Spends Gemini quota.** |
 | `npm run build` | Production build → `dist/`. Vercel runs this on deploy. |
 | `vercel --prod` | Deploy to production, or just push to the connected repo. |
 
@@ -104,15 +114,18 @@ whole loop, and obviously not the model.
 ## Project layout
 
 ```
-api/move.ts               serverless proxy — prompt, Gemini call, response shaping
+api/move.ts               serverless proxy — game-agnostic; per-cart bits live in _games.ts
+api/_games.ts             per-cart dispatch: board size, prompt, schema, legality, analysis
 api/_ratelimit.ts         per-IP + global quota limiting, KV-backed, fails open
 api/_types.ts             the /api/move wire contract, shared with the client
 carts/*.p8                PICO-8 sources; exported into public/games/
 public/games/*.{html,js}  exported carts; the iframe loads the .html
-src/components/           iframe embed, GPIO poll loop, reasoning panel, theme toggle
-src/lib/                  gpio.ts (byte protocol) + ai.ts (calls /api/move)
+src/components/           iframe embed, GPIO poll loop, cart switcher, reasoning panel
+src/lib/                  gpio.ts (byte protocol per cart) + ai.ts (calls /api/move)
 src/styles/               design tokens (PICO-8 palette, geometry) + global reset
-tests/                    node:test suites
+tests/                    node:test suites — fast, no browser, no network
+playwright/               browser suite — Chromium, WebKit, mobile Safari
+bench/                    prompt benchmarks against the real model + recorded results
 LICENSE / NOTICE          MIT, plus the Lexaloffle carve-out for public/games/
 ```
 
@@ -122,23 +135,31 @@ LICENSE / NOTICE          MIT, plus the Lexaloffle carve-out for public/games/
 
 ## Roadmap
 
-- **Perception layer.** Small models are poor at a game's *arithmetic* (scanning lines,
-  counting) but good at *judgement* once the facts are laid out. Have code compute the
-  salient facts of a position and let the LLM weigh them — giving it eyes, not a strategy.
-  Closing the fork gap is the first thing this should fix.
-- **More carts.** Each game ships a small feature-extractor over a shared contract, so the
-  pipeline is written once. Games without an optimal algorithm to fall back on are exactly
-  where the LLM genuinely has to play.
+- **Two-ply sight.** The one measured weakness, and it belongs to the model rather than the
+  prompt. Tic-tac-toe loses to a two-corner fork; Connect Four answers the equivalent
+  position — one move creating two winning threats — with the centre column **0 out of 9
+  times, across every prompt variant tested**. Two carts, two prompt styles, the same blind
+  spot. Closing it means computing "this move creates two threats" in code, which is a
+  decision about how much the program plays rather than a prompt to tune.
+- **A third cart.** `api/_games.ts` and `PROTOCOLS` already make this one entry each and no
+  edit to `move.ts` — the shared contract exists and has been exercised once.
+- **Not on the list: a perception layer for tic-tac-toe.** It was built, benchmarked and
+  rejected. Computing the line facts in code made play *worse*: generating the derivation
+  buys the model's *attention*, not its arithmetic, and handed the same facts as a table it
+  skimmed and missed an immediate block. Connect Four ships a facts-based prompt because it
+  won its own A/B; tic-tac-toe does not because it lost.
+  See [`bench/results/README.md`](bench/results/README.md).
 
 ## License
 
 [MIT](LICENSE) — with one carve-out, detailed in [NOTICE](NOTICE).
 
 The MIT grant covers the source authored here (`src/`, `api/`, `carts/`, `tests/`,
-`docs/`). It does **not** cover `public/games/`, which holds PICO-8 export artifacts:
-`tic_tac_toe.js` is ~1.7 MB of PICO-8 web player runtime, © Lexaloffle Games LLP,
-redistributed under PICO-8's terms for exported carts rather than relicensed.
+`playwright/`, `bench/`, `docs/`). It does **not** cover `public/games/`, which holds
+PICO-8 export artifacts: each cart ships ~1.7 MB of PICO-8 web player runtime,
+© Lexaloffle Games LLP, redistributed under PICO-8's terms for exported carts rather than
+relicensed.
 
-The game itself is not third-party content — the Lua at
-[carts/tic_tac_toe.p8](carts/tic_tac_toe.p8) is MIT like the rest of the source. Only the
-player runtime that PICO-8's HTML export wraps around it belongs to Lexaloffle.
+The games themselves are not third-party content — the Lua in
+[carts/](carts/) is MIT like the rest of the source. Only the player runtime that PICO-8's
+HTML export wraps around it belongs to Lexaloffle. See [NOTICE](NOTICE) for the file list.
