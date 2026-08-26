@@ -11,11 +11,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test \"tests/**/*.test.{js,ts}\"",
+    "test:unit": "node --test \"tests/**/*.test.{js,ts}\"",
     "test:watch": "node --test --watch \"tests/**/*.test.{js,ts}\"",
     "typecheck": "tsc --noEmit",
     "bench": "node bench/baseline.ts",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:playwright": "playwright test",
+    "test:playwright:ui": "playwright test --ui"
   },
   "dependencies": {
     "react": "^18.3.1",

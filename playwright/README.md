@@ -1,8 +1,8 @@
 # Browser tests
 
 ```sh
-npm run test:e2e          # all three projects
-npm run test:e2e:ui       # watch mode with a time-travel debugger
+npm run test:playwright      # all three projects
+npm run test:playwright:ui   # watch mode with a time-travel debugger
 npx playwright test --project=webkit
 ```
 

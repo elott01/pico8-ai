@@ -25,7 +25,7 @@ jobs:
 
   # Browser suite. Runs in parallel with `unit` rather than after it: the two fail for
   # unrelated reasons, and waiting would only delay whichever signal you actually needed.
-  e2e:
+  playwright:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -61,7 +61,7 @@ jobs:
 
       # Starts Vite itself (see playwright.config.ts). No GEMINI_API_KEY, no quota:
       # /api/move is stubbed in-page for the one test that needs a model response.
-      - run: npm run test:e2e
+      - run: npm run test:playwright
 
       - if: failure()
         uses: actions/upload-artifact@v4

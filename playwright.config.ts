@@ -16,7 +16,7 @@ const PORT = 5174; // not 3000/5173, so a dev server you already have open is le
 const BASE_URL = `http://localhost:${PORT}`;
 
 export default defineConfig({
-  testDir: './e2e',
+  testDir: './playwright',
   // Cart switches involve a 1.6MB runtime load; the default 5s expect timeout is tight.
   expect: { timeout: 10_000 },
   fullyParallel: true,
