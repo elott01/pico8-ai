@@ -22,3 +22,8 @@ dist
 
 # Playwright MCP scratch output (snapshots, console logs, screenshots)
 .playwright-mcp/
+
+# Playwright test runner output
+/test-results/
+/playwright-report/
+/blob-report/
