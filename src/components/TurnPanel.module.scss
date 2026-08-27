@@ -144,29 +144,4 @@
   margin-top: 0.5rem;
 }
 
-// --board-cols and --cell-size are set per cart by MiniBoard; the fallbacks keep the
-// 3x3 tic-tac-toe geometry if the properties are ever absent.
-.board {
-  display: grid;
-  grid-template-columns: repeat(var(--board-cols, 3), var(--cell-size, 18px));
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-.cell {
-  width: var(--cell-size, 18px);
-  height: var(--cell-size, 18px);
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  border: 1px solid var(--rule);
-  background: var(--cell-bg);
-  color: var(--ink);
-  border-radius: var(--radius-sm);
-}
-
-.cellPlayed {
-  border-color: var(--win);
-  color: var(--win);
-  background: color-mix(in srgb, var(--win) 18%, var(--cell-bg));
-}
+// .board / .cell / .cellPlayed moved to MiniBoard.module.scss with the component.

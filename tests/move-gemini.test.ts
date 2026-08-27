@@ -8,6 +8,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { asResponse, mockReq, mockRes, successBody } from './_mocks.ts';
+import type { Captured } from './_mocks.ts';
 
 const { default: handler } = await import('../api/move.ts');
 
@@ -110,5 +111,47 @@ describe('illegal-move retry', () => {
     assert.equal(calls, 3, 'three transient retries, not six');
     assert.equal(res.code, 200, 'still answers, so the game stays playable');
     assert.ok(!Number.isInteger(successBody(res.body).move), 'no usable move; the cart falls back');
+  });
+});
+
+// The retry loop is bounded by a DEADLINE as well as an attempt count. Gemini has been
+// observed holding a request for 18-24s and then answering 503; a retry after that arrives
+// long after getAiTurn aborted at 12s, so it spends a second Gemini call and holds the
+// function open for an answer nobody can read.
+//
+// Time is stubbed rather than waited out — the real thing takes 12 seconds to reproduce,
+// which is not a test anyone will keep running.
+describe('client-deadline cutoff', () => {
+  /** Runs `fn` with Date.now() under our control; each Gemini call advances it by `stepMs`. */
+  async function withClock(stepMs: number, fn: () => Promise<Captured>) {
+    const realNow = Date.now;
+    let clock = realNow.call(Date);
+    Date.now = () => clock;
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      clock += stepMs; // the call itself took this long
+      return asResponse({ status: 503, ok: false, json: async () => ({}) });
+    }) as typeof globalThis.fetch;
+    try {
+      return { res: await fn(), calls: () => calls };
+    } finally {
+      Date.now = realNow;
+    }
+  }
+
+  it('stops retrying once a slow failure has eaten the client budget', async () => {
+    // Two 9s calls put the elapsed time past the 12s abort, so the third must not fire.
+    const { res, calls } = await withClock(9000, () => call(Array(9).fill(0)));
+
+    assert.equal(calls(), 2, 'the third attempt is unreadable by the client and must be skipped');
+    assert.equal(res.code, 200, 'the turn still answers, so the cart falls back and play continues');
+    assert.equal(successBody(res.body).move, null);
+  });
+
+  it('still uses every attempt when the failures are fast', async () => {
+    // The guard must not shorten the normal 503 path — the case retries exist for.
+    const { calls } = await withClock(100, () => call(Array(9).fill(0)));
+    assert.equal(calls(), 3);
   });
 });

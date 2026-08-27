@@ -13,5 +13,17 @@ dist
 # …except bench run logs, which are measurement records rather than stray output. One is
 # the only surviving evidence of a run whose JSON was overwritten; see results/README.md.
 !bench/results/*.log
+
+# Working notes and plans — drafts, not project documentation. Anything here that turns out
+# to matter should be moved into docs/ or CLAUDE.md rather than referenced from tracked code.
+/local/
 .DS_Store
 .env*
+
+# Playwright MCP scratch output (snapshots, console logs, screenshots)
+.playwright-mcp/
+
+# Playwright test runner output
+/test-results/
+/playwright-report/
+/blob-report/

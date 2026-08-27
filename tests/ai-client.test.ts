@@ -105,3 +105,47 @@ describe('getAiTurn', () => {
     assert.ok(turn && typeof turn === 'object');
   });
 });
+
+// A cart switch must cancel the turn in flight. Without it the request runs to completion
+// and the resumed poll tick appends the cart-you-left's final turn into the new cart's
+// panel — seen live as a phantom turn #1 carrying the previous game's commentary. Aborting
+// also stops billing a Gemini call for an answer nothing will render.
+describe('external abort signal', () => {
+  it('gives up immediately when the caller aborts', async () => {
+    const ctrl = new AbortController();
+    globalThis.fetch = ((_url: RequestInfo | URL, opts?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        opts!.signal!.addEventListener('abort', () => {
+          const e = new Error('aborted');
+          e.name = 'AbortError';
+          reject(e);
+        });
+      })) as typeof globalThis.fetch;
+
+    // The internal timeout is set far out, so only the external signal can end this. The
+    // race is what makes the test meaningful: asserting `reason === 'timeout'` alone passes
+    // either way, because the 60s timeout produces the same reason — it just takes 60s to
+    // get there. Verified by mutation: dropping the signal wiring makes this hang, and the
+    // race turns that into a failure in 500ms instead of a minute of green.
+    const turn = getAiTurn(BOARD, 'tic_tac_toe', 60_000, ctrl.signal);
+    ctrl.abort();
+
+    const raced = await Promise.race([
+      turn.then((t) => ({ via: 'signal' as const, t })),
+      new Promise<{ via: 'hung' }>((r) => setTimeout(() => r({ via: 'hung' }), 500)),
+    ]);
+
+    assert.equal(raced.via, 'signal', 'the external signal must abort the request in flight');
+    assert.equal(raced.via === 'signal' ? raced.t.reason : null, 'timeout');
+  });
+
+  it('is unaffected by a signal that never fires', async () => {
+    const ctrl = new AbortController();
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ move: 4 }), { status: 200 })) as typeof globalThis.fetch;
+
+    const turn = await getAiTurn(BOARD, 'tic_tac_toe', 60_000, ctrl.signal);
+    assert.equal(turn.reason, null);
+    assert.equal(turn.move, 4);
+  });
+});

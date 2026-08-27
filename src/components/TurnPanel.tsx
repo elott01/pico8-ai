@@ -2,10 +2,10 @@
 // evidence that a real LLM chose each move, so a card must never pair the model's
 // commentary with a move it didn't make — hence the fromModel guards below.
 
-import type { CSSProperties } from 'react';
-import { landingCell, isLegalMove } from '../lib/gpio.ts';
+import { isLegalMove } from '../lib/gpio.ts';
 import type { Board, Protocol } from '../lib/gpio.ts';
 import type { AiFailure, Line } from '../lib/ai.ts';
+import MiniBoard from './MiniBoard.tsx';
 import styles from './TurnPanel.module.scss';
 
 /** One row of the panel: what the model said, and what the cart actually played. */
@@ -36,8 +36,6 @@ export type Turn = {
 // stylesheet and re-theming never touches this file.
 type BadgeKind = 'win' | 'threat' | 'notice';
 type Badge = { text: string; kind: BadgeKind };
-
-const MARK = ['', 'X', 'O']; // 0 empty, 1 human (X), 2 AI (O)
 
 export default function TurnPanel({ turns, thinking }: { turns: Turn[]; thinking: boolean }) {
   return (
@@ -161,39 +159,6 @@ function Reasoning({
         ))}
         {quiet > 0 && <div className={styles.quiet}>+ {quiet} quiet lines</div>}
       </div>
-    </div>
-  );
-}
-
-// `board` is the position *before* the move, so the ringed cell has to be derived rather
-// than read: in Connect Four `move` is a column and gravity decides the row. landingCell
-// answers both carts, so the highlight can never point at a cell the cart did not fill.
-function MiniBoard({
-  board,
-  protocol,
-  move,
-}: {
-  board: Board;
-  protocol: Protocol;
-  move: number | null;
-}) {
-  const played = move === null ? null : landingCell(board, move, protocol);
-
-  // Column count is data, not styling, so it rides in as a custom property rather than a
-  // per-cart class — the palette stays entirely in the stylesheet either way. Wider boards
-  // get smaller cells so a 7-wide grid still fits the panel.
-  const vars = {
-    '--board-cols': protocol.cols,
-    '--cell-size': protocol.cols > 4 ? '14px' : '18px',
-  } as CSSProperties;
-
-  return (
-    <div className={styles.board} style={vars}>
-      {board.map((v, i) => (
-        <div key={i} className={`${styles.cell} ${i === played ? styles.cellPlayed : ''}`}>
-          {i === played ? 'O' : MARK[v]}
-        </div>
-      ))}
     </div>
   );
 }

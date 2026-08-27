@@ -30,14 +30,13 @@ version; `gpio.ts` wins if they ever disagree.
 **Connect Four is wired end to end and playable.** `gpio.ts` and `Pico8Game.tsx` speak its
 protocol — 42 board bytes, a column at byte 43, gravity resolved by `landingCell` — and
 `/api/move` serves it through `api/_games.ts`, with its own prompt, its own decoding schema
-and its own analysis fields. What is missing is only the routing: `App.tsx` hardcodes
-`tic_tac_toe`, so Connect Four is reachable in the browser only by editing that line until
-the cart switcher lands.
+and its own analysis fields, and the cart switcher in `App.tsx` routes to it — so both
+carts are playable in the browser.
 
 The request carries `game` explicitly and the endpoint checks the board length against it,
 so a mismatch is a 400 rather than 42 cells quietly read as a 9-cell board.
 
-*Last verified 2026-08-18.*
+*Last verified 2026-08-26.*
 
 ---
 

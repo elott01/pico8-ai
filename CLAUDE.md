@@ -15,7 +15,14 @@ npm run test:watch                           # watch mode
 npm run build                                # production build -> dist/
 npm run bench                                # prompt benchmark; SPENDS Gemini quota
 node bench/ab.ts --variants current,perception   # A/B prompt variants
+npm run test:playwright                      # browser suite; boots Vite itself, no API key
+npx playwright test --project=webkit         # the engine that catches the real bugs
 ```
+
+`playwright/` is a separate suite from `npm test` — three engines, ~10s, needs
+`npx playwright install chromium webkit` once. **WebKit is not redundant with Chromium**:
+the cart switcher was keyboard-unreachable in Safari while passing every Chromium check.
+See `playwright/README.md`.
 
 `bench/` calls Gemini for real, reading `GEMINI_API_KEY` straight out of `.env.local`. It is
 a local tool only — CI never runs it, and it burns free-tier quota, so `--runs`/`--gap` are
@@ -156,6 +163,12 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   be a module — a deferred one runs after first paint, so a stored choice that disagrees
   with the OS flashes the wrong theme on every load. Changing one side alone silently
   reintroduces the flash.
+- **`tabIndex={0}` on a `<button>` is required, not redundant.** WebKit leaves buttons and
+  links out of the tab order unless macOS keyboard navigation is enabled, so on default
+  Safari every control in `CartCard.tsx` and `ThemeToggle.tsx` is unreachable by keyboard
+  without it — Tab cycles the iframe and body only. It looks like something a linter should
+  strip; deleting it silently makes the page mouse-only for a large share of visitors.
+  Verified against Playwright's WebKit, which reproduces the default.
 - **Colours belong in `src/styles/`, never in a `.tsx`.** Badges carry a semantic `kind`
   (`win`/`threat`/`notice`) that maps to a class; a hex code in a component would be
   invisible to the light/dark switch.

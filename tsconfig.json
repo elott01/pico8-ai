@@ -38,6 +38,6 @@
     "allowJs": true,
     "checkJs": false
   },
-  "include": ["src", "tests", "api", "bench", "env.d.ts"],
+  "include": ["src", "tests", "api", "bench", "playwright", "env.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

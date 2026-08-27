@@ -8,10 +8,11 @@
 // through the whole stack — same-origin check, rate limiter, quota reservation, the model
 // call, and the legality retry — because that total is what races getAiTurn's 10s abort.
 //
-// Why it exists: connect-four-cart-plan.md builds its "the fallback will fire constantly"
-// argument on a measurement of 8.5-10.2s end to end against that 10s budget. bench/ab.ts
-// later put pure model time at ~700ms. Those two numbers imply completely different
-// designs, and several open decisions are waiting on which one is real.
+// Why it exists: the Connect Four cart was planned around a measurement of 8.5-10.2s end to
+// end against a 10s client budget, which implied the fallback would fire constantly at
+// 15-20 turns a game. bench/ab.ts later put pure model time at ~700ms. Those two numbers
+// imply completely different designs, and this is what settles which one is real.
+// Findings so far are recorded in bench/results/README.md and CLAUDE.md.
 //
 // Costs N Gemini calls. The default gap stays under the 12-calls-per-minute global cap.
 
