@@ -102,7 +102,7 @@ describe('a normal purchase', () => {
     ]);
   });
 
-  it('sends the shipping prompt: v4 with the notice step, and the per-request price enum', async () => {
+  it('sends the shipping prompt, with the notice step and the per-request price enum', async () => {
     fakeGemini(gemini({ notice: 'x', verdict: 'neutral', price: '20', speech: 'vitality, then.' }));
     await call();
 

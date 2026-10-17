@@ -146,7 +146,7 @@ for (const v of VARIANTS) {
         outputTokens: call.outputTokens,
         parseError: call.reply === null,
         keyOrder: call.keyOrder,
-        keyOrderOk: call.keyOrder.join() === expectedKeys(v).join(),
+        keyOrderOk: call.keyOrder.join() === expectedKeys().join(),
         notice: typeof call.reply?.notice === 'string' ? call.reply.notice : null,
         verdict: parsed.verdict,
         verdictOk: f.expectVerdict ? parsed.verdict === f.expectVerdict : null,

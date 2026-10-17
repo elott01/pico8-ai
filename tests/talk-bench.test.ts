@@ -26,7 +26,7 @@ import {
   repeatedPhrases,
 } from '../bench/talk_suite.ts';
 import { TALK_CONFIG } from '../api/_gemini.ts';
-import { TIER_COST, STASH_CAPS, SHOP_ITEMS, priceOptions, SHIPPING } from '../api/_talk_prompt.ts';
+import { TIER_COST, STASH_CAPS, SHOP_ITEMS, priceOptions } from '../api/_talk_prompt.ts';
 import type { TalkStats } from '../api/_types.ts';
 
 function assertPlausible(s: TalkStats, label: string) {
@@ -86,8 +86,7 @@ describe('variants', () => {
     assert.equal(new Set(names).size, names.length);
     const current = TALK_VARIANTS.find((v) => v.name === 'current');
     assert.ok(current);
-    assert.equal(current.options, SHIPPING, 'the control must build exactly what /api/talk builds');
-    assert.equal(current.base, TALK_CONFIG, 'and decode with exactly what production sends');
+    assert.equal(current.base, TALK_CONFIG, 'the control must decode with exactly what production sends');
   });
 
   it('build a prompt and a config for every fixture', () => {
@@ -95,7 +94,7 @@ describe('variants', () => {
       for (const f of TALK_FIXTURES) {
         assert.ok(variantPrompt(v, f).length > 500);
         const schema = variantConfig(v, f).responseSchema as { propertyOrdering: string[]; properties: { price: { enum: string[] } } };
-        assert.deepEqual(schema.propertyOrdering, expectedKeys(v));
+        assert.deepEqual(schema.propertyOrdering, expectedKeys());
         assert.deepEqual(schema.properties.price.enum, priceOptions(f.request.purchase.listPrice));
       }
     }

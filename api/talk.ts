@@ -10,7 +10,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { checkRateLimit, QuotaError, errorMessage } from './_ratelimit.ts';
 import { askGemini, isSameOrigin, CLIENT_ABORT_MS } from './_ask_gemini.ts';
 import type { CallStats } from './_ask_gemini.ts';
-import { buildTalkPrompt, talkConfig, parseTalkReply, priceBand, SHIPPING } from './_talk_prompt.ts';
+import { buildTalkPrompt, talkConfig, parseTalkReply, priceBand } from './_talk_prompt.ts';
 import type { ParsedTalk } from './_talk_prompt.ts';
 import { cleanSpeech, paginate } from './_talk_text.ts';
 import { readTalkRequest } from './_talk_request.ts';
@@ -95,8 +95,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 async function ask(request: TalkRequest, stats: CallStats, started: number, correction?: string): Promise<ParsedTalk> {
   const reply = await askGemini({
-    prompt: buildTalkPrompt(request, { ...SHIPPING, correction }),
-    config: talkConfig(request, SHIPPING),
+    prompt: buildTalkPrompt(request, { correction }),
+    config: talkConfig(request),
     stats,
     started,
     tag: 'talk',

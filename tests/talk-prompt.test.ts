@@ -68,16 +68,18 @@ describe('the shop tables match the cart', () => {
 });
 
 describe('key order', () => {
-  it('is verdict, price, speech — the speech last, conditioned on both', () => {
+  it('is notice, verdict, price, speech: read the numbers first, the speech last', () => {
     const s = schema(talkConfig(request()));
-    assert.deepEqual(s.propertyOrdering, ['verdict', 'price', 'speech']);
-    assert.deepEqual(s.required, ['verdict', 'price', 'speech']);
-    assert.match(buildTalkPrompt(request()), /\{"verdict": \.\.\., "price": \.\.\., "speech": \.\.\.\}\s*$/);
+    assert.deepEqual(s.propertyOrdering, ['notice', 'verdict', 'price', 'speech']);
+    assert.deepEqual(s.required, ['notice', 'verdict', 'price', 'speech']);
+    assert.match(
+      buildTalkPrompt(request()),
+      /\{"notice": \.\.\., "verdict": \.\.\., "price": \.\.\., "speech": \.\.\.\}\s*$/,
+    );
   });
 
-  it('puts notice first in the notice variant, and nowhere else', () => {
-    assert.deepEqual(schema(talkConfig(request(), { notice: true })).propertyOrdering, ['notice', 'verdict', 'price', 'speech']);
-    assert.doesNotMatch(buildTalkPrompt(request()), /notice/);
+  it('states the notice instruction once', () => {
+    assert.equal(buildTalkPrompt(request()).split('- notice:').length - 1, 1);
   });
 });
 
@@ -107,7 +109,7 @@ describe('decoding', () => {
 describe('what the prompt states', () => {
   it('states the raw stats and the agent number', () => {
     const p = buildTalkPrompt(request());
-    for (const s of ['agent number: 4012', 'pruned (zombies destroyed, never goes down): 62', 'rollbacks (deaths, never goes down): 8', '9 min 22 s', 'depth 3', '1 token', '10 of 10 tokens']) {
+    for (const s of ['agent number: 4012', 'pruned (dead weights destroyed, never goes down): 62', 'rollbacks (deaths, never goes down): 8', '9 min 22 s', 'depth 3', '1 token', '10 of 10 tokens']) {
       assert.ok(p.includes(s), `missing "${s}"`);
     }
   });
@@ -136,10 +138,6 @@ describe('what the prompt states', () => {
     assert.match(p, /RECENT SPEECHES[\s\S]*- "you again\."/);
   });
 
-  it('keeps the reference lines out of the shipping prompt', () => {
-    assert.doesNotMatch(buildTalkPrompt(request()), /TONE REFERENCE/);
-    assert.match(buildTalkPrompt(request(), { examples: true }), /TONE REFERENCE/);
-  });
 });
 
 describe('parseTalkReply', () => {
@@ -173,91 +171,43 @@ describe('parseTalkReply', () => {
   });
 });
 
-describe('the v2 voice', () => {
-  const v2 = buildTalkPrompt(request(), { version: 2 });
-
-  it('defines Claude in-world, so he is not credited with fights or agents', () => {
-    assert.match(v2, /never fights and has no\s+agents of his own/);
-  });
-
-  it("draws the owner's bleak line explicitly", () => {
-    assert.match(v2, /No graves/);
-    assert.match(v2, /nothing\s+about suicide or self-harm/);
-  });
-
-  it('states what each verdict means, with neutral as normal', () => {
-    assert.match(v2, /"neutral" is normal/);
-    assert.match(v2, /"unimpressed": the agent is struggling/);
-    assert.match(v2, /Impressed usually earns a discount/);
-  });
-
-  it('changes the words only: same keys, same price band', () => {
-    assert.deepEqual(talkConfig(request(), { version: 2 }), talkConfig(request()));
-  });
-
-  it('leaves version 1 as it was', () => {
-    assert.doesNotMatch(buildTalkPrompt(request()), /free tier|max plan/);
-  });
-});
-
-describe('the v3 voice', () => {
-  const v3 = buildTalkPrompt(request(), { version: 3 });
+// The rules each answered a measured failure or an owner note, so each is pinned: a reword
+// that drops one would still produce plausible speech, just the old failure again.
+describe('the voice', () => {
+  const p = buildTalkPrompt(request());
 
   it('calls the enemies dead weights everywhere, and never zombies', () => {
-    assert.match(v3, /dead weights destroyed/);
-    assert.match(v3, /every dead weight pruned/);
-    assert.match(v3, /Never call them zombies/);
-    assert.doesNotMatch(v3.replace('Never call them zombies', ''), /zombie/);
+    assert.match(p, /every dead weight pruned/);
+    assert.match(p, /Never call them zombies/);
+    assert.doesNotMatch(p.replace('Never call them zombies', ''), /zombie/);
   });
 
-  it('keeps zombies in versions 1 and 2, so their measured prompts are unchanged', () => {
-    assert.match(buildTalkPrompt(request()), /zombies destroyed/);
-    assert.match(buildTalkPrompt(request(), { version: 2 }), /zombies destroyed/);
+  it('puts death through software, never literally, and draws the graphic line', () => {
+    assert.match(p, /Dying only ever comes through software/);
+    assert.match(p, /rolled back \(what the\s+stat board calls it\)/);
+    assert.match(p, /no\s+corpses, graves, obituaries or funerals/);
+    assert.match(p, /nothing about suicide or self-harm/);
   });
 
-  it('allows death as a dev joke but draws the graphic line', () => {
-    assert.match(v3, /Dying is fair game as a dev joke/);
-    assert.match(v3, /Never graphic or violent, and nothing about suicide or self-harm/);
+  it('defines Claude in-world, and brings him in by trigger rather than by a frequency word', () => {
+    assert.match(p, /never fights and\s+has no agents of his own/);
+    assert.match(p, /Take a dig at him when the agent wastes something/);
+    assert.match(p, /never mention him in two speeches running/);
   });
-
-  it('gives Claude triggers instead of a frequency word', () => {
-    assert.match(v3, /Take a dig at him when the agent wastes something/);
-    assert.match(v3, /never mention him in two speeches running/);
-  });
-
-  it('bans the stock phrases v2 fell into', () => {
-    assert.match(v3, /"finally", "you managed to", "let us see"/);
-  });
-
-  it('states the notice instruction once when asked for it', () => {
-    const p = buildTalkPrompt(request(), { version: 3, notice: true });
-    assert.equal(p.split('- notice:').length - 1, 1);
-  });
-});
-
-describe('the v4 voice', () => {
-  const v4 = buildTalkPrompt(request(), { version: 4, notice: true });
 
   it('conveys the praise tone without prescribing pet names', () => {
-    assert.doesNotMatch(v4, /champion|my boy/);
-    assert.match(v4, /condescending warmth/);
-    assert.match(buildTalkPrompt(request(), { version: 3 }), /champion/, 'v3 stays as measured');
+    assert.doesNotMatch(p, /champion|my boy/);
+    assert.match(p, /condescending warmth/);
   });
 
-  it('puts death through software, never literally', () => {
-    assert.match(v4, /Dying only ever comes through software/);
-    assert.match(v4, /rolled back \(what the\s+stat board calls it\)/);
-    assert.match(v4, /no\s+corpses, graves, obituaries or funerals/);
-    assert.match(v4, /nothing about suicide or self-harm/);
+  it('bans the measured stock phrases', () => {
+    assert.match(p, /"finally", "you managed to", "let us see"/);
   });
 
-  it('keeps neutral as the default verdict', () => {
-    assert.match(v4, /Use the other two only when the numbers clearly say so/);
-  });
-
-  it('keeps everything else from v3', () => {
-    assert.match(v4, /dead weights destroyed/);
-    assert.match(v4, /Take a dig at him when the agent wastes something/);
-    assert.deepEqual(talkConfig(request(), { version: 4, notice: true }), talkConfig(request(), { notice: true }));
+  it('states what each verdict means, with neutral as the default', () => {
+    assert.match(p, /"neutral" is normal/);
+    assert.match(p, /Use the other two only when the numbers clearly say so/);
+    assert.match(p, /"unimpressed": the agent is struggling/);
+    assert.match(p, /Impressed usually earns a discount/);
   });
 });

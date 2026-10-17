@@ -15,12 +15,21 @@ Runs of the same suite with different `--variants` are different measurements. P
 `--label <name>` to give one its own file; without it the suite's default file is replaced,
 and the runner prints a NOTE when it is about to do that.
 
-## `talk` variant names changed on 2026-10-17
+## The `talk` runs measured prompts that are no longer in the code
 
-`current` always means the shipping prompt. Until 2026-10-17 that was the first version, so
-`talk.json` and `talk-ab-v2.json` call it `current`. Since then the shipping prompt is v4 with
-the notice step, and the first version runs as `v1`. `talk-ab-v4.json` measured the shipping
-prompt under the name `v4`, before it was promoted.
+`current` always means the shipping prompt. The four runs here are how it was chosen, and
+three of the variants they name have since been removed from `api/_talk_prompt.ts`:
+
+| file | variants | what they are |
+| --- | --- | --- |
+| `talk.json` | `current` | the first prompt, v1, which was shipping at the time |
+| `talk-ab-v2.json` | `current`, `v2` | v1 again, against v2 |
+| `talk-ab-v3.json` | `v3`, `v3-notice`, `v3-temp-1.3` | v3 three ways |
+| `talk-ab-v4.json` | `v4` | v4 with the notice step: the prompt that shipped, before it was renamed `current` |
+
+To re-run an old version, its prompt and variant list are at commit `e3b5902`:
+`git show e3b5902:api/_talk_prompt.ts`. The A/B ideas that were never run (`rates`,
+`examples`, and temperatures 0.8 and 1.2) are there too.
 
 ## `talk` runs are read, not just scored
 

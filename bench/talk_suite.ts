@@ -9,8 +9,7 @@
 
 import type { ShopItem, TalkRequest, TalkStats, Verdict } from '../api/_types.ts';
 import { TALK_CONFIG } from '../api/_gemini.ts';
-import { buildTalkPrompt, talkConfig, TIER_COST, SHOP_ITEMS, SHIPPING } from '../api/_talk_prompt.ts';
-import type { TalkPromptOptions } from '../api/_talk_prompt.ts';
+import { buildTalkPrompt, talkConfig, TIER_COST, SHOP_ITEMS } from '../api/_talk_prompt.ts';
 
 // ---- fixtures ------------------------------------------------------------------------------
 
@@ -146,35 +145,25 @@ export const TALK_FIXTURES: TalkFixture[] = [
 export type TalkVariant = {
   name: string;
   describe: string;
-  options: TalkPromptOptions;
-  /** The decoding base. Only the temperature variants differ from TALK_CONFIG. */
+  /** The decoding base: TALK_CONFIG for the control, an override for a decoding A/B. */
   base: Record<string, unknown>;
 };
 
-// `current` is the shipping prompt and the control: SHIPPING, exactly what /api/talk sends.
-// The rest are the history, kept runnable. v1 was `current` until 2026-10-17, so results
-// files from before then call it `current`; v4 shipped as `current` after its own run
-// (talk-ab-v4.*). The temperature variants spread TALK_CONFIG and override one field.
+// `current` is the shipping prompt, exactly what /api/talk sends, and the control for the
+// next A/B. The four versions that led to it, and the options they tried, are in git history
+// at e3b5902, next to the results that measured them; bench/results/README.md has the
+// details. A prompt variant goes back in as an option on buildTalkPrompt, a decoding one as
+// a `base` that spreads TALK_CONFIG and overrides a field.
 export const TALK_VARIANTS: TalkVariant[] = [
-  { name: 'current', describe: 'the shipping prompt (v4 + notice) — the control', options: SHIPPING, base: TALK_CONFIG },
-  { name: 'v1', describe: 'the first prompt: shipped as `current` until 2026-10-17', options: {}, base: TALK_CONFIG },
-  { name: 'v2', describe: 'the revised voice: shorter, Claude rarer, free-tier lore, verdict meanings', options: { version: 2 }, base: TALK_CONFIG },
-  { name: 'v3', describe: "the owner's notes: dead weights, dev-joke deaths, Claude present not everywhere, character", options: { version: 3 }, base: TALK_CONFIG },
-  { name: 'v3-notice', describe: 'v3, naming what stands out before the verdict', options: { version: 3, notice: true }, base: TALK_CONFIG },
-  { name: 'v3-temp-1.3', describe: 'v3 at temperature 1.3: does more randomness buy variety?', options: { version: 3 }, base: { ...TALK_CONFIG, temperature: 1.3 } },
-  { name: 'notice', describe: 'adds a "notice" field before the verdict: what stands out', options: { notice: true }, base: TALK_CONFIG },
-  { name: 'rates', describe: 'adds pruned per minute and minutes per rollback', options: { rates: true }, base: TALK_CONFIG },
-  { name: 'examples', describe: "shows the owner's reference lines as a tone guide", options: { examples: true }, base: TALK_CONFIG },
-  { name: 'temp-0.8', describe: 'the shipping prompt at temperature 0.8', options: {}, base: { ...TALK_CONFIG, temperature: 0.8 } },
-  { name: 'temp-1.2', describe: 'the shipping prompt at temperature 1.2', options: {}, base: { ...TALK_CONFIG, temperature: 1.2 } },
+  { name: 'current', describe: 'the shipping prompt — the control', base: TALK_CONFIG },
 ];
 
-export const variantPrompt = (v: TalkVariant, f: TalkFixture) => buildTalkPrompt(f.request, v.options);
-export const variantConfig = (v: TalkVariant, f: TalkFixture) => talkConfig(f.request, v.options, v.base);
+export const variantPrompt = (_v: TalkVariant, f: TalkFixture) => buildTalkPrompt(f.request);
+export const variantConfig = (v: TalkVariant, f: TalkFixture) => talkConfig(f.request, v.base);
 
 /** The key order the reply must come back in, restated rather than read from the config
  *  so a change to one side is caught by the other. */
-export const expectedKeys = (v: TalkVariant) => [...(v.options.notice ? ['notice'] : []), 'verdict', 'price', 'speech'];
+export const expectedKeys = () => ['notice', 'verdict', 'price', 'speech'];
 
 // ---- measures ------------------------------------------------------------------------------
 
