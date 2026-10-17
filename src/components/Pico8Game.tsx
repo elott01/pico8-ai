@@ -7,14 +7,24 @@ import {
   ST_READY,
   NO_MOVE,
   PROTOCOLS,
+  TALK_PROTOCOLS,
+  isBoardCart,
   readBoard,
   isLegalMove,
+  readTalkCall,
+  writeTalkPage,
+  readTalkBack,
 } from '../lib/gpio.ts';
-import type { Board, CartId, Gpio, Protocol } from '../lib/gpio.ts';
+import type { Board, CartId, Gpio, Protocol, TalkProtocol } from '../lib/gpio.ts';
 import { getAiTurn } from '../lib/ai.ts';
 import type { AiTurn } from '../lib/ai.ts';
+import { getTalk, browserStorage, loadMemory, saveMemory, memoryFor, remember } from '../lib/talk.ts';
+import type { TalkReply } from '../lib/talk.ts';
+import type { TalkRequest } from '../../api/_types.ts';
 import TurnPanel from './TurnPanel.tsx';
 import type { Turn } from './TurnPanel.tsx';
+import TalkPanel from './TalkPanel.tsx';
+import type { TalkTurn } from './TalkPanel.tsx';
 import styles from './Pico8Game.module.scss';
 
 type CartStatus = 'loading' | 'ready' | 'missing';
@@ -32,13 +42,17 @@ export default function Pico8Game({
    *  release its latch, since a 1.6MB runtime does not arrive instantly. */
   onReady?: () => void;
 }) {
-  const protocol = PROTOCOLS[game];
+  // Exactly one of these is set: a board cart talks to /api/move, a talk cart to /api/talk,
+  // and each poll loop below runs only for its own kind.
+  const boardProtocol = isBoardCart(game) ? PROTOCOLS[game] : null;
+  const talkProtocol = isBoardCart(game) ? null : TALK_PROTOCOLS[game];
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // The poll loop reads status every 100ms but must not be torn down and rebuilt each time
   // it changes, so it goes through a ref rather than the effect's dependency list.
   const statusRef = useRef<CartStatus>('loading');
   const [status, setStatus] = useState<CartStatus>('loading');
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [talks, setTalks] = useState<TalkTurn[]>([]);
   // Distinct from the `busy` latch below: that one guards re-entrancy, this one is the
   // only thing the UI can see. Without it the panel sits silent for the ~1.6s the model
   // takes, which reads as a dead page on the very turn the panel exists to evidence.
@@ -64,6 +78,7 @@ export default function Pico8Game({
   useEffect(() => {
     applyStatus('loading');
     setTurns([]); // analysis from the previous cart would be misleading
+    setTalks([]);
     setThinking(false);
   }, [game, applyStatus]);
 
@@ -71,6 +86,8 @@ export default function Pico8Game({
   // byte layouts are declared in lib/gpio.ts. Nothing below may hardcode an offset — the
   // effect re-runs when `game` changes, so it reads the whole layout off `protocol`.
   useEffect(() => {
+    if (!boardProtocol) return;
+    const protocol = boardProtocol;
     let busy = false;
     // `clearInterval` stops future ticks but cannot cancel one already suspended at an
     // `await`. That tick still holds the OLD cart's gpio, protocol and game, so on resume it
@@ -173,7 +190,115 @@ export default function Pico8Game({
       abort.abort();
       clearInterval(id);
     };
-  }, [game, protocol]);
+  }, [game, boardProtocol]);
+
+  // The talk cart's half of its protocol (carts/gemini.p8 holds the other). A purchase is one
+  // /api/talk call; every later page of the speech is served from `pending` with no call at
+  // all, because the server already returned the whole thing.
+  useEffect(() => {
+    if (!talkProtocol) return;
+    const p: TalkProtocol = talkProtocol;
+    let busy = false;
+    let cancelled = false; // see the board loop: a suspended tick must learn its cart is gone
+    const abort = new AbortController();
+    let pausedUntil = 0;
+    let pending: string[] = [];
+    const id = setInterval(async () => {
+      if (statusRef.current !== 'ready') return;
+      const gpio = iframeRef.current?.contentWindow?.pico8_gpio;
+      if (!gpio || busy || gpio[IDX_STATUS] !== ST_REQUEST) return;
+
+      busy = true;
+      gpio[IDX_STATUS] = ST_THINKING; // ack synchronously, or the cart keeps re-requesting
+      try {
+        const call = readTalkCall(gpio, p);
+        if (call?.occasion !== 'purchase') {
+          // The next page, from memory. An unknown occasion gets an empty page, which the
+          // cart treats as the end of the speech rather than waiting out its timeout.
+          const page = call ? pending.shift() : undefined;
+          writeTalkPage(gpio, p, { text: page ?? '', more: pending.length > 0 });
+          gpio[IDX_STATUS] = ST_READY;
+          return;
+        }
+        pending = [];
+
+        const storage = browserStorage();
+        const memory = loadMemory(storage);
+        const talkMemory = memoryFor(memory, 'gem-in-eye', call.stats);
+        const request: TalkRequest = {
+          occasion: 'purchase',
+          purchase: { item: call.item, tier: call.tier as 1 | 2 | 3, listPrice: call.listPrice },
+          stats: call.stats,
+          memory: talkMemory,
+        };
+
+        let reply: TalkReply;
+        if (Date.now() < pausedUntil) {
+          reply = { reason: 'rate-limited' };
+        } else {
+          setThinking(true);
+          reply = await getTalk(request, undefined, abort.signal);
+          if (cancelled) return;
+          setThinking(false);
+          if (reply.reason === 'rate-limited') {
+            const wait = Math.min(Math.max(reply.retryAfter ?? 60, 5), 15 * 60);
+            pausedUntil = Date.now() + wait * 1000;
+          }
+        }
+        const spoke = reply.reason === null ? reply : null;
+        const pages = spoke?.pages ?? [];
+
+        // The cart may have stopped waiting (450 frames) while the request was out. Writing
+        // now would land a stale reply on whatever it asks next, so the reply is dropped and
+        // the turn recorded as late. The cart has already sold at list with its own line.
+        const late = gpio[IDX_STATUS] !== ST_THINKING;
+        if (!late) {
+          pending = pages.slice(1);
+          writeTalkPage(gpio, p, {
+            text: pages[0] ?? '',
+            verdict: spoke?.verdict,
+            price: spoke?.price,
+            more: pending.length > 0,
+          });
+          gpio[IDX_STATUS] = ST_READY;
+        }
+
+        if (cancelled) return;
+        const back = late ? readTalkBack(gpio, p) : await readTalkBackWhenIdle(gpio, p);
+        if (cancelled) return;
+
+        const fromModel = !late && back !== null && back.showedSpeech;
+        const speech = pages.length ? pages.join(' ') : null;
+        saveMemory(storage, remember(memory, 'gem-in-eye', call.stats, talkMemory.agentNumber, fromModel ? speech : null));
+        setTalks((prev) => [
+          ...prev,
+          {
+            n: prev.length + 1,
+            item: call.item,
+            tier: call.tier,
+            listPrice: call.listPrice,
+            stats: call.stats,
+            agentNumber: talkMemory.agentNumber,
+            verdict: spoke?.verdict ?? null,
+            notice: spoke?.notice ?? null,
+            speech,
+            charged: back?.charged ?? null,
+            reason: reply.reason,
+            fromModel,
+            late,
+          },
+        ]);
+      } finally {
+        busy = false;
+        setThinking(false);
+      }
+    }, 100);
+    return () => {
+      cancelled = true;
+      abort.abort();
+      clearInterval(id);
+    };
+  }, [game, talkProtocol]);
 
   const src = `/games/${game}.html`;
 
@@ -199,7 +324,12 @@ export default function Pico8Game({
             onError={() => applyStatus('missing')}
           />
         </div>
-        {status !== 'missing' && <TurnPanel turns={turns} thinking={thinking} />}
+        {status !== 'missing' &&
+          (boardProtocol ? (
+            <TurnPanel turns={turns} thinking={thinking} />
+          ) : (
+            <TalkPanel talks={talks} thinking={thinking} />
+          ))}
       </div>
     </div>
   );
@@ -231,4 +361,15 @@ async function readCartPlayedMove(
     await sleep(16);
   }
   return null; // no cart listening, or it never wrote a move; the panel shows no move
+}
+
+// After a purchase the cart writes the price it charged, and whether it printed the page's
+// speech, and only then returns to idle — so idle is what makes the read-back trustworthy.
+async function readTalkBackWhenIdle(gpio: Gpio, p: TalkProtocol, timeoutMs = 3500) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (gpio[IDX_STATUS] === ST_IDLE) return readTalkBack(gpio, p);
+    await sleep(16);
+  }
+  return null; // no cart listening; the panel shows the charge as unknown
 }

@@ -15,6 +15,7 @@ npm run test:watch                           # watch mode
 npm run build                                # production build -> dist/
 npm run bench                                # prompt benchmark; SPENDS Gemini quota
 node bench/ab.ts --variants current,perception   # A/B prompt variants
+node bench/talk.ts --dry                         # gem-in-eye's dialogue bench; drop --dry to spend quota
 npm run test:playwright                      # browser suite; boots Vite itself, no API key
 npx playwright test --project=webkit         # the engine that catches the real bugs
 ```
@@ -36,7 +37,7 @@ Everything under `src/`, `api/` and `tests/` is TypeScript. The test glob still 
 `tests/_mocks.ts` holds the shared `VercelRequest`/`VercelResponse` and `fetch` fakes. It
 is underscore-prefixed and not a `*.test.*` file, so the runner's glob skips it.
 
-**`npm run dev` runs Vite only**, so `/api/move` 404s and the AI silently does nothing. Only
+**`npm run dev` runs Vite only**, so `/api/move` and `/api/talk` 404 and the AI silently does nothing. Only
 `vercel dev` runs the serverless functions. It reads `.env.local` and `api/` **at boot** —
 after editing either, fully restart it (a Vite hot-restart is not enough).
 
@@ -52,12 +53,25 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
   On the CPU's turn it publishes the board to GPIO and waits.
 - **`src/components/Pico8Game.tsx`** embeds the cart's *exported `.html`* in an iframe (not the
   `.js` — the export needs its own shell) and polls `contentWindow.pico8_gpio` every 100ms.
-- **`src/lib/gpio.ts`** is the byte-protocol source of truth, one `PROTOCOLS` entry per cart;
+- **`src/lib/gpio.ts`** is the byte-protocol source of truth, one `PROTOCOLS` entry per game
+  cart and one `TALK_PROTOCOLS` entry for the shop cart (see `docs/gpio-protocol.md`);
   each cart's Lua half must match its entry, and `tests/gpio-protocol.test.ts` parses the Lua
   to check that it does. Nothing outside this file may hardcode a byte offset or board size.
 - **`api/move.ts`** holds the API key, calls Gemini, and returns the move plus the model's own
   analysis, which `TurnPanel.tsx` renders as evidence a real LLM chose it. It is
   **game-agnostic**: everything per-cart comes from `api/_games.ts`.
+- **`api/talk.ts`** voices gem-in-eye, the shopkeeper in `carts/gemini.p8`: on a purchase it
+  judges the agent, prices the sale and speaks. It is a sibling of `move.ts`, not a game in
+  `_games.ts`, because a speech has no legal set or right answer.
+  - **`api/_talk_prompt.ts`** holds the prompt. `SHIPPING` is what production sends; the
+    older versions stay buildable for `bench/talk.ts`.
+  - **`api/_talk_text.ts`** cleans the speech and pages it to the cart's own `wrap_text`.
+  - **`api/_talk_request.ts`** validates the request.
+  - Both endpoints share the Gemini call, retry, quota and origin rules in
+    **`api/_ask_gemini.ts`**.
+  - On the page, `Pico8Game.tsx` runs a second poll loop for talk carts. **`src/lib/talk.ts`**
+    holds the client and gem-in-eye's memory in `localStorage`, keyed per speaker, and
+    **`TalkPanel.tsx`** shows what he was shown and what he said.
 - **`api/_games.ts`** is the per-cart dispatch table — board size, prompt, decoding config,
   move parsing, legality, and which analysis fields that game returns. Adding a cart should
   mean one entry here plus one in `PROTOCOLS`, and no edit to `move.ts`.
@@ -90,12 +104,12 @@ Breaking any of these fails silently, so verify them when touching the relevant 
 - **Timeout budget chain:** `getAiTurn` (12s, `src/lib/ai.ts`) must stay *below* the cart's
   `ai_max_frames` (450 frames ≈ 15s). If the cart gives up first it self-plays and the
   read-back finds nothing, so the panel loses the played cell. `CLIENT_ABORT_MS` in
-  `api/move.ts` is a third copy of the same number — it only drives the `TOO-LATE` log
+  `api/_ask_gemini.ts` (shared by both endpoints) is a third copy of the same number — it only drives the `TOO-LATE` log
   marker, but if it disagrees the logs misreport which turns the player actually saw.
   Raising the client side past ~13s means raising `ai_max_frames` too, which costs a manual
   cart re-export.
 - **The quota cap counts Gemini calls, not requests.** `reserveGeminiCall()` sits *inside* the
-  retry loop in `askGemini` — one request can issue several calls.
+  retry loop in `askGemini` (`api/_ask_gemini.ts`) — one request can issue several calls.
 - **`EXPIRE … NX`, never a plain EXPIRE** in `_ratelimit.ts`; refreshing the TTL each increment
   would push the window out forever and the counter would never reset.
 - **Rate limiting fails open.** Any KV error degrades to a per-instance memory Map. A limiter
@@ -118,7 +132,11 @@ Breaking any of these fails silently, so verify them when touching the relevant 
 - **`game` is sent explicitly and checked against the board length.** Never infer the cart
   from `board.length` — a third cart with 42 cells would then be silently misread. A
   mismatch is a 400.
-- **The `/api/move` wire contract lives in `api/_types.ts` and nowhere else.** `move.ts`
+- **`memory.lastSpeeches` in a `/api/talk` request is untrusted.** The page keeps gem-in-eye's
+  past speeches in `localStorage`, which a player can edit, so they are the one route by which
+  typed text could reach a prompt. `_talk_request.ts` cleans them to the cart's character set,
+  keeps the last 3, caps their length, and the prompt quotes them as data. Don't loosen that.
+- **The `/api/move` and `/api/talk` wire contracts live in `api/_types.ts` and nowhere else.** `move.ts`
   annotates its response bodies with it and `src/lib/ai.ts` imports it, so the producer and
   consumer break together. Restating the shape on either side reintroduces silent drift —
   that is how `emptyCell` vs `emptyCells` shipped past typecheck, tests and build.
