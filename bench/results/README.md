@@ -9,10 +9,28 @@ record of one measurement, not as a checked-in fixture.
 | `ab-connect_four.json` | `node bench/ab.ts --suite connect_four` | other Connect Four runs |
 | `ab-connect_four-parity.log` | an earlier Connect Four run — **console log only** | see below |
 | `before.json` | `node bench/baseline.ts before` — **pre-fix runner** | nothing (see below) |
+| `talk.json` + `talk.md` | `node bench/talk.ts` (gem-in-eye's dialogue) | other `talk` runs with the same `--variants` and fixtures |
 
 Runs of the same suite with different `--variants` are different measurements. Pass
 `--label <name>` to give one its own file; without it the suite's default file is replaced,
 and the runner prints a NOTE when it is about to do that.
+
+## `talk` variant names changed on 2026-10-17
+
+`current` always means the shipping prompt. Until 2026-10-17 that was the first version, so
+`talk.json` and `talk-ab-v2.json` call it `current`. Since then the shipping prompt is v4 with
+the notice step, and the first version runs as `v1`. `talk-ab-v4.json` measured the shipping
+prompt under the name `v4`, before it was promoted.
+
+## `talk` runs are read, not just scored
+
+A speech has no right answer, so most of `talk.json`'s columns are flags rather than grades:
+`specific` (does it point at this agent's numbers or purchase), `saysPrice` (it recites the
+price the shop already shows), `memRepeat` (it rewords a line from its memory), and variety
+within a fixture (distinct speeches, reworded pairs). Only two fixtures carry an expected
+verdict, the owner's own praise and mockery examples, and the price is checked for being in
+band. `talk.md` is the same run as a list of every speech, paged the way the cart would show
+it. Reading that file is the actual review; the numbers only say where to look.
 
 ## `before.json` latency is not comparable to anything
 

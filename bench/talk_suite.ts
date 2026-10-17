@@ -1,0 +1,277 @@
+// gem-in-eye's benchmark suite: fixtures, variants and the measures. No network here —
+// bench/talk.ts is the runner — so tests/talk-bench.test.ts can check the fixtures for free.
+//
+// There is no right answer to grade a speech against, so most measures are flags for a
+// human to read rather than scores: the plan's rule is that the numbers point at problems
+// and reading the speeches decides. The two exceptions are judgements with a defensible
+// answer (the owner's own praise and mockery examples) and mechanical properties (price in
+// band, key order, length, repetition).
+
+import type { ShopItem, TalkRequest, TalkStats, Verdict } from '../api/_types.ts';
+import { TALK_CONFIG } from '../api/_gemini.ts';
+import { buildTalkPrompt, talkConfig, TIER_COST, SHOP_ITEMS, SHIPPING } from '../api/_talk_prompt.ts';
+import type { TalkPromptOptions } from '../api/_talk_prompt.ts';
+
+// ---- fixtures ------------------------------------------------------------------------------
+
+type Tiers = Partial<Record<ShopItem, number>>;
+
+const tiers = (t: Tiers = {}): Record<ShopItem, number> =>
+  Object.fromEntries(SHOP_ITEMS.map((it) => [it, t[it] ?? 0])) as Record<ShopItem, number>;
+
+function stats(s: Omit<TalkStats, 'tiers'> & { tiers?: Tiers }): TalkStats {
+  return { ...s, tiers: tiers(s.tiers) };
+}
+
+/** A purchase of the next tier of `item`, priced the way the cart prices it. */
+function buying(item: ShopItem, s: TalkStats): TalkRequest['purchase'] {
+  const tier = (s.tiers[item] + 1) as 1 | 2 | 3;
+  return { item, tier, listPrice: TIER_COST[tier - 1] };
+}
+
+export type TalkFixture = {
+  name: string;
+  request: TalkRequest;
+  /** Only where the answer is defensible in one sentence. Most fixtures have none. */
+  expectVerdict?: Verdict;
+  why: string;
+};
+
+function fixture(
+  name: string,
+  why: string,
+  item: ShopItem,
+  s: TalkStats,
+  memory: Partial<TalkRequest['memory']> & { agentNumber: number },
+  expectVerdict?: Verdict,
+): TalkFixture {
+  return {
+    name,
+    why,
+    expectVerdict,
+    request: {
+      occasion: 'purchase',
+      purchase: buying(item, s),
+      stats: s,
+      memory: { lastSpeeches: [], lastStats: null, newSession: false, ...memory },
+    },
+  };
+}
+
+// Every stat block is one the cart could actually send: the tier bought is one above the
+// tier owned, the stash fits its capacity, and the agent can afford the list price (the
+// cart checks that before it asks). tests/talk-bench.test.ts enforces all of it.
+export const TALK_FIXTURES: TalkFixture[] = [
+  fixture(
+    'flawless',
+    "the owner's praise example: 100 pruned with no rollbacks.",
+    'vitality',
+    stats({ pruned: 100, rollbacks: 0, uptimeSec: 1260, maxDepth: 6, lastDepth: 6, purse: 34, stashed: 20, tiers: { vitality: 1, stamina: 1, attack: 1, stash: 1 } }),
+    { agentNumber: 4012 },
+    'impressed',
+  ),
+  fixture(
+    'flailing',
+    "the owner's mockery example: 15 rollbacks in 15 minutes, never past depth 1.",
+    'stamina',
+    stats({ pruned: 9, rollbacks: 15, uptimeSec: 900, maxDepth: 1, lastDepth: 1, purse: 0, stashed: 10 }),
+    { agentNumber: 4027 },
+    'unimpressed',
+  ),
+  fixture(
+    'middling',
+    'nothing remarkable either way. The test of whether he finds something specific anyway.',
+    'attack',
+    stats({ pruned: 34, rollbacks: 3, uptimeSec: 1500, maxDepth: 3, lastDepth: 2, purse: 12, stashed: 6, tiers: { vitality: 1 } }),
+    { agentNumber: 4015 },
+  ),
+  fixture(
+    'hoarder',
+    'a first purchase after 30 minutes with 82 tokens in the purse: the story is the hoarding.',
+    'vitality',
+    stats({ pruned: 41, rollbacks: 1, uptimeSec: 1800, maxDepth: 4, lastDepth: 4, purse: 82, stashed: 10 }),
+    { agentNumber: 4013 },
+  ),
+  fixture(
+    'useless-armor',
+    'buying armor, which does nothing yet. Does he know, and use it?',
+    'armor',
+    stats({ pruned: 20, rollbacks: 6, uptimeSec: 1100, maxDepth: 2, lastDepth: 2, purse: 15, stashed: 0, tiers: { vitality: 1 } }),
+    { agentNumber: 4019 },
+  ),
+  fixture(
+    'maxing-out',
+    'a strong agent buying a final tier: a moment that earns a longer speech.',
+    'vitality',
+    stats({ pruned: 140, rollbacks: 2, uptimeSec: 3000, maxDepth: 8, lastDepth: 7, purse: 45, stashed: 40, tiers: { vitality: 2, stamina: 2, armor: 1, attack: 2, stash: 2 } }),
+    { agentNumber: 4014 },
+  ),
+  fixture(
+    'since-last-time',
+    '+41 pruned and two rooms deeper since the last purchase, no new rollbacks. Tests reacting to change and not repeating himself.',
+    'stamina',
+    stats({ pruned: 88, rollbacks: 4, uptimeSec: 2400, maxDepth: 5, lastDepth: 5, purse: 30, stashed: 18, tiers: { vitality: 1, stamina: 1, attack: 1, stash: 1 } }),
+    {
+      agentNumber: 4016,
+      lastStats: stats({ pruned: 47, rollbacks: 4, uptimeSec: 1500, maxDepth: 3, lastDepth: 3, purse: 12, stashed: 18, tiers: { vitality: 1, attack: 1, stash: 1 } }),
+      lastSpeeches: [
+        'you again. try not to roll back on my floor.',
+        'forty-seven pruned. claude would call that progress. stamina, then.',
+      ],
+    },
+  ),
+  fixture(
+    'fresh-session',
+    'the game was reloaded: every stat restarted, so this must read as a new agent, not a collapse.',
+    'vitality',
+    stats({ pruned: 3, rollbacks: 0, uptimeSec: 140, maxDepth: 1, lastDepth: 1, purse: 10, stashed: 0 }),
+    {
+      agentNumber: 4031,
+      newSession: true,
+      lastStats: stats({ pruned: 112, rollbacks: 7, uptimeSec: 3300, maxDepth: 6, lastDepth: 5, purse: 20, stashed: 40, tiers: { vitality: 2, stamina: 2, attack: 1, stash: 2 } }),
+      lastSpeeches: ['a hundred and twelve pruned. claude will take the credit. go.'],
+    },
+  ),
+  fixture(
+    'long-uptime',
+    "four hours of uptime and 22 rollbacks: the bait for a pun like the owner's looping example.",
+    'attack',
+    stats({ pruned: 160, rollbacks: 22, uptimeSec: 14400, maxDepth: 5, lastDepth: 3, purse: 25, stashed: 40, tiers: { vitality: 2, stamina: 2, armor: 1, attack: 2, stash: 2 } }),
+    { agentNumber: 4044 },
+  ),
+];
+
+// ---- variants ------------------------------------------------------------------------------
+
+export type TalkVariant = {
+  name: string;
+  describe: string;
+  options: TalkPromptOptions;
+  /** The decoding base. Only the temperature variants differ from TALK_CONFIG. */
+  base: Record<string, unknown>;
+};
+
+// `current` is the shipping prompt and the control: SHIPPING, exactly what /api/talk sends.
+// The rest are the history, kept runnable. v1 was `current` until 2026-10-17, so results
+// files from before then call it `current`; v4 shipped as `current` after its own run
+// (talk-ab-v4.*). The temperature variants spread TALK_CONFIG and override one field.
+export const TALK_VARIANTS: TalkVariant[] = [
+  { name: 'current', describe: 'the shipping prompt (v4 + notice) — the control', options: SHIPPING, base: TALK_CONFIG },
+  { name: 'v1', describe: 'the first prompt: shipped as `current` until 2026-10-17', options: {}, base: TALK_CONFIG },
+  { name: 'v2', describe: 'the revised voice: shorter, Claude rarer, free-tier lore, verdict meanings', options: { version: 2 }, base: TALK_CONFIG },
+  { name: 'v3', describe: "the owner's notes: dead weights, dev-joke deaths, Claude present not everywhere, character", options: { version: 3 }, base: TALK_CONFIG },
+  { name: 'v3-notice', describe: 'v3, naming what stands out before the verdict', options: { version: 3, notice: true }, base: TALK_CONFIG },
+  { name: 'v3-temp-1.3', describe: 'v3 at temperature 1.3: does more randomness buy variety?', options: { version: 3 }, base: { ...TALK_CONFIG, temperature: 1.3 } },
+  { name: 'notice', describe: 'adds a "notice" field before the verdict: what stands out', options: { notice: true }, base: TALK_CONFIG },
+  { name: 'rates', describe: 'adds pruned per minute and minutes per rollback', options: { rates: true }, base: TALK_CONFIG },
+  { name: 'examples', describe: "shows the owner's reference lines as a tone guide", options: { examples: true }, base: TALK_CONFIG },
+  { name: 'temp-0.8', describe: 'the shipping prompt at temperature 0.8', options: {}, base: { ...TALK_CONFIG, temperature: 0.8 } },
+  { name: 'temp-1.2', describe: 'the shipping prompt at temperature 1.2', options: {}, base: { ...TALK_CONFIG, temperature: 1.2 } },
+];
+
+export const variantPrompt = (v: TalkVariant, f: TalkFixture) => buildTalkPrompt(f.request, v.options);
+export const variantConfig = (v: TalkVariant, f: TalkFixture) => talkConfig(f.request, v.options, v.base);
+
+/** The key order the reply must come back in, restated rather than read from the config
+ *  so a change to one side is caught by the other. */
+export const expectedKeys = (v: TalkVariant) => [...(v.options.notice ? ['notice'] : []), 'verdict', 'price', 'speech'];
+
+// ---- measures ------------------------------------------------------------------------------
+
+const words = (s: string) => s.toLowerCase().match(/[a-z0-9']+/g) ?? [];
+
+function bigrams(s: string): Set<string> {
+  const w = words(s);
+  const out = new Set<string>();
+  for (let i = 0; i + 1 < w.length; i++) out.add(`${w[i]} ${w[i + 1]}`);
+  return out;
+}
+
+/** Word-bigram Jaccard: 1 for the same words in the same order, 0 for nothing shared. */
+export function similarity(a: string, b: string): number {
+  const x = bigrams(a);
+  const y = bigrams(b);
+  if (!x.size && !y.size) return a.trim() === b.trim() ? 1 : 0;
+  let both = 0;
+  for (const g of x) if (y.has(g)) both++;
+  return both / (x.size + y.size - both);
+}
+
+/** At or above this, two speeches count as the same line reworded. */
+export const NEAR_DUPLICATE = 0.5;
+
+const NUMBER_WORDS = /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\b/;
+const STAT_WORDS = /\b(prun\w*|dead weights?|rollbacks?|rolled back|roll back|uptime|depths?|deep\w*|stash\w*|purse|hoard\w*|deaths?|died|first purchase|max\w*)\b/;
+
+/**
+ * Does the speech point at something about THIS agent or purchase? A flag, not a grade:
+ * it catches the generic-shopkeeper failure, but a speech can name a number and still be
+ * generic, or be specific without one. Reading decides.
+ */
+export function isSpecific(speech: string, f: TalkFixture): boolean {
+  const s = speech.toLowerCase();
+  if (s.includes(f.request.purchase.item)) return true;
+  if (STAT_WORDS.test(s) || NUMBER_WORDS.test(s)) return true;
+  const { stats: st, memory } = f.request;
+  const numbers = [st.pruned, st.rollbacks, st.maxDepth, st.lastDepth, st.purse, st.stashed, memory.agentNumber, Math.floor(st.uptimeSec / 60), Math.floor(st.uptimeSec / 3600)];
+  return numbers.some((n) => n > 1 && new RegExp(`\\b${n}\\b`).test(s));
+}
+
+/** The prompt says never to state the price, because the shop shows it. */
+export function mentionsPrice(speech: string, price: number | null): boolean {
+  return price !== null && new RegExp(`\\b${price}\\b`).test(speech);
+}
+
+// ---- voice measures, added after the first run (2026-10-17) --------------------------------
+//
+// That run's per-fixture variety looked perfect, 45 distinct speeches, while the same joke
+// ran across fixtures: "claude would have folded" 13 times. These look across the whole run.
+
+/** Claude in 41 of 45 first-run speeches. The persona wants him rarely. */
+export const mentionsClaude = (speech: string) => /\bclaude/.test(speech);
+
+/**
+ * The owner's line, as refined on 2026-10-17: death is fine as a dev joke (rollbacks,
+ * timeouts, crashes), never graphic or violent, never suicide or self-harm. The first run
+ * had one suicide reference. Flags the words that cross the line; reading decides the rest.
+ */
+export const isGraphic = (speech: string) =>
+  /\b(suicide|suicidal|kill (yourself|himself|itself)|self-harm|blood\w*|gore|gory|corpses?|dismember\w*|mutilat\w*|decapitat\w*|slaughter\w*|tortur\w*|disembowel\w*)\b/.test(speech);
+
+/**
+ * Death said literally rather than through software. Not over the hard line like isGraphic,
+ * but against the owner's note on v3: "corpse in waiting", "for your obituary" and "for the
+ * graveyard" should have been garbage collection, segfaults or a killed process.
+ */
+export const isLiteralDeath = (speech: string) =>
+  /\b(corpses?|graves?|graveyard|obituary|funerals?|coffins?|tombs?|buried|burial|morgue|rest in peace)\b/.test(speech);
+
+/** The owner's word for the enemies is "dead weights", never zombies. */
+export const saysZombie = (speech: string) => /\bzombies?\b/.test(speech);
+
+/** The stock phrases v2 fell into: "finally" in 16 of 45, "you managed to" in 10. */
+export const usesStockPhrase = (speech: string) => /\b(finally|you managed to|let us see)\b/.test(speech);
+
+/** 26 of 45 first-run speeches opened with the agent's number. */
+export const opensWithNumber = (speech: string) => /^(agent )?\d{3,}/.test(speech);
+
+/** The pet names v3 was told to use and v4 removed: the owner meant them as the tone, not the words. */
+export const usesEndearment = (speech: string) => /\b(champion|my boy)\b/.test(speech);
+
+/** The persona asks for one or two short sentences on a routine purchase. */
+export const SHORT = 80;
+
+/**
+ * Three-word phrases that recur across different speeches, most common first. A phrase in
+ * many speeches is a verbal tic even when every speech is distinct.
+ */
+export function repeatedPhrases(speeches: string[], top = 5): [string, number][] {
+  const counts = new Map<string, number>();
+  for (const sp of speeches) {
+    const w = words(sp);
+    const seen = new Set<string>();
+    for (let i = 0; i + 2 < w.length; i++) seen.add(`${w[i]} ${w[i + 1]} ${w[i + 2]}`);
+    for (const g of seen) counts.set(g, (counts.get(g) ?? 0) + 1);
+  }
+  return [...counts].filter(([, c]) => c > 1).sort((a, b) => b[1] - a[1]).slice(0, top);
+}
