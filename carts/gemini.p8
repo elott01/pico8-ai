@@ -1432,7 +1432,7 @@ function sell(ok)
 	put(gp_len, len)
 end
 
--- bridge, per gem-in-eye-plan.md. the protocol test parses these lines
+-- bridge; must match src/lib/gpio.ts. the protocol test parses these lines
 gpio = 0x5f80
 gp_status = 0
 st_idle, st_request, st_thinking, st_ready = 0, 1, 2, 3
