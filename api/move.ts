@@ -2,8 +2,9 @@
 // the model's move and its reasoning. Vercel pre-parses JSON, so req.body is an object.
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { checkRateLimit, reserveGeminiCall, QuotaError, firstHeader, errorMessage } from './_ratelimit.ts';
-import { GEMINI_URL } from './_gemini.ts';
+import { checkRateLimit, QuotaError, errorMessage } from './_ratelimit.ts';
+import { askGemini as ask, isSameOrigin, CLIENT_ABORT_MS } from './_ask_gemini.ts';
+import type { CallStats } from './_ask_gemini.ts';
 import { GAMES, DEFAULT_GAME, isGameId } from './_games.ts';
 import type { GameSpec } from './_games.ts';
 import type { Board, ModelReply, MoveSuccess, MoveRateLimited } from './_types.ts';
@@ -100,20 +101,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-/** Only the sliver of Gemini's response this code reads. */
-type GeminiResponse = {
-  candidates?: { content?: { parts?: { text?: string }[] } }[];
-};
-
-/** Mutable per-request tally, so the handler can report what a slow turn actually spent. */
-type CallStats = { calls: number; geminiMs: number };
-
-// getAiTurn's abort in src/lib/ai.ts. Duplicated rather than imported because api/ must not
-// depend on src/ — but the two have to agree, or the TOO-LATE marker lies about which turns
-// the player actually saw. See the timeout budget chain in CLAUDE.md: this must stay below
-// the cart's ai_max_frames (450 frames ≈ 15s).
-const CLIENT_ABORT_MS = 12_000;
-
+/** The shared call (_ask_gemini.ts), with this game's prompt and per-board config. */
 async function askGemini(
   spec: GameSpec,
   board: Board,
@@ -121,93 +109,16 @@ async function askGemini(
   started: number,
   correction?: string,
 ): Promise<ModelReply> {
-  // The handler guards this, but askGemini is separately callable and the fetch header
-  // needs a string rather than string | undefined.
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
-
-  let data: GeminiResponse | undefined;
-  let callStart = Date.now();
-  // Attempts and backoff have to fit inside the client's request timeout (getAiTurn in
-  // src/lib/ai.ts) alongside generation and a possible legality retry.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    // Attempts are capped by a DEADLINE, not just a count. Google has been observed holding
-    // a request for 18-24s and then answering 503; retrying after that pushed the function
-    // past 30s and spent quota on an answer the client abandoned at CLIENT_ABORT_MS. A
-    // retry is only worth making if its result can still be read.
-    if (attempt > 0 && Date.now() - started >= CLIENT_ABORT_MS) {
-      console.log(
-        `[move] giving up after ${Date.now() - started}ms — past the client's ${CLIENT_ABORT_MS}ms budget, a retry cannot be read`,
-      );
-      break;
-    }
-    await reserveGeminiCall(); // inside the loop: the quota cap counts calls, not requests
-    callStart = Date.now();
-    stats.calls++;
-    const r = await fetch(GEMINI_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: spec.buildPrompt(board, correction) }] }],
-        // Per-board, not per-game: Connect Four's schema enumerates the legal columns, so
-        // an illegal one is unrepresentable rather than merely discouraged.
-        generationConfig: spec.config(board),
-      }),
-    });
-    data = (await r.json()) as GeminiResponse;
-
-    // 429 and 503 are NOT the same failure and must not share a retry path.
-    //
-    // 503 is transient overload: waiting helps. 429 means we are over Google's own rate
-    // limit, where retrying is both pointless and harmful — three attempts plus backoff
-    // turns an instant, honest "rate limited" into a ~2s+ request that eats the client's
-    // 10s budget and surfaces as a *timeout* instead. Failing fast here keeps the cause
-    // visible, and lets the page pause properly via its Retry-After handling.
-    if (r.status === 429) {
-      const retryAfter = Number(r.headers.get('retry-after')) || 60;
-      console.log(`[move] gemini 429 (upstream quota) after ${Date.now() - callStart}ms; not retrying`);
-      throw new QuotaError(retryAfter);
-    }
-    if (r.status !== 503) {
-      stats.geminiMs += Date.now() - callStart;
-      break;
-    }
-    stats.geminiMs += Date.now() - callStart;
-    console.log(`[move] gemini 503 (attempt ${attempt + 1}) after ${Date.now() - callStart}ms, retrying…`);
-    await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
-  }
-
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
-  try {
-    return JSON.parse(text) as ModelReply;
-  } catch {
-    console.log('[move] unparseable response body:', JSON.stringify(data));
-    throw new Error('could not parse model response');
-  }
-}
-
-// Matching Origin's host against the request's own Host works unchanged on localhost,
-// preview deploys and custom domains — no allowlist to keep in sync. A missing Origin
-// means a non-browser client, since browsers always send it on POST.
-//
-// A speed bump, not security: Origin is trivially forged outside a browser. The rate
-// limits in _ratelimit.ts are the real control.
-function isSameOrigin(req: VercelRequest): boolean {
-  const origin = firstHeader(req.headers?.origin);
-  if (!origin) return false;
-
-  // x-forwarded-host is what the user actually hit when Vercel's proxy is in front.
-  const hosts = [firstHeader(req.headers['x-forwarded-host']), firstHeader(req.headers.host)].filter(
-    (h): h is string => Boolean(h),
-  );
-  try {
-    return hosts.includes(new URL(origin).host);
-  } catch {
-    return false; // malformed Origin
-  }
+  const reply = await ask({
+    prompt: spec.buildPrompt(board, correction),
+    // Per-board, not per-game: Connect Four's schema enumerates the legal columns, so
+    // an illegal one is unrepresentable rather than merely discouraged.
+    config: spec.config(board),
+    stats,
+    started,
+    tag: 'move',
+  });
+  return reply as ModelReply;
 }
 
 // Length is checked against the declared game, so a Connect Four board sent without

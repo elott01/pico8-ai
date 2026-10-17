@@ -74,3 +74,97 @@ export type MoveRateLimited = {
 export type MoveError = { error: string };
 
 export type MoveResponse = MoveSuccess | MoveRateLimited | MoveError;
+
+// ---- /api/talk: gem-in-eye, the shopkeeper in carts/gemini.p8 ----------------------------
+//
+// A second contract beside /api/move rather than another GameSpec: a line of dialogue has
+// no legal set and no right answer, so a move-shaped contract would be half empty. Owned
+// here for the same reason as the move types — the endpoint and the page must break
+// together.
+
+/** The five things gem-in-eye sells, in the cart's `shop` order — which is also the order
+ *  the tiers travel in over GPIO. */
+export type ShopItem = 'vitality' | 'stamina' | 'armor' | 'attack' | 'stash';
+
+/** The agent's record, as the cart reports it at the moment of a purchase. */
+export type TalkStats = {
+  pruned: number;
+  rollbacks: number;
+  /** Seconds since the cart started. Resets on reload; wraps at 32767 (about 9 hours). */
+  uptimeSec: number;
+  maxDepth: number;
+  /** How deep the most recent run got. 0 before the first run. */
+  lastDepth: number;
+  /** Tokens carried. Lost on a rollback. */
+  purse: number;
+  /** Tokens in the hub's safe. Survives rollbacks. */
+  stashed: number;
+  /** Tiers owned, 0-3 each. */
+  tiers: Record<ShopItem, number>;
+};
+
+export type TalkPurchase = {
+  item: ShopItem;
+  /** The tier being bought: one above the tier owned. */
+  tier: 1 | 2 | 3;
+  listPrice: number;
+};
+
+/** What the page remembers between purchases, in localStorage. The cart remembers nothing. */
+export type TalkMemory = {
+  /** gem-in-eye's last few speeches, oldest first. */
+  lastSpeeches: string[];
+  /** The stats at the previous call, or null on the first. */
+  lastStats: TalkStats | null;
+  /** The cart restarted since lastStats, so a drop in every stat is a new agent. */
+  newSession: boolean;
+  /** Stable across calls: +1 per rollback and per new session. Each rollback is an agent
+   *  killed, so the old agents are the numbers below this one. */
+  agentNumber: number;
+};
+
+export type TalkRequest = {
+  /** Only purchases call Gemini in v1. 'enter' is reserved for a generated greeting. */
+  occasion: 'purchase';
+  purchase: TalkPurchase;
+  stats: TalkStats;
+  memory: TalkMemory;
+};
+
+export type Verdict = 'impressed' | 'neutral' | 'unimpressed';
+
+/** What the model is asked to return, in this generation order: the judgement, then the
+ *  deal, then the words, so the speech is conditioned on both. `notice` exists only in the
+ *  bench variant that tests whether naming what stands out first improves the speech. */
+export type TalkModelReply = {
+  notice?: string | null;
+  verdict?: string | null;
+  price?: number | string | null;
+  speech?: string | null;
+};
+
+/**
+ * 200. Everything is null when the server fell back; a null `price` alone means "charge
+ * list". `pages` is the cleaned speech already split to the cart's own wrap — 1 to 3
+ * pages of at most 3 lines, each small enough for one GPIO handshake. `notice` is the
+ * model's own line about what stood out in the numbers: generated, so the panel can show
+ * it as evidence, and never sent to the cart.
+ */
+export type TalkSuccess = {
+  verdict: Verdict | null;
+  price: number | null;
+  pages: string[] | null;
+  notice: string | null;
+};
+
+/** 429, the same shape and header as /api/move's. */
+export type TalkRateLimited = {
+  verdict: null;
+  price: null;
+  pages: null;
+  notice: null;
+  rateLimited: true;
+  retryAfter: number;
+};
+
+export type TalkResponse = TalkSuccess | TalkRateLimited | MoveError;

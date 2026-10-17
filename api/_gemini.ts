@@ -14,3 +14,11 @@ export const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/mode
 
 /** JSON out, not prose; low temperature because a move should be near-deterministic. */
 export const GENERATION_CONFIG = { temperature: 0.1, responseMimeType: 'application/json' };
+
+/**
+ * gem-in-eye's dialogue. High temperature because the speech is the product and must not
+ * repeat: at the move config's 0.1 the same stats would get the same line on every visit.
+ * The response schema is added per request in _talk_prompt.ts, because the price enum
+ * depends on the list price.
+ */
+export const TALK_CONFIG = { temperature: 1.0, responseMimeType: 'application/json' };
