@@ -86,10 +86,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       done('quota', ` retryAfter=${e.retryAfter}s`);
       return rateLimited(e.retryAfter);
     }
-    // 200 with nothing, not a 5xx: the cart sells at list with its own line, and the shop
-    // keeps working.
+    // 502, not the all-null 200. The cart sells at list with its own line either way, but
+    // the page reads a 200 with no speech as the model answering with nothing, and only an
+    // error status as the model being unavailable — which is what happened.
     done('FAILED', ` err=${JSON.stringify(errorMessage(e))}`);
-    return res.status(200).json(FALLBACK);
+    return res.status(502).json({ error: 'model unavailable' });
   }
 }
 

@@ -19,9 +19,17 @@ export const CLIENT_ABORT_MS = 12_000;
 /** Mutable per-request tally, so the handler can report what a slow request actually spent. */
 export type CallStats = { calls: number; geminiMs: number };
 
+/**
+ * Gemini calls per request. Only a 503 is retried, and only while the client can still read
+ * the answer. Four rather than three because three fast 503s in a row were observed costing
+ * a shop speech with about 4.5s of the client's budget left — room for one more call.
+ */
+export const ATTEMPTS = 4;
+
 /** Only the sliver of Gemini's response this code reads. */
 type GeminiResponse = {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
+  error?: { message?: string };
 };
 
 export type Ask = {
@@ -37,8 +45,9 @@ export type Ask = {
 
 /**
  * Ask Gemini for a JSON reply. Throws QuotaError on an upstream 429, and a plain Error if
- * the reply cannot be parsed; a missing candidate parses as `{}`, which callers read as "the
- * model answered with nothing usable".
+ * Gemini still answers with an error status once the retries are spent, or if the reply
+ * cannot be parsed. A 200 with no candidate parses as `{}`, which callers read as "the model
+ * answered with nothing usable".
  */
 export async function askGemini({ prompt, config, stats, started, tag }: Ask): Promise<Record<string, unknown>> {
   // The handlers guard this, but the fetch header needs a string, not string | undefined.
@@ -46,10 +55,12 @@ export async function askGemini({ prompt, config, stats, started, tag }: Ask): P
   if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
 
   let data: GeminiResponse | undefined;
+  let status = 0;
+  let ok = false;
   let callStart = Date.now();
   // Attempts and backoff have to fit inside the client's request timeout alongside
   // generation and a possible correction retry.
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     // Attempts are capped by a DEADLINE, not just a count. Google has been observed holding
     // a request for 18-24s and then answering 503; retrying after that pushed the function
     // past 30s and spent quota on an answer the client abandoned at CLIENT_ABORT_MS. A
@@ -63,15 +74,29 @@ export async function askGemini({ prompt, config, stats, started, tag }: Ask): P
     await reserveGeminiCall(); // inside the loop: the quota cap counts calls, not requests
     callStart = Date.now();
     stats.calls++;
-    const r = await fetch(GEMINI_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: config }),
-    });
-    data = (await r.json()) as GeminiResponse;
+    // The same deadline on the call itself. Google has also been seen holding a first call
+    // past 30s with no answer at all, which the guard above never reaches: the function
+    // hung on a reply the page had abandoned at 12s. The signal covers reading the body too.
+    const deadline = AbortSignal.timeout(Math.max(0, CLIENT_ABORT_MS - (callStart - started)));
+    let r: Response;
+    try {
+      r = await fetch(GEMINI_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: config }),
+        signal: deadline,
+      });
+      status = r.status;
+      ok = r.ok;
+      data = (await r.json()) as GeminiResponse;
+    } catch (e) {
+      if (!deadline.aborted) throw e;
+      stats.geminiMs += Date.now() - callStart;
+      throw new Error(`gemini held the call ${Date.now() - callStart}ms, past the client's ${CLIENT_ABORT_MS}ms budget`);
+    }
 
     // 429 and 503 are NOT the same failure and must not share a retry path.
     //
@@ -85,14 +110,21 @@ export async function askGemini({ prompt, config, stats, started, tag }: Ask): P
       console.log(`[${tag}] gemini 429 (upstream quota) after ${Date.now() - callStart}ms; not retrying`);
       throw new QuotaError(retryAfter);
     }
-    if (r.status !== 503) {
-      stats.geminiMs += Date.now() - callStart;
-      break;
-    }
     stats.geminiMs += Date.now() - callStart;
-    console.log(`[${tag}] gemini 503 (attempt ${attempt + 1}) after ${Date.now() - callStart}ms, retrying…`);
-    await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+    if (r.status !== 503) break;
+    // No backoff after the last attempt: there is nothing left to wait for.
+    const more = attempt + 1 < ATTEMPTS;
+    console.log(
+      `[${tag}] gemini 503 (attempt ${attempt + 1}/${ATTEMPTS}) after ${Date.now() - callStart}ms${more ? ', retrying…' : ''}`,
+    );
+    if (more) await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
   }
+
+  // An error status carries an error body, not a candidate. Read as a reply, it parses as
+  // `{}` and the handler reports the model answering with nothing — which is how a 503
+  // storm reached the shop panel as "Model gave no usable speech". Throwing lets the
+  // handler say the model was unavailable instead.
+  if (!ok) throw new Error(`gemini ${status}${data?.error?.message ? `: ${data.error.message}` : ''}`);
 
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
   try {

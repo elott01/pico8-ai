@@ -84,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // game's own — neither cart sends the other's.
     const body: MoveSuccess = { move, ...spec.analysis(parsed) };
     // `move=null` here is the model answering with nothing usable — distinct from the
-    // catch branch below, and the panel currently cannot tell them apart.
+    // catch branch below, which answers 502 so the panel can tell them apart.
     done(move === null ? `${spec.id} no-move` : `${spec.id} ok`, ` move=${move}`);
     return res.status(200).json(body);
   } catch (e) {
@@ -94,10 +94,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       done(`${spec.id} quota`, ` retryAfter=${e.retryAfter}s`);
       return res.status(429).json(body);
     }
-    // 200 with no move, not a 5xx: the cart plays its own minimax and the game continues.
+    // 502, not a 200 with no move. The cart plays its own minimax either way, but the panel
+    // reads a 200 with no move as the model's move being rejected, and only an error status
+    // as the model being unavailable — which is what happened.
     done(`${spec.id} FAILED`, ` err=${JSON.stringify(errorMessage(e))}`);
-    const body: MoveSuccess = { move: null };
-    return res.status(200).json(body);
+    return res.status(502).json({ error: 'model unavailable' });
   }
 }
 

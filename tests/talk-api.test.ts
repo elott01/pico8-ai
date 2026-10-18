@@ -1,8 +1,9 @@
 // /api/talk end to end through the handler, with Gemini faked. What matters here is what
-// the cart ends up doing: every path must produce either a usable speech or the all-null
-// fallback that makes the cart sell at list with its own line. A 5xx would leave the page
-// with nothing to write back, and a half-filled reply would show a speech the model never
-// gave.
+// the cart ends up doing: every path must produce a usable speech, the all-null 200 of a
+// model that answered with nothing, or a 502 when Gemini itself failed. The page writes an
+// empty page for both of the last two, so the cart sells at list with its own line, but
+// only the 502 lets the panel say the model was unavailable. A half-filled reply would show
+// a speech the model never gave.
 
 process.env.GEMINI_API_KEY = 'test-key';
 process.env.GEMINI_MAX_CALLS_PER_MIN = '999';
@@ -152,11 +153,35 @@ describe('degraded replies', () => {
     assert.equal(body.pages, null);
   });
 
-  it('falls back to all-null when Gemini fails, never a 5xx', async () => {
-    fakeGemini(asResponse({ status: 500, ok: false, headers: new Headers(), json: async () => ({ error: 'boom' }) }));
+  it('answers 502 when Gemini fails, so the panel says unavailable, not "no usable speech"', async () => {
+    fakeGemini(asResponse({ status: 500, ok: false, headers: new Headers(), json: async () => ({ error: { message: 'boom' } }) }));
+    const out = await call();
+    assert.equal(sent.length, 1, 'only a 503 is retried');
+    assert.equal(out.code, 502);
+  });
+
+  it('answers 502 after a 503 storm, having used every attempt', async () => {
+    // The reported failure: three 503s in a row, the last error body read as an empty reply,
+    // and the panel blaming the model for a speech it was never able to give.
+    const overloaded = () =>
+      asResponse({
+        status: 503,
+        ok: false,
+        headers: new Headers(),
+        json: async () => ({ error: { message: 'The model is overloaded. Please try again later.' } }),
+      });
+    fakeGemini(overloaded(), overloaded(), overloaded(), overloaded());
+    const out = await call();
+    assert.equal(sent.length, 4);
+    assert.equal(out.code, 502);
+  });
+
+  it('keeps a speech that arrives on the fourth attempt', async () => {
+    const overloaded = () => asResponse({ status: 503, ok: false, headers: new Headers(), json: async () => ({}) });
+    fakeGemini(overloaded(), overloaded(), overloaded(), gemini({ notice: 'x', verdict: 'neutral', price: '20', speech: 'fourth time.' }));
     const out = await call();
     assert.equal(out.code, 200);
-    assert.deepEqual(out.body, FALLBACK);
+    assert.deepEqual(success(out.body).pages, ['fourth time.']);
   });
 
   it('reports an upstream 429 as a rate limit, with Retry-After', async () => {

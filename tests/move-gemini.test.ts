@@ -11,6 +11,7 @@ import { asResponse, mockReq, mockRes, successBody } from './_mocks.ts';
 import type { Captured } from './_mocks.ts';
 
 const { default: handler } = await import('../api/move.ts');
+const { askGemini, CLIENT_ABORT_MS } = await import('../api/_ask_gemini.ts');
 
 const HOST = 'pico8-ai.vercel.app';
 
@@ -98,8 +99,23 @@ describe('illegal-move retry', () => {
   });
 
   it('does not retry when the model returned no move at all', async () => {
-    // A 503 storm leaves no cell to correct, so "that cell was illegal" is nonsense and
-    // would only double the load on an API that is already failing.
+    // No cell named means nothing to correct, so "that cell was illegal" would be nonsense.
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return geminiReply({ move: null });
+    }) as typeof globalThis.fetch;
+
+    const res = await call(Array(9).fill(0));
+
+    assert.equal(calls, 1, 'no correction retry without a move to correct');
+    assert.equal(res.code, 200, 'the model answered; it just named nothing');
+    assert.equal(successBody(res.body).move, null, 'no usable move; the cart falls back');
+  });
+
+  it('answers 502 after a 503 storm, so the panel says unavailable rather than rejected', async () => {
+    // A 200 with no move reads on the page as the model's move being rejected. After a storm
+    // the model never answered, and the cart's minimax must not be labelled as if it had.
     let calls = 0;
     globalThis.fetch = (async () => {
       calls++;
@@ -108,16 +124,29 @@ describe('illegal-move retry', () => {
 
     const res = await call(Array(9).fill(0));
 
-    assert.equal(calls, 3, 'three transient retries, not six');
-    assert.equal(res.code, 200, 'still answers, so the game stays playable');
-    assert.ok(!Number.isInteger(successBody(res.body).move), 'no usable move; the cart falls back');
+    assert.equal(calls, 4, 'every transient attempt, and no correction retry on top');
+    assert.equal(res.code, 502, 'an error status: the page sends NO_MOVE and the cart plays on');
+  });
+
+  it('does not retry an error status other than 503, and answers 502', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return asResponse({ status: 500, ok: false, json: async () => ({ error: { message: 'boom' } }) });
+    }) as typeof globalThis.fetch;
+
+    const res = await call(Array(9).fill(0));
+
+    assert.equal(calls, 1);
+    assert.equal(res.code, 502);
   });
 });
 
 // The retry loop is bounded by a DEADLINE as well as an attempt count. Gemini has been
 // observed holding a request for 18-24s and then answering 503; a retry after that arrives
 // long after getAiTurn aborted at 12s, so it spends a second Gemini call and holds the
-// function open for an answer nobody can read.
+// function open for an answer nobody can read. Each call is cut off at the same deadline,
+// for the case where the first one never answers at all.
 //
 // Time is stubbed rather than waited out — the real thing takes 12 seconds to reproduce,
 // which is not a test anyone will keep running.
@@ -145,13 +174,28 @@ describe('client-deadline cutoff', () => {
     const { res, calls } = await withClock(9000, () => call(Array(9).fill(0)));
 
     assert.equal(calls(), 2, 'the third attempt is unreadable by the client and must be skipped');
-    assert.equal(res.code, 200, 'the turn still answers, so the cart falls back and play continues');
-    assert.equal(successBody(res.body).move, null);
+    assert.equal(res.code, 502, 'the turn still answers, so the cart falls back and play continues');
   });
 
   it('still uses every attempt when the failures are fast', async () => {
     // The guard must not shorten the normal 503 path — the case retries exist for.
     const { calls } = await withClock(100, () => call(Array(9).fill(0)));
-    assert.equal(calls(), 3);
+    assert.equal(calls(), 4);
+  });
+
+  it('abandons a call Google holds past the budget, instead of hanging the function', async () => {
+    // Observed: a first call held past 30s with no answer, so no attempt ever returned for
+    // the guard above to act on. Started 50ms short of the budget, so this takes 50ms.
+    let calls = 0;
+    globalThis.fetch = ((_url: RequestInfo | URL, opts?: RequestInit) => {
+      calls++;
+      return new Promise((_, reject) => opts?.signal?.addEventListener('abort', () => reject(opts.signal?.reason)));
+    }) as typeof globalThis.fetch;
+
+    await assert.rejects(
+      askGemini({ prompt: 'x', config: {}, stats: { calls: 0, geminiMs: 0 }, started: Date.now() - CLIENT_ABORT_MS + 50, tag: 'test' }),
+      /past the client's \d+ms budget/,
+    );
+    assert.equal(calls, 1, 'a held call is not retried: the budget is already spent');
   });
 });
