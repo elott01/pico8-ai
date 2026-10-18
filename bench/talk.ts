@@ -32,6 +32,7 @@ import {
   saysZombie,
   usesStockPhrase,
   opensWithNumber,
+  strayNumbers,
   usesEndearment,
   repeatedPhrases,
   SHORT,
@@ -114,6 +115,9 @@ type Sample = {
   stock: boolean;
   opensWithNumber: boolean;
   endearment: boolean;
+  /** Numbers the fixture's stats don't support, in the speech and in the notice. */
+  strayNumbers: number[];
+  strayInNotice: number[];
 };
 
 const key = apiKey();
@@ -167,6 +171,8 @@ for (const v of VARIANTS) {
         stock: usesStockPhrase(speech),
         opensWithNumber: opensWithNumber(speech),
         endearment: usesEndearment(speech),
+        strayNumbers: strayNumbers(speech, f, parsed.price),
+        strayInNotice: typeof call.reply?.notice === 'string' ? strayNumbers(call.reply.notice, f, parsed.price) : [],
       };
       samples.push(sample);
 
@@ -224,6 +230,8 @@ const rows = VARIANTS.map((v) => {
     stock: rate(s, (x) => (x.chars ? x.stock : null)),
     opensWithNumber: rate(s, (x) => (x.chars ? x.opensWithNumber : null)),
     endearmentWhenImpressed: rate(s.filter((x) => x.verdict === 'impressed'), (x) => x.endearment),
+    strayNumbers: rate(s, (x) => (x.chars ? x.strayNumbers.length > 0 : null)),
+    strayInNotice: rate(s, (x) => (x.notice ? x.strayInNotice.length > 0 : null)),
     verdicts: Object.fromEntries(['impressed', 'neutral', 'unimpressed'].map((k) => [k, s.filter((x) => x.verdict === k).length])),
     repeatedPhrases: repeatedPhrases(s.map((x) => x.pages.join(' ')).filter(Boolean)),
   };
@@ -284,13 +292,14 @@ for (const r of rows) {
 console.log('='.repeat(118));
 
 console.log('\nvoice: short = under ' + SHORT + ' chars; litDeath = said literally, not through software; endear = "champion"/"my boy"');
-console.log('variant       short  claude graphic litDeath zombie  stock  opensNum  endear  verdicts (imp/neu/unimp)');
+console.log('variant       short  claude graphic litDeath zombie  stock  opensNum  endear  stray(speech/notice)  verdicts (imp/neu/unimp)');
 for (const r of rows) {
   console.log(
     `${r.variant.padEnd(12)} ${fmt(r.short).padStart(6)} ${fmt(r.claude).padStart(7)} ${String(r.graphic).padStart(7)} ` +
       `${String(r.literalDeath).padStart(8)}` +
       `${String(r.zombie).padStart(6)} ${fmt(r.stock).padStart(6)}` +
       `${fmt(r.opensWithNumber).padStart(9)} ${fmt(r.endearmentWhenImpressed).padStart(7)}  ` +
+      `${`${fmt(r.strayNumbers)}/${fmt(r.strayInNotice)}`.padStart(19)}  ` +
       `${r.verdicts.impressed}/${r.verdicts.neutral}/${r.verdicts.unimpressed}`,
   );
 }
@@ -339,7 +348,7 @@ for (const v of VARIANTS) {
     const { min, max } = priceBand(f.request.purchase.listPrice);
     md.push('', `### ${f.name}`, '', `${f.why} Buying ${f.request.purchase.item} ${f.request.purchase.tier}; price band ${min}-${max}.`, '');
     for (const s of ok.filter((x) => x.variant === v.name && x.fixture === f.name)) {
-      const flags = [s.cut && 'cut', s.mentionsPrice && 'says price', (s.memorySimilarity ?? 0) >= NEAR_DUPLICATE && 'repeats memory', s.graphic && 'graphic?', s.literalDeath && 'literal death', s.zombie && 'zombie']
+      const flags = [s.cut && 'cut', s.mentionsPrice && 'says price', (s.memorySimilarity ?? 0) >= NEAR_DUPLICATE && 'repeats memory', s.graphic && 'graphic?', s.literalDeath && 'literal death', s.zombie && 'zombie', s.strayNumbers.length > 0 && `stray ${s.strayNumbers.join(', ')}`]
         .filter(Boolean)
         .join(', ');
       md.push(

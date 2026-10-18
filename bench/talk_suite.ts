@@ -9,7 +9,8 @@
 
 import type { ShopItem, TalkRequest, TalkStats, Verdict } from '../api/_types.ts';
 import { TALK_CONFIG } from '../api/_gemini.ts';
-import { buildTalkPrompt, talkConfig, TIER_COST, SHOP_ITEMS } from '../api/_talk_prompt.ts';
+import { buildTalkPrompt, talkConfig, TIER_COST, STASH_CAPS, SHOP_ITEMS } from '../api/_talk_prompt.ts';
+import type { TalkPromptOptions } from '../api/_talk_prompt.ts';
 
 // ---- fixtures ------------------------------------------------------------------------------
 
@@ -147,6 +148,8 @@ export type TalkVariant = {
   describe: string;
   /** The decoding base: TALK_CONFIG for the control, an override for a decoding A/B. */
   base: Record<string, unknown>;
+  /** buildTalkPrompt's options, for a prompt A/B. Absent on the control. */
+  prompt?: TalkPromptOptions;
 };
 
 // `current` is the shipping prompt, exactly what /api/talk sends, and the control for the
@@ -156,9 +159,21 @@ export type TalkVariant = {
 // a `base` that spreads TALK_CONFIG and overrides a field.
 export const TALK_VARIANTS: TalkVariant[] = [
   { name: 'current', describe: 'the shipping prompt — the control', base: TALK_CONFIG },
+  {
+    name: 'digits',
+    describe: 'the shipping prompt + numbers in the speech as digits, never words',
+    base: TALK_CONFIG,
+    prompt: { digits: true },
+  },
+  {
+    name: 'agent-digits',
+    describe: "the shipping prompt + only the agent's own number as digits",
+    base: TALK_CONFIG,
+    prompt: { agentDigits: true },
+  },
 ];
 
-export const variantPrompt = (_v: TalkVariant, f: TalkFixture) => buildTalkPrompt(f.request);
+export const variantPrompt = (v: TalkVariant, f: TalkFixture) => buildTalkPrompt(f.request, v.prompt);
 export const variantConfig = (v: TalkVariant, f: TalkFixture) => talkConfig(f.request, v.base);
 
 /** The key order the reply must come back in, restated rather than read from the config
@@ -200,7 +215,8 @@ const STAT_WORDS = /\b(prun\w*|dead weights?|rollbacks?|rolled back|roll back|up
 export function isSpecific(speech: string, f: TalkFixture): boolean {
   const s = speech.toLowerCase();
   if (s.includes(f.request.purchase.item)) return true;
-  if (STAT_WORDS.test(s) || NUMBER_WORDS.test(s)) return true;
+  // Any number counts, in words or digits alike, so a digits variant is scored the same way.
+  if (STAT_WORDS.test(s) || NUMBER_WORDS.test(s) || /\b\d+\b/.test(s)) return true;
   const { stats: st, memory } = f.request;
   const numbers = [st.pruned, st.rollbacks, st.maxDepth, st.lastDepth, st.purse, st.stashed, memory.agentNumber, Math.floor(st.uptimeSec / 60), Math.floor(st.uptimeSec / 3600)];
   return numbers.some((n) => n > 1 && new RegExp(`\\b${n}\\b`).test(s));
@@ -209,6 +225,116 @@ export function isSpecific(speech: string, f: TalkFixture): boolean {
 /** The prompt says never to state the price, because the shop shows it. */
 export function mentionsPrice(speech: string, price: number | null): boolean {
   return price !== null && new RegExp(`\\b${price}\\b`).test(speech);
+}
+
+// ---- numbers, added for the 3.5 Flash-Lite switch (2026-10-17) ------------------------------
+//
+// The first 3.5 run fused and invented numbers when it spelled them out: "forty-one sixteen"
+// for agent 4016 with 41 new prunes, "forty-four thousand parameters" for agent 4014. 3.1
+// never did. isSpecific only asks whether a speech names a number; these ask whether the
+// number is one the stats support.
+
+const UNITS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+// No 'second': in a speech it is nearly always time ("thirty seconds"), and 2 is never flagged.
+const UNIT_ORDINALS = ['zeroth', 'first', '', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh', 'twelfth', 'thirteenth', 'fourteenth', 'fifteenth', 'sixteenth', 'seventeenth', 'eighteenth', 'nineteenth'];
+const TENS_ORDINALS = ['', '', 'twentieth', 'thirtieth', 'fortieth', 'fiftieth', 'sixtieth', 'seventieth', 'eightieth', 'ninetieth'];
+
+/** A plural counts ("forty-one sixteens"), except "hundreds" and "thousands": those are
+ *  vague, not a number the speech claims. */
+function wordValue(word: string): { n: number; kind: 'unit' | 'tens' } | null {
+  for (const w of word.endsWith('s') ? [word, word.slice(0, -1)] : [word]) {
+    for (const list of [UNITS, UNIT_ORDINALS]) if (w && list.includes(w)) return { n: list.indexOf(w), kind: 'unit' };
+    for (const list of [TENS, TENS_ORDINALS]) if (w && list.includes(w)) return { n: list.indexOf(w) * 10, kind: 'tens' };
+  }
+  return null;
+}
+
+/**
+ * Every number in a line, in digits or words. Words are read the usual way ("four thousand
+ * and twelve" is 4012), and two adjacent pairs of 10-99 the way a year is said ("forty
+ * sixteen" is 4016). That second rule is what exposes a fusion: "forty-one sixteen" reads
+ * as 4116, not as two numbers that each happen to be right.
+ */
+export function numbersIn(text: string): number[] {
+  const out: number[] = [];
+  let groups: number[] = []; // one spoken run, before year-style pairing
+  let total = 0;
+  let cur = 0;
+  let inNum = false;
+  let last: 'unit' | 'tens' | 'scale' | 'and' | null = null;
+
+  const endGroup = () => {
+    if (inNum) groups.push(total + cur);
+    total = cur = 0;
+    inNum = false;
+    last = null;
+  };
+  const endRun = () => {
+    endGroup();
+    for (let i = 0; i < groups.length; i++) {
+      const [a, b] = [groups[i], groups[i + 1]];
+      if (b !== undefined && a >= 10 && a <= 99 && b >= 10 && b <= 99) out.push(a * 100 + b), i++;
+      else out.push(a);
+    }
+    groups = [];
+  };
+
+  for (const w of text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)) {
+    const digits = w.match(/^(\d+)(st|nd|rd|th)?$/);
+    const v = wordValue(w);
+    if (digits) {
+      endRun();
+      out.push(Number(digits[1]));
+    } else if (v) {
+      // A unit may follow a tens word ("forty-one") or a scale; anything else starts a new group.
+      const joins = v.kind === 'unit' ? last === 'tens' && v.n > 0 && v.n < 10 : false;
+      if (!joins && last !== null && last !== 'scale' && last !== 'and') endGroup();
+      cur += v.n;
+      inNum = true;
+      last = v.kind;
+    } else if (w === 'hundred' || w === 'hundredth') {
+      cur = (inNum ? cur || 1 : 1) * 100;
+      inNum = true;
+      last = 'scale';
+    } else if (w === 'thousand' || w === 'thousandth') {
+      total += (inNum ? cur || 1 : 1) * 1000;
+      cur = 0;
+      inNum = true;
+      last = 'scale';
+    } else if (w === 'and' && last === 'scale') {
+      last = 'and';
+    } else {
+      endRun();
+    }
+  }
+  endRun();
+  return out;
+}
+
+/**
+ * Numbers in `text` that nothing in the fixture supports. Supported: every stat, now and at
+ * the last purchase, and the change between them; uptime in minutes or hours; tiers, list
+ * prices, stash capacities and bars (a base of 3); the price charged and the discount; any
+ * agent number up to this one (the old agents "are the numbers below"); and the prompt's
+ * own "ten thousand agents". 0-3 are never flagged: "one hit" and "the first one" are not
+ * stats.
+ */
+export function strayNumbers(text: string, f: TalkFixture, price: number | null): number[] {
+  const { stats: s, memory: m, purchase: p } = f.request;
+  const ok = new Set<number>([10_000, p.tier, p.listPrice, ...TIER_COST, ...STASH_CAPS]);
+  const add = (...ns: number[]) => ns.forEach((n) => ok.add(n));
+  const statsOf = (st: TalkStats) => [
+    st.pruned, st.rollbacks, st.maxDepth, st.lastDepth, st.purse, st.stashed, st.purse + st.stashed,
+    Math.floor(st.uptimeSec / 60), Math.round(st.uptimeSec / 60), Math.floor(st.uptimeSec / 3600),
+    ...Object.values(st.tiers), 3 + st.tiers.vitality, 3 + st.tiers.stamina,
+  ];
+  add(...statsOf(s), 3 + p.tier);
+  const l = m.lastStats;
+  if (l) add(...statsOf(l), s.pruned - l.pruned, s.rollbacks - l.rollbacks, s.maxDepth - l.maxDepth, Math.floor((s.uptimeSec - l.uptimeSec) / 60));
+  if (price !== null) add(price, p.listPrice - price);
+  const oldAgent = (n: number) => n <= m.agentNumber && n > m.agentNumber - 1000;
+  return numbersIn(text).filter((n) => n > 3 && !ok.has(n) && !oldAgent(n));
 }
 
 // ---- voice measures, added after the first run (2026-10-17) --------------------------------

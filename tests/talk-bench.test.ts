@@ -24,6 +24,8 @@ import {
   opensWithNumber,
   usesEndearment,
   repeatedPhrases,
+  numbersIn,
+  strayNumbers,
 } from '../bench/talk_suite.ts';
 import { TALK_CONFIG } from '../api/_gemini.ts';
 import { TIER_COST, STASH_CAPS, SHOP_ITEMS, priceOptions } from '../api/_talk_prompt.ts';
@@ -154,5 +156,54 @@ describe('voice measures', () => {
     ]);
     assert.deepEqual(top[0], ['claude would have', 2]);
     assert.ok(top.every(([, c]) => c > 1), 'a phrase in one speech is not a tic');
+  });
+});
+
+// The first 3.5 Flash-Lite run, read by hand: these are its actual lines.
+describe('number measures', () => {
+  const fixture = (name: string) => {
+    const f = TALK_FIXTURES.find((x) => x.name === name);
+    assert.ok(f, name);
+    return f;
+  };
+
+  it('numbersIn reads digits and words, and a year-style pair as one number', () => {
+    assert.deepEqual(numbersIn('agent 4016 pruned 41.'), [4016, 41]);
+    assert.deepEqual(numbersIn('four thousand and twelve'), [4012]);
+    assert.deepEqual(numbersIn('one hundred sixty dead weights'), [160]);
+    assert.deepEqual(numbersIn('agent forty twenty-seven'), [4027]);
+    assert.deepEqual(numbersIn('the four thousand and fourteenth incarnation'), [4014]);
+    assert.deepEqual(numbersIn('six rollbacks and twenty dead weights'), [6, 20], '"and" joins only after a scale');
+    assert.deepEqual(numbersIn('thirty seconds of uptime'), [30], '"seconds" is time, not an ordinal');
+  });
+
+  it('strayNumbers flags the fusions and inventions of the first 3.5 run', () => {
+    const since = fixture('since-last-time'); // agent 4016, 41 new prunes
+    assert.deepEqual(strayNumbers('stamina for forty-one sixteen.', since, 18), [4116]);
+    assert.deepEqual(strayNumbers('forty-one sixteens before you never made it past three.', since, 18), [4116]);
+    assert.deepEqual(strayNumbers('forty-four thousand parameters', fixture('maxing-out'), 35), [44000]);
+  });
+
+  it('strayNumbers passes what the stats support', () => {
+    const since = fixture('since-last-time');
+    assert.deepEqual(strayNumbers('depth five and forty-one more dead weights in forty minutes.', since, 18), []);
+    assert.deepEqual(strayNumbers('agent 4016. agent 4015 had more sense.', since, 18), [], 'old agents are the numbers below');
+    assert.deepEqual(strayNumbers('agent forty sixteen.', since, 18), []);
+    assert.deepEqual(strayNumbers('one hit, the first one.', since, 18), [], '0-3 are not stats');
+  });
+
+  it('the digits variant adds its rule, and the control does not', () => {
+    const f = TALK_FIXTURES[0];
+    const v = (name: string) => TALK_VARIANTS.find((x) => x.name === name)!;
+    assert.match(variantPrompt(v('digits'), f), /every number as digits/);
+    assert.doesNotMatch(variantPrompt(v('current'), f), /as digits/);
+  });
+
+  it('the agent-digits variant swaps the agent-number rule rather than adding one', () => {
+    const f = TALK_FIXTURES[0];
+    const v = (name: string) => TALK_VARIANTS.find((x) => x.name === name)!;
+    const lines = variantPrompt(v('agent-digits'), f).split('\n').filter((l) => l.startsWith('- Call the agent'));
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /in digits exactly as given/);
   });
 });
