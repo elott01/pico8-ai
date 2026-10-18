@@ -19,6 +19,17 @@ import type { TalkRequest, TalkSuccess, TalkRateLimited } from './_types.ts';
 /** Every field null: the cart charges list price and says its own line. */
 const FALLBACK: TalkSuccess = { verdict: null, price: null, pages: null, notice: null };
 
+/**
+ * When a second, identical call goes out if the first has not answered. Gemini's latency has
+ * a long, flat tail unrelated to the prompt: across 315 bench calls, 1 in 8 took longer than
+ * the page's 12s, spread evenly over every fixture and no longer in output. Taking whichever
+ * of two calls answers first cut that to about 2% when simulated on those latencies, for one
+ * extra call on about 1 in 5 purchases.
+ *
+ * Talk only, for now: /api/move has the same tail and gets this if it holds up in practice.
+ */
+export const HEDGE_MS = 5_000;
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // One greppable line per request, as in move.ts: without it a 9.8s request and a 1.4s
   // one look identical from outside, and the page's abort happens where we cannot see it.
@@ -55,7 +66,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const list = request.purchase.listPrice;
   try {
-    let reply = await ask(request, stats, started);
+    const { reply: first, hedged, winner } = await askHedged(request, stats, started);
+    let reply = first;
 
     // The price enum makes an out-of-band price unrepresentable, so this should never fire.
     // If it does, retry once with the band spelled out — the same pattern move.ts uses for
@@ -78,7 +90,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     done(
       body.pages ? 'ok' : 'no-speech',
-      ` ${request.purchase.item}${request.purchase.tier} verdict=${body.verdict} price=${body.price}/${list} pages=${pages.length}${cut ? ' cut' : ''}`,
+      ` ${request.purchase.item}${request.purchase.tier} verdict=${body.verdict} price=${body.price}/${list} pages=${pages.length}${cut ? ' cut' : ''}` +
+        (hedged ? ` hedge=${winner === 'hedge' ? 'won' : 'lost'}` : ''),
     );
     return res.status(200).json(body);
   } catch (e) {
@@ -94,13 +107,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-async function ask(request: TalkRequest, stats: CallStats, started: number, correction?: string): Promise<ParsedTalk> {
+type Hedged = { reply: ParsedTalk; hedged: boolean; winner: 'first' | 'hedge' };
+
+/**
+ * The first call, plus a second identical one at HEDGE_MS if the first is still out. The
+ * first success wins and the other call is cancelled. One call failing while the other is
+ * still out does not fail the request.
+ *
+ * - Only a slow call is hedged, not a failing one. A first call already retrying 503s means
+ *   Google is overloaded, and a second would only add to the load.
+ * - If both fail, a quota error is reported over anything else, so the page pauses exactly
+ *   as it would have without the hedge.
+ * - `stats` is shared, so the log's calls and gemini time count both calls; with two in
+ *   flight, gemini time can exceed the request's total.
+ */
+function askHedged(request: TalkRequest, stats: CallStats, started: number): Promise<Hedged> {
+  return new Promise((resolve, reject) => {
+    const calls: AbortController[] = [];
+    const errors: unknown[] = [];
+    let settled = false;
+
+    const launch = (which: Hedged['winner']) => {
+      const ctrl = new AbortController();
+      calls.push(ctrl);
+      ask(request, stats, started, undefined, ctrl.signal).then(
+        (reply) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          for (const c of calls) if (c !== ctrl) c.abort();
+          resolve({ reply, hedged: calls.length > 1, winner: which });
+        },
+        (e: unknown) => {
+          if (settled) return;
+          errors.push(e);
+          if (errors.length < calls.length) return; // the other call may still answer
+          settled = true;
+          clearTimeout(timer);
+          reject(errors.find((x) => x instanceof QuotaError) ?? errors[0]);
+        },
+      );
+    };
+
+    const timer = setTimeout(() => {
+      if (settled || stats.calls > 1) return;
+      console.log(`[talk] no reply after ${HEDGE_MS}ms; sending a second call`);
+      launch('hedge');
+    }, HEDGE_MS);
+    launch('first');
+  });
+}
+
+async function ask(
+  request: TalkRequest,
+  stats: CallStats,
+  started: number,
+  correction?: string,
+  signal?: AbortSignal,
+): Promise<ParsedTalk> {
   const reply = await askGemini({
     prompt: buildTalkPrompt(request, { correction }),
     config: talkConfig(request),
     stats,
     started,
     tag: 'talk',
+    signal,
   });
   return parseTalkReply(reply, request.purchase.listPrice);
 }

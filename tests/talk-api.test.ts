@@ -8,13 +8,13 @@
 process.env.GEMINI_API_KEY = 'test-key';
 process.env.GEMINI_MAX_CALLS_PER_MIN = '999';
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { asResponse, mockReq, mockRes } from './_mocks.ts';
 import type { TalkRequest, TalkSuccess, TalkRateLimited } from '../api/_types.ts';
 
-const { default: handler } = await import('../api/talk.ts');
+const { default: handler, HEDGE_MS } = await import('../api/talk.ts');
 
 const HOST = 'pico8-ai.vercel.app';
 
@@ -198,6 +198,121 @@ describe('degraded replies', () => {
     const out = await call();
     assert.equal(out.code, 200);
     assert.deepEqual(out.body, FALLBACK);
+  });
+});
+
+// The hedge: a second call at HEDGE_MS when the first is slow. setTimeout is mocked, so
+// the clock moves only when a test ticks it, and each Gemini call stays open until the test
+// answers it. A call rejects when aborted, as a real fetch does, so a test can see that the
+// slower call was cancelled.
+describe('a second call when the first is slow', () => {
+  type Held = { answer: (r: Response) => void; aborted: () => boolean };
+
+  function heldGemini(): Held[] {
+    const held: Held[] = [];
+    globalThis.fetch = ((_url: RequestInfo | URL, opts?: RequestInit) =>
+      new Promise<Response>((resolve, reject) => {
+        const signal = opts?.signal;
+        signal?.addEventListener('abort', () => reject(signal.reason));
+        held.push({ answer: resolve, aborted: () => signal?.aborted ?? false });
+      })) as typeof globalThis.fetch;
+    return held;
+  }
+
+  /** Lets the handler run up to its next timer or unanswered call. */
+  const settle = () => new Promise((r) => setImmediate(r));
+  const status = (code: number) => asResponse({ status: code, ok: false, headers: new Headers(), json: async () => ({}) });
+  const said = (speech: string) => gemini({ notice: 'x', verdict: 'neutral', price: '20', speech });
+
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout'] }));
+  afterEach(() => mock.timers.reset());
+
+  it('sends nothing more while the first call is inside HEDGE_MS', async () => {
+    const held = heldGemini();
+    const out = call();
+    await settle();
+    mock.timers.tick(HEDGE_MS - 1);
+    await settle();
+    assert.equal(held.length, 1);
+
+    held[0].answer(said('in time.'));
+    assert.deepEqual(success((await out).body).pages, ['in time.']);
+  });
+
+  it('takes the second call when it answers first, and cancels the first', async () => {
+    const held = heldGemini();
+    const out = call();
+    await settle();
+    mock.timers.tick(HEDGE_MS);
+    await settle();
+    assert.equal(held.length, 2, 'a second call at HEDGE_MS');
+
+    held[1].answer(said('the second one.'));
+    const res = await out;
+    assert.equal(res.code, 200);
+    assert.deepEqual(success(res.body).pages, ['the second one.']);
+    assert.ok(held[0].aborted(), 'the slower call is cancelled, not left running');
+  });
+
+  it('takes the first call when it answers first after all, and cancels the second', async () => {
+    const held = heldGemini();
+    const out = call();
+    await settle();
+    mock.timers.tick(HEDGE_MS);
+    await settle();
+
+    held[0].answer(said('the first one.'));
+    assert.deepEqual(success((await out).body).pages, ['the first one.']);
+    assert.ok(held[1].aborted());
+  });
+
+  it('does not add a second call to a first that is already retrying 503s', async () => {
+    // A retry means Google is overloaded: a second call would only add to the load.
+    const held = heldGemini();
+    const out = call();
+    await settle();
+    held[0].answer(status(503));
+    await settle();
+    mock.timers.tick(400); // the first call's backoff
+    await settle();
+    assert.equal(held.length, 2, "the first call's own retry");
+
+    mock.timers.tick(HEDGE_MS);
+    await settle();
+    assert.equal(held.length, 2, 'no second call on top of a retry');
+
+    held[1].answer(said('second attempt.'));
+    assert.deepEqual(success((await out).body).pages, ['second attempt.']);
+  });
+
+  it('does not fail the request when one call fails and the other can still answer', async () => {
+    const held = heldGemini();
+    const out = call();
+    await settle();
+    mock.timers.tick(HEDGE_MS);
+    await settle();
+
+    held[1].answer(status(500));
+    await settle();
+    held[0].answer(said('still here.'));
+    const res = await out;
+    assert.equal(res.code, 200);
+    assert.deepEqual(success(res.body).pages, ['still here.']);
+  });
+
+  it('reports a quota error over a plain failure when both calls fail, so the page pauses', async () => {
+    const held = heldGemini();
+    const out = call();
+    await settle();
+    mock.timers.tick(HEDGE_MS);
+    await settle();
+
+    held[0].answer(status(500));
+    await settle();
+    held[1].answer(status(429));
+    const res = await out;
+    assert.equal(res.code, 429);
+    assert.equal((res.body as TalkRateLimited).rateLimited, true);
   });
 });
 

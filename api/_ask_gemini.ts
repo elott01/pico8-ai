@@ -41,6 +41,9 @@ export type Ask = {
   started: number;
   /** Log prefix, so each endpoint's lines stay greppable as its own. */
   tag: string;
+  /** Cancels the call, between attempts or mid-fetch. talk.ts uses it to drop the slower of
+   *  two racing calls. */
+  signal?: AbortSignal;
 };
 
 /**
@@ -49,7 +52,7 @@ export type Ask = {
  * cannot be parsed. A 200 with no candidate parses as `{}`, which callers read as "the model
  * answered with nothing usable".
  */
-export async function askGemini({ prompt, config, stats, started, tag }: Ask): Promise<Record<string, unknown>> {
+export async function askGemini({ prompt, config, stats, started, tag, signal }: Ask): Promise<Record<string, unknown>> {
   // The handlers guard this, but the fetch header needs a string, not string | undefined.
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
@@ -71,6 +74,7 @@ export async function askGemini({ prompt, config, stats, started, tag }: Ask): P
       );
       break;
     }
+    signal?.throwIfAborted(); // before reserving: a cancelled call must not spend quota
     await reserveGeminiCall(); // inside the loop: the quota cap counts calls, not requests
     callStart = Date.now();
     stats.calls++;
@@ -87,7 +91,7 @@ export async function askGemini({ prompt, config, stats, started, tag }: Ask): P
           'x-goog-api-key': apiKey,
         },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: config }),
-        signal: deadline,
+        signal: signal ? AbortSignal.any([deadline, signal]) : deadline,
       });
       status = r.status;
       ok = r.ok;
