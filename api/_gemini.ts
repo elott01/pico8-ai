@@ -8,7 +8,7 @@
 // nothing in the output would look wrong — the same silent-drift failure as the wire
 // contract in _types.ts.
 
-export const MODEL = 'gemini-3.1-flash-lite';
+export const MODEL = 'gemini-3.5-flash-lite';
 
 export const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 

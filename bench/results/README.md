@@ -15,6 +15,17 @@ Runs of the same suite with different `--variants` are different measurements. P
 `--label <name>` to give one its own file; without it the suite's default file is replaced,
 and the runner prints a NOTE when it is about to do that.
 
+## `*-flash-lite-3.5` files are the model switch
+
+Every file without that suffix was measured on `gemini-3.1-flash-lite`. The
+`-flash-lite-3.5` runs repeat only the shipping variant of each suite on
+`gemini-3.5-flash-lite`, with the same run counts, to check the switch: compare
+`ab-tic_tac_toe-flash-lite-3.5.json` with the `schema-full` row of `ab-tic_tac_toe-enum.json`,
+`ab-connect_four-flash-lite-3.5.json` with its `facts+threats` row, and
+`talk-flash-lite-3.5.json` with `talk-ab-v4.json`. Accuracy held in both games. Latency fell
+sharply, the talk p95 from 13.0s to 1.2s. The speeches garbled or invented a number in
+about 7 of 45 (`forty-one sixteen` for agent 4016 with 41 new prunes), which 3.1 did not.
+
 ## The `talk` runs measured prompts that are no longer in the code
 
 `current` always means the shipping prompt. The four runs here are how it was chosen, and

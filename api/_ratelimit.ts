@@ -30,8 +30,9 @@ const IP_MAX = 40;
 // Raising this does NOT increase total spend: CALLS_PER_DAY is the budget guard and is
 // unchanged. This one only shapes bursts.
 //
-// MUST stay below Google's own RPM for the key, which for the free tier on
-// gemini-3.1-flash-lite is **15** (AI Studio → Rate Limit). Going above it does not fail
+// MUST stay below Google's own RPM for the key and the model `_gemini.ts` names (AI Studio
+// → Rate Limit). For the free tier on gemini-3.1-flash-lite, where everything below was
+// measured, that was **15**; recheck it whenever the model changes. Going above it does not fail
 // loudly: Google queues the excess rather than rejecting it, so requests still succeed with
 // ~100% success rate while latency collapses. Measured directly — paced at 10/min the p50
 // was 1.5s; bursting to 15-20/min during live play the p50 was 8s with a 21s outlier, and
