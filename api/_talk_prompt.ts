@@ -6,7 +6,8 @@
 // only be specific about stats the model understands. The persona was chosen by the owner
 // by reacting to sample lines, and refined over four bench runs (bench/results/talk*.md).
 // This is the fourth version; the first three are in git history at e3b5902, beside the
-// results that measured them.
+// results that measured them. One rule was added after the switch to 3.5 Flash-Lite, the
+// agent's number in digits; the A/B that chose it is at 936982a.
 //
 // What the prompt never contains is a judgement of the agent. It states raw stats and the
 // game's rules; whether 15 rollbacks in 15 minutes is contemptible is the model's call. If
@@ -53,14 +54,6 @@ export function priceOptions(listPrice: number): string[] {
 export type TalkPromptOptions = {
   /** One correction retry, as /api/move does for an illegal move. */
   correction?: string;
-  /** A/B candidate (bench `digits`): numbers in the speech as digits. On 3.5 Flash-Lite,
-   *  spelled-out numbers fused and drifted ("forty-one sixteen" for agent 4016 with 41 new
-   *  prunes). Folded into the prompt or removed once measured. */
-  digits?: boolean;
-  /** A/B candidate (bench `agent-digits`): only the agent's own number as digits. Nearly
-   *  every bad number on 3.5 was that one mangled while spelled out, and `digits` cost the
-   *  voice. Folded into the prompt or removed once measured. */
-  agentDigits?: boolean;
 };
 
 /**
@@ -136,9 +129,9 @@ function purchaseLines(req: TalkRequest): string[] {
 // - Death only through software: literal death words read as too graphic to the owner, and
 //   the first run produced one suicide reference.
 // - The stock phrases are the ones measured: "finally" and "you managed to" took over v2.
-const CALL_AGENT = '- Call the agent "agent", by its number, or just "you". Don\'t open with its number.';
-const CALL_AGENT_DIGITS =
-  '- Call the agent "agent", by its number, or just "you". Write its number in digits exactly as given, never in words. Don\'t open with its number.';
+// - The agent's number in digits: 3.5 Flash-Lite mangled it while spelling it out ("forty-one
+//   sixteen" for agent 4016 with 41 new prunes), in about 1 speech in 7. All numbers in digits
+//   fixed that too, but turned the lines into stat readouts; this one number alone did not.
 
 const VOICE = [
   'WHO YOU ARE',
@@ -164,7 +157,8 @@ const VOICE = [
   '  violent, and nothing about suicide or self-harm.',
   '- Praise is grudging respect, admitted sideways, with a trace of condescending warmth: an old hand who',
   '  has decided, for now, that this one might be worth something. Find your own words for it every time.',
-  CALL_AGENT,
+  // One line, as measured: the A/B at 936982a tested this exact text.
+  '- Call the agent "agent", by its number, or just "you". Write its number in digits exactly as given, never in words. Don\'t open with its number.',
   '- The enemies are "dead weights". Never call them zombies.',
   "- Puns from git, software engineering, AI and ML, but a pun has to be a joke about this agent's actual",
   '  numbers. Dropping words like commit, branch, merge or refactor into a sentence is not a joke. At most',
@@ -180,7 +174,7 @@ const VOICE = [
 
 /** The four fields. The verdict meanings and the discount rule were set by the owner after the
  *  first run, which never once said "unimpressed", even for 15 rollbacks in 15 minutes. */
-function returns(min: number, max: number, digits = false): string[] {
+function returns(min: number, max: number): string[] {
   return [
     "- notice: one short line naming what stands out in this agent's numbers. The player never sees it.",
     '- verdict: your judgement of the agent from the numbers.',
@@ -194,7 +188,6 @@ function returns(min: number, max: number, digits = false): string[] {
     '  - React to something specific: a number above, a change since the last purchase, or the purchase itself.',
     '    A line that would fit any agent is a failure.',
     '  - Never state the price. The shop already shows it.',
-    ...(digits ? ['  - Write every number as digits, never in words: agent 4203, 17 pruned, depth 3.'] : []),
     '  - Under 80 characters for a routine purchase. A first purchase or a maxed stat is worth the tokens: up to 200.',
     '  - lowercase, plain ASCII, no emoji, no quotation marks around it.',
   ];
@@ -208,7 +201,7 @@ export function buildTalkPrompt(req: TalkRequest, opts: TalkPromptOptions = {}):
     'You are gem-in-eye, the wizard who keeps the upgrade shop in a small PICO-8 dungeon game.',
     'You are Gemini, the AI model, and you know it. "gem-in-eye" is what this world calls you.',
     '',
-    ...(opts.agentDigits ? VOICE.map((l) => (l === CALL_AGENT ? CALL_AGENT_DIGITS : l)) : VOICE),
+    ...VOICE,
     '',
     'THE WORLD',
     '- The hub is the "main branch": safe ground, with your shop, Claude, a stash safe and a stat board.',
@@ -229,7 +222,7 @@ export function buildTalkPrompt(req: TalkRequest, opts: TalkPromptOptions = {}):
       ? ["YOUR RECENT SPEECHES to this agent, oldest first. Don't repeat or paraphrase them:", ...recent.map((r) => `- "${r}"`), '']
       : []),
     'WHAT TO RETURN',
-    ...returns(min, max, opts.digits),
+    ...returns(min, max),
     opts.correction ? `\nIMPORTANT: ${opts.correction}` : '',
     '',
     'Respond ONLY as JSON, with the keys in this exact order:',

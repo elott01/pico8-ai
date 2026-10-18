@@ -192,18 +192,10 @@ describe('number measures', () => {
     assert.deepEqual(strayNumbers('one hit, the first one.', since, 18), [], '0-3 are not stats');
   });
 
-  it('the digits variant adds its rule, and the control does not', () => {
-    const f = TALK_FIXTURES[0];
-    const v = (name: string) => TALK_VARIANTS.find((x) => x.name === name)!;
-    assert.match(variantPrompt(v('digits'), f), /every number as digits/);
-    assert.doesNotMatch(variantPrompt(v('current'), f), /as digits/);
-  });
-
-  it('the agent-digits variant swaps the agent-number rule rather than adding one', () => {
-    const f = TALK_FIXTURES[0];
-    const v = (name: string) => TALK_VARIANTS.find((x) => x.name === name)!;
-    const lines = variantPrompt(v('agent-digits'), f).split('\n').filter((l) => l.startsWith('- Call the agent'));
+  it("the shipping prompt keeps the agent-number rule the A/B chose, once", () => {
+    // Measured at 936982a: it halved stray numbers on 3.5 without costing the voice.
+    const lines = variantPrompt(TALK_VARIANTS[0], TALK_FIXTURES[0]).split('\n').filter((l) => l.startsWith('- Call the agent'));
     assert.equal(lines.length, 1);
-    assert.match(lines[0], /in digits exactly as given/);
+    assert.match(lines[0], /Write its number in digits exactly as given, never in words\./);
   });
 });

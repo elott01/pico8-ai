@@ -154,23 +154,12 @@ export type TalkVariant = {
 
 // `current` is the shipping prompt, exactly what /api/talk sends, and the control for the
 // next A/B. The four versions that led to it, and the options they tried, are in git history
-// at e3b5902, next to the results that measured them; bench/results/README.md has the
-// details. A prompt variant goes back in as an option on buildTalkPrompt, a decoding one as
-// a `base` that spreads TALK_CONFIG and overrides a field.
+// at e3b5902, next to the results that measured them; the `digits` and `agent-digits`
+// variants measured on 3.5 Flash-Lite are at 936982a. bench/results/README.md has the
+// details. A prompt variant goes back in as an option on buildTalkPrompt, passed through
+// `prompt`; a decoding one as a `base` that spreads TALK_CONFIG and overrides a field.
 export const TALK_VARIANTS: TalkVariant[] = [
   { name: 'current', describe: 'the shipping prompt — the control', base: TALK_CONFIG },
-  {
-    name: 'digits',
-    describe: 'the shipping prompt + numbers in the speech as digits, never words',
-    base: TALK_CONFIG,
-    prompt: { digits: true },
-  },
-  {
-    name: 'agent-digits',
-    describe: "the shipping prompt + only the agent's own number as digits",
-    base: TALK_CONFIG,
-    prompt: { agentDigits: true },
-  },
 ];
 
 export const variantPrompt = (v: TalkVariant, f: TalkFixture) => buildTalkPrompt(f.request, v.prompt);

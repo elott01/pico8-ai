@@ -26,6 +26,26 @@ Every file without that suffix was measured on `gemini-3.1-flash-lite`. The
 sharply, the talk p95 from 13.0s to 1.2s. The speeches garbled or invented a number in
 about 7 of 45 (`forty-one sixteen` for agent 4016 with 41 new prunes), which 3.1 did not.
 
+## `talk-digits` and `talk-agent-digits` chose the agent-number rule
+
+Two fixes for those numbers, measured with the `stray(speech/notice)` column, which flags
+any number in a line that the fixture's stats don't support. Both variants are at commit
+`936982a`; the winner is now part of `current`.
+
+| run | variant | stray speeches | stray notices | opens with a number |
+| --- | --- | --- | --- | --- |
+| `talk-flash-lite-3.5` | `current` (words) | 7/45 | 3/45 | 0 |
+| `talk-digits` | `current` (words) | 6/45 | 1/45 | 0 |
+| `talk-digits` | `digits`: every number as digits | 3/45 | 2/45 | 15 |
+| `talk-agent-digits` | `agent-digits`: only the agent's own number | 3/45 | 0/45 | 2 |
+
+`digits` halved the strays but cost the voice: a third of its speeches opened with the
+agent's number against an owner rule, and the lines read as stat readouts ("agent 4014,
+depth 8 with 140 pruned and only 2 rollbacks"). `agent-digits` matched it on strays and read
+like the control. Its one remaining fusion was the agent's number used as a count, spelled
+out: "forty-one hundred agents" for agent 4014. `talk-agent-digits` has no control of its
+own; compare it with both `current` rows above, which ran on the same model the same day.
+
 ## The `talk` runs measured prompts that are no longer in the code
 
 `current` always means the shipping prompt. The four runs here are how it was chosen, and

@@ -64,8 +64,8 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
   judges the agent, prices the sale and speaks. It is a sibling of `move.ts`, not a game in
   `_games.ts`, because a speech has no legal set or right answer.
   - **`api/_talk_prompt.ts`** holds the prompt: only the voice that ships. The versions the
-    bench compared to get there are in git history at `e3b5902`, beside their results in
-    `bench/results/`.
+    bench compared to get there are in git history at `e3b5902`, and the digit rules tried
+    on 3.5 Flash-Lite at `936982a`, beside their results in `bench/results/`.
   - **`api/_talk_text.ts`** cleans the speech and pages it to the cart's own `wrap_text`.
   - **`api/_talk_request.ts`** validates the request.
   - Both endpoints share the Gemini call, retry, quota and origin rules in
