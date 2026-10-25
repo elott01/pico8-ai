@@ -44,8 +44,10 @@ export default function CartCard({
     >
       <span className={styles.label}>
         {/* The board shape IS the label art — an empty 3x3 beside an empty 7x6 says which
-            game faster than the name does. Real PICO-8 cart labels are phase 2; they need
-            a Ctrl-7 capture and a decode step, and the HTML export drops them anyway. */}
+            game faster than the name does. Real PICO-8 cart labels are phase 2. Each cart
+            saves one in its .p8's __label__ section, and the export shows it dimmed as the
+            poster behind the play button, but nothing decodes it into an image the card
+            could use yet. */}
         {protocol ? (
           <MiniBoard board={emptyBoard(protocol)} protocol={protocol} size="9px" />
         ) : (
