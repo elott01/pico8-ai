@@ -26,13 +26,18 @@ What each export file carries:
 
 ## 1. Work out what is needed
 
-If no cart was named, list the carts with changes: `git status --short carts/`.
+Do this for the cart named, or for every `.p8` in `carts/` if none was. `git status` can't find
+them for you: it only sees uncommitted edits, so a cart edited and committed but never exported
+looks clean to it.
 
-Diff the cart against the commit that last exported it:
+Diff each cart against the commit that last exported it. That covers committed and uncommitted
+edits alike:
 
 ```sh
-git diff $(git log -1 --format=%h -- public/games/<cart>.js) -- carts/<cart>.p8
+git diff "$(git log -1 --format=%h -- public/games/<cart>.js)" -- carts/<cart>.p8
 ```
+
+If `git log` finds no commit, the cart has never been exported, so export it.
 
 Read the diff by section:
 
