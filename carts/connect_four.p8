@@ -199,7 +199,7 @@ st_idle, st_request, st_thinking, st_ready = 0, 1, 2, 3
 
 -- how long to wait (frames @30fps) on a web move before falling back locally:
 ai_ack_frames = 15   -- ~0.5s: no ack -> assume no page (e.g. desktop pico-8)
--- must exceed the page's request timeout (getAiTurn, ~10s) so the page always
+-- must exceed the page's request timeout (getAiTurn, ~12s) so the page always
 -- gets to answer and read back what was played; if it bails first it can't.
 -- only a dead page should reach this. the drop animation must not run inside
 -- this budget -- see _update.
