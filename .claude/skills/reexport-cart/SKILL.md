@@ -47,6 +47,11 @@ A line holding code and a trailing comment counts as code. A comment-only edit w
 change the `.js` bytes, but not what the cart does, so it isn't worth a 1.7 MB diff. Export one
 only if the user asks.
 
+The `__label__` row has one exception. If
+`node scripts/cart-label.ts check carts/<cart>.p8 public/games/<cart>.html` passes, the live
+poster already shows the new label, as after a `restore`, so the label is no reason to export.
+That only removes the label as a reason: if any other row applies, export anyway.
+
 If nothing needs exporting and no label was asked for, say so and stop.
 
 ## 2. A new label, only if one was asked for
