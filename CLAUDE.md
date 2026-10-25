@@ -18,6 +18,8 @@ node bench/ab.ts --variants current,perception   # A/B prompt variants
 node bench/talk.ts --dry                         # gem-in-eye's dialogue bench; drop --dry to spend quota
 npm run test:playwright                      # browser suite; boots Vite itself, no API key
 npx playwright test --project=webkit         # the engine that catches the real bugs
+node scripts/export-cart.ts gemini           # re-export a cart headless; runs the PICO-8 app
+node scripts/cart-label.ts png carts/gemini.p8 label.png   # look at a cart's saved label
 ```
 
 `playwright/` is a separate suite from `npm test` — three engines, ~10s, needs
@@ -110,8 +112,8 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   read-back finds nothing, so the panel loses the played cell. `CLIENT_ABORT_MS` in
   `api/_ask_gemini.ts` (shared by both endpoints) is a third copy of the same number — it only drives the `TOO-LATE` log
   marker, but if it disagrees the logs misreport which turns the player actually saw.
-  Raising the client side past ~13s means raising `ai_max_frames` too, which costs a manual
-  cart re-export.
+  Raising the client side past ~13s means raising `ai_max_frames` too, which costs a cart
+  re-export (`/reexport-cart`).
 - **The quota cap counts Gemini calls, not requests.** `reserveGeminiCall()` sits *inside* the
   retry loop in `askGemini` (`api/_ask_gemini.ts`) — one request can issue several calls.
 - **`EXPIRE … NX`, never a plain EXPIRE** in `_ratelimit.ts`; refreshing the TTL each increment
@@ -147,17 +149,16 @@ Breaking any of these fails silently, so verify them when touching the relevant 
 
 ## Gotchas
 
-- **Cart edits require a manual PICO-8 re-export** (`load`, then `export tic_tac_toe.html`) and
-  copying both files into `public/games/`. This cannot be scripted. Comment-only edits to the
-  `.p8` need no re-export.
-- **`carts/` is the only copy of a cart that counts.** PICO-8 resolves a bare `load
-  tic_tac_toe.p8` against its *own* carts folder, not this repo — the path looks
-  repo-relative and is not. That already produced two copies of the tic-tac-toe cart which
-  drifted apart unnoticed across two migrations. The failure is quiet and asymmetric: edit in
-  the repo but export from PICO-8's folder and you ship a build that does not match the
-  source; edit in PICO-8's folder and export, and the next copy-back silently overwrites your
-  repo edits. Always open the repo file explicitly — point PICO-8 at this repo
-  (`pico8 -root_path <repo>/carts`), drag the file in, or pass it on the command line.
+- **Cart edits need a PICO-8 re-export.** After editing a `.p8`'s code, sprites, map, sound or
+  label, tell the user to run `/reexport-cart <cart>`, which re-exports through
+  `scripts/export-cart.ts` (PICO-8's headless `-export`) and checks the result. It is
+  manual-only because it runs the PICO-8 app outside the repo, so Claude cannot invoke it,
+  and for the same reason should not run `scripts/export-cart.ts` unasked.
+  Comment-only edits need no re-export. A label edit does: the `.html` embeds the label as the
+  poster behind the play button, and `tests/cart-labels.test.ts` fails until the two agree.
+- **`carts/` is the only copy of a cart that counts.** PICO-8 resolves a bare `load` against
+  its *own* carts folder, which has already left two tic-tac-toe carts drifting apart
+  unnoticed. Never treat a cart file outside `carts/` as the source.
 - **Files in `api/` become public routes** unless underscore-prefixed — that is why the limiter
   lives in `api/_ratelimit.ts`.
 - **Never prefix an env var with `VITE_`** — those are inlined into the browser bundle.
