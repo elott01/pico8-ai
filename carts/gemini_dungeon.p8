@@ -419,7 +419,8 @@ end
 function descend()
 	depth += 1
 	max_depth = max(max_depth, depth)
-	x, y = room.ex, room.ey
+	-- in through the right wall, walking left. a load forgets which way he faced
+	x, y, facing, flipx = room.ex, room.ey, "side", true
 	enter_battle()
 end
 
