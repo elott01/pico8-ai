@@ -132,8 +132,9 @@ lists every cart it should carry. It takes a second or two, with a 60s limit.
 - `npm run test:playwright`: boots the real exported carts in Chromium, WebKit and mobile
   Safari, which is the first time the new export actually runs. If the browsers aren't
   installed, report that. Don't treat a skipped run as a pass.
-- For a cart with a bundle, Playwright never walks through a door, so no test runs a
-  `load()`. Ask the user to take one trip into the bundled cart and back under `vercel dev`.
+- For Gem-in-Eye, `playwright/doors.spec.ts` walks the knight through both doors of the new
+  export, so the run above covers its `load()`s. A new bundled cart has no such test until one
+  is written. Until then, ask the user to take one trip into it and back under `vercel dev`.
 
 ## If a poster and its label disagree
 

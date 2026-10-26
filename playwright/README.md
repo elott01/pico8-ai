@@ -44,6 +44,20 @@ leaves `chromium` passing.
 - **`cart-switch.spec.ts`** — a turn in flight when you switch carts must never land in the
   new cart's panel. Stages a request by writing `ST_REQUEST` into `pico8_gpio` directly (the
   iframe is same-origin, which is how the page reads it at all), rather than driving the game.
+- **`doors.spec.ts`**: Gem-in-Eye's knight walks into the dungeon, home, and back in, and
+  the run (max depth, uptime) survives each `load()` between the two carts. It is the only file
+  that starts a cart and plays it. It reads each switch from the runtime's console log, and
+  steers through `pico8_buttons` rather than the keyboard, for the reason below.
+
+## Input that changes mid-load is lost
+
+A key released while a cart is loading stays held in the next cart, and one pressed then never
+arrives. Driven from the keyboard, `doors.spec.ts` passed about seven runs in ten: the knight
+would arrive with the last direction stuck down and stand still against the next one.
+`pico8_buttons` is a single number the runtime takes up when it changes, so the first change a
+cart sees overwrites anything stale, and the walk keeps changing it until a door takes him.
+60 of 60 runs passed that way, across Chromium and WebKit with up to 20 in parallel. Players
+can hit the same thing by letting go of an arrow mid-load.
 
 ## The timing trap in `cart-switch.spec.ts`
 

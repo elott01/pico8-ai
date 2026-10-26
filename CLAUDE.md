@@ -176,6 +176,10 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   finds no dungeon.
 - **Never name a global after a PICO-8 built-in.** A global `flip` replaced the function
   PICO-8's main loop calls every frame and crashed the cart, with no warning beforehand.
+- **Input that changes during a `load()` is lost.** A key released mid-load stays held in the
+  next cart, and one pressed then never arrives. That is why `playwright/doors.spec.ts` steers
+  through `pico8_buttons` and not the keyboard (see `playwright/README.md`); a keyboard
+  version of it was flaky.
 - **Gem-in-Eye's shop backdrop is the hub's sprites 128-255**, one `memcpy` to the screen's
   top half. Anything drawn there shows up behind gem-in-eye. Neither cart has sound yet, so
   music and SFX have both carts' sound memory free.
