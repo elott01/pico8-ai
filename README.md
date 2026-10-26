@@ -98,18 +98,33 @@ whole loop, and obviously not the model.
 | `npm run test:playwright` | Browser suite across Chromium, WebKit and mobile Safari. Boots Vite itself; no API key needed. |
 | `npm run bench` | Prompt benchmark against the real model. **Spends Gemini quota.** |
 | `npm run build` | Production build → `dist/`. Vercel runs this on deploy. |
-| `vercel --prod` | Deploy to production, or just push to the connected repo. |
+| `vercel` | One-off preview of the working tree, uncommitted files included. Production comes from pushing `main`, not `vercel --prod`. |
 
 ## Deploy
 
-1. Push to GitHub and import the repo in Vercel (auto-deploys on push), or `vercel --prod`.
-2. Set these for the **Production** environment in Vercel → Settings → Environment
-   Variables — `.env.local` is local-only and does not ship:
+Deploys come from Git. Pushing `main` deploys production; every other branch gets a preview
+at a stable `<project>-git-<branch>-<scope>.vercel.app` URL, linked from its pull request.
+
+1. Import the repo in Vercel, or connect an existing project under Settings → Git. That
+   installs the Vercel GitHub App — give it this repository only, not every repository.
+2. Set these for **both Production and Preview** in Vercel → Settings → Environment
+   Variables — previews call Gemini too, and `.env.local` is local-only and does not ship:
    - `GEMINI_API_KEY`
    - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (from the Upstash/KV integration). Without
      them the rate limiter falls back to per-instance memory, which cannot enforce a
-     global cap.
-3. Smoke-test the live URL on desktop and mobile.
+     global cap. Its keys carry no environment, so environments sharing one KV store share
+     one daily Gemini cap.
+3. Leave Deployment Protection on for previews and Git fork protection on. The repo is
+   public and every preview build runs with the key: an open preview is a public copy of
+   the game on your quota, and an unreviewed fork PR is a stranger's code holding the key.
+   To let a tester in, send a share link for that deployment rather than lifting protection.
+4. Smoke-test the live URL on desktop and mobile.
+
+Only committed files ship, so a re-exported cart in `public/games/` goes out when it is
+pushed. Don't mix in `vercel --prod`: production would flip between a hand-deployed working
+tree and whatever `main` last built. `vercel rollback` undoes a bad production deploy, and a
+deploy that fails where `npm run build` passes reproduces with `vercel build`, which compiles
+`api/` the way the real deploy does.
 
 ## Project layout
 
