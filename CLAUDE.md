@@ -22,7 +22,7 @@ node scripts/export-cart.ts gemini           # re-export a cart headless; runs t
 node scripts/cart-label.ts png carts/gemini.p8 label.png   # look at a cart's saved label
 ```
 
-`playwright/` is a separate suite from `npm test` — three engines, ~10s, needs
+`playwright/` is a separate suite from `npm test` — three engines, ~16s, needs
 `npx playwright install chromium webkit` once. **WebKit is not redundant with Chromium**:
 the cart switcher was keyboard-unreachable in Safari while passing every Chromium check.
 See `playwright/README.md`.

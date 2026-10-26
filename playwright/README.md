@@ -44,10 +44,13 @@ leaves `chromium` passing.
 - **`cart-switch.spec.ts`** — a turn in flight when you switch carts must never land in the
   new cart's panel. Stages a request by writing `ST_REQUEST` into `pico8_gpio` directly (the
   iframe is same-origin, which is how the page reads it at all), rather than driving the game.
-- **`doors.spec.ts`**: Gem-in-Eye's knight walks into the dungeon, home, and back in, and
-  the run (max depth, uptime) survives each `load()` between the two carts. It is the only file
-  that starts a cart and plays it. It reads each switch from the runtime's console log, and
-  steers through `pico8_buttons` rather than the keyboard, for the reason below.
+- **`doors.spec.ts`**: both ways from Gem-in-Eye's dungeon back to the hub, which are
+  separate code paths. One test walks the knight into the dungeon, home, and back in, and
+  checks that the run (max depth, uptime) survives each `load()`. The other lets a dead weight
+  kill him and rolls back, and checks the rollback is counted, he's refilled, and the hub
+  carries it back down. This is the only file that starts a cart and plays it. It reads each
+  switch from the runtime's console log, and steers through `pico8_buttons` rather than the
+  keyboard, for the reason below. The death takes ~12s, the slowest test in the suite.
 
 ## Input that changes mid-load is lost
 

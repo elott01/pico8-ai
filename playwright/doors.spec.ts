@@ -3,7 +3,8 @@
 // carts/gemini.p8 (the hub) and carts/gemini_dungeon.p8 hand the run to each other with
 // load(), and nothing else in either suite runs one: tests/cart-bundle.test.ts checks that the
 // export carries both carts, not that a door gets you between them. A load() naming a cart the
-// export doesn't hold, or a cart crashing as it arrives, would pass everything else.
+// export doesn't hold, or a cart crashing as it arrives, would pass everything else. There are
+// two ways home, walking out and dying, and they are separate code paths, so each has a test.
 //
 // Unlike the other files, this one starts the cart and plays it. Each door is beside where you
 // arrive, so holding one direction is enough. PICO-8's web runtime logs every cart it runs
@@ -29,6 +30,7 @@ const carry = /^carry = split"([^"]+)"/m.exec(hub)![1]!.split(',');
 // Player 1's bits in pico8_buttons, as btn() numbers them
 const LEFT = 1 << 0;
 const RIGHT = 1 << 1;
+const O = 1 << 4;
 
 type Run = { cart: string; param: string[] };
 
@@ -55,16 +57,19 @@ const hold = (page: Page, buttons: number) =>
     (cart as unknown as { pico8_buttons: number[] }).pico8_buttons[0] = b;
   }, buttons);
 
-/** Walk one way until the runtime starts `cart`, which means the knight took a door. */
-async function walkInto(page: Page, runs: Run[], direction: number, cart: string): Promise<Run> {
+/**
+ * Press `buttons`, on and off, until the runtime starts `cart`. With a direction, that means
+ * the knight walked through a door.
+ */
+async function pressUntil(page: Page, runs: Run[], buttons: number, cart: string, timeout = 15_000): Promise<Run> {
   const before = runs.length;
   const arrived = () => runs.slice(before).find((r) => r.cart === cart);
-  const deadline = Date.now() + 15_000;
+  const deadline = Date.now() + timeout;
   try {
     // 150ms held is about 4 pixels; a door is under 8 from where you arrive
     while (!arrived()) {
-      if (Date.now() > deadline) throw new Error(`walking with button ${direction} never loaded ${cart}.p8`);
-      await hold(page, direction);
+      if (Date.now() > deadline) throw new Error(`pressing button ${buttons} never loaded ${cart}.p8`);
+      await hold(page, buttons);
       await page.waitForTimeout(150);
       await hold(page, 0);
       await page.waitForTimeout(50);
@@ -75,26 +80,32 @@ async function walkInto(page: Page, runs: Run[], direction: number, cart: string
   return arrived()!;
 }
 
+/** Open Gem-in-Eye, start it, and wait for the hub. Returns the runs as they come in. */
+async function startHub(page: Page): Promise<Run[]> {
+  const runs = watchRuns(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: /Gem-in-Eye/ }).click();
+  await expect(page.locator('iframe')).toHaveAttribute('src', /gemini/);
+  // The export waits for a click before it starts
+  await page.frameLocator('iframe').locator('#p8_start_button').click();
+  await expect
+    .poll(() => runs.map((r) => r.cart), { message: 'the hub never booted', timeout: 20_000 })
+    .toContain('gemini');
+  return runs;
+}
+
 test.describe('gem-in-eye doors', () => {
   // The touch project runs the same WebKit as the webkit project, so it would add nothing
   test.skip(({ isMobile }) => !!isMobile, 'duplicate engine coverage — see the webkit project');
 
   test('the knight walks into the dungeon, home, and back in, carrying the run', async ({ page }) => {
     test.setTimeout(60_000);
-    const runs = watchRuns(page);
-    await page.goto('/');
-    await page.getByRole('button', { name: /Gem-in-Eye/ }).click();
-    await expect(page.locator('iframe')).toHaveAttribute('src', /gemini/);
-    // The export waits for a click before it starts
-    await page.frameLocator('iframe').locator('#p8_start_button').click();
-    await expect
-      .poll(() => runs.map((r) => r.cart), { message: 'the hub never booted', timeout: 20_000 })
-      .toContain('gemini');
+    const runs = await startHub(page);
 
     // The dungeon door is on the hub's left; the way home is on the dungeon's right
-    const down = await walkInto(page, runs, LEFT, 'gemini_dungeon');
-    const home = await walkInto(page, runs, RIGHT, 'gemini');
-    const again = await walkInto(page, runs, LEFT, 'gemini_dungeon');
+    const down = await pressUntil(page, runs, LEFT, 'gemini_dungeon');
+    const home = await pressUntil(page, runs, RIGHT, 'gemini');
+    const again = await pressUntil(page, runs, LEFT, 'gemini_dungeon');
 
     // Entering the dungeon starts a run at depth 1. The dungeon hands that home, and the hub,
     // reloaded from scratch, hands it back down, so the run survived both directions
@@ -103,5 +114,25 @@ test.describe('gem-in-eye doors', () => {
     expect(value(again, 'max_depth')).toBe('1');
     // time() restarts with each cart, so uptime only grows if every load carried it
     expect(Number(value(again, 'up'))).toBeGreaterThan(Number(value(down, 'up')));
+  });
+
+  test('dying in the dungeon rolls back to the hub, which carries the rollback', async ({ page }) => {
+    test.setTimeout(90_000);
+    const runs = await startHub(page);
+    await pressUntil(page, runs, LEFT, 'gemini_dungeon');
+
+    // The knight stands still. Depth 1 wakes one dead weight at least 40px off, which walks over
+    // and takes his three hearts in a few seconds. 🅾️ does nothing while he's alive, so it's
+    // pressed from the start and rolls back as soon as he dies. With no direction held, only
+    // dying can load the hub
+    const rollback = await pressUntil(page, runs, O, 'gemini', 45_000);
+    const again = await pressUntil(page, runs, LEFT, 'gemini_dungeon');
+
+    expect(value(rollback, 'rollbacks')).toBe('1');
+    // a rollback refills him, and drops the purse (empty here: he never picked a token up)
+    expect(value(rollback, 'health')).toBe(value(rollback, 'health_max'));
+    expect(value(rollback, 'tokens')).toBe('0');
+    // the hub, reloaded from scratch, hands the count back down
+    expect(value(again, 'rollbacks')).toBe('1');
   });
 });
