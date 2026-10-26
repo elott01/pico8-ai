@@ -15,8 +15,15 @@ command-line `-export` does that headless, and `scripts/export-cart.ts` wraps it
 app from `/Applications`, outside this repo. That is why this skill is manual only: the user
 invoking it is the go-ahead for that.
 
-Cart ids are the `.p8` names in `carts/`. The export must be named after the id, because that
-is the URL the page builds. Touch only the two export files for the cart in hand.
+Cart ids are the ones in the switcher, `CART_ORDER` in `src/lib/carts.ts`. The export must be
+named after the id, because that is the URL the page builds. Touch only the two export files
+for the cart in hand.
+
+A cart can `load()` others by name, and then its export carries them inside its `.js`:
+`gemini.p8` loads `gemini_dungeon.p8`, so `public/games/gemini.js` holds both.
+`scripts/cart-bundle.ts` reads the names out of the code. A bundled cart is part of the cart
+that loads it. It has no export or label of its own, so a request to export
+`gemini_dungeon` means exporting `gemini`.
 
 What each export file carries:
 
@@ -26,16 +33,19 @@ What each export file carries:
 
 ## 1. Work out what is needed
 
-Do this for the cart named, or for every `.p8` in `carts/` if none was. `git status` can't find
-them for you: it only sees uncommitted edits, so a cart edited and committed but never exported
-looks clean to it.
+Do this for the cart named, or for every cart in `CART_ORDER` if none was. `git status` can't
+find them for you: it only sees uncommitted edits, so a cart edited and committed but never
+exported looks clean to it.
 
-Diff each cart against the commit that last exported it. That covers committed and uncommitted
-edits alike:
+Diff each cart, and every cart it bundles, against the commit that last exported it. That
+covers committed and uncommitted edits alike:
 
 ```sh
-git diff "$(git log -1 --format=%h -- public/games/<cart>.js)" -- carts/<cart>.p8
+git diff "$(git log -1 --format=%h -- public/games/<cart>.js)" -- carts/<cart>.p8 carts/<bundled>.p8
 ```
+
+The bundled carts are the ones the cart's code names in a string like `go("gemini_dungeon.p8")`.
+An edit to one of them needs the cart that loads it exported.
 
 If `git log` finds no commit, the cart has never been exported, so export it.
 
@@ -99,12 +109,15 @@ node scripts/export-cart.ts <cart>
 ```
 
 It runs PICO-8 headless in a temp folder (an export lands wherever PICO-8 was started), with a
-temp `-home` so the user's PICO-8 config is never touched. It copies both files into
-`public/games/` only once both exist. It takes a second or two, with a 60s limit.
+temp `-home` so the user's PICO-8 config is never touched. It bundles every cart the code
+loads by name. It copies both files into `public/games/` only once both exist and the `.js`
+lists every cart it should carry. It takes a second or two, with a 60s limit.
 
 - **Exit 2:** the cart has no saved label, which `-export` requires. Go to step 2.
 - **Exit 1:** something else failed; show the user what PICO-8 printed. If PICO-8 isn't in
-  `/Applications`, ask where it is and rerun with `PICO8=<path to the binary>`.
+  `/Applications`, ask where it is and rerun with `PICO8=<path to the binary>`. "Left out"
+  means PICO-8 exported without a bundled cart. Nothing was copied, so the live export is
+  untouched.
 
 ## 4. Check it
 
@@ -114,9 +127,13 @@ temp `-home` so the user's PICO-8 config is never touched. It copies both files 
   last one, so no change there is expected, not a failure.
 - `npm test`: `cart-labels.test.ts` checks every poster against its cart's saved label, and
   `gpio-protocol.test.ts` checks that the Lua side still matches `src/lib/gpio.ts`.
+  `cart-bundle.test.ts` checks that the export carries every cart the code loads, and that
+  bundled carts share their `-- >> shared` section and sprites 0-63.
 - `npm run test:playwright`: boots the real exported carts in Chromium, WebKit and mobile
   Safari, which is the first time the new export actually runs. If the browsers aren't
   installed, report that. Don't treat a skipped run as a pass.
+- For a cart with a bundle, Playwright never walks through a door, so no test runs a
+  `load()`. Ask the user to take one trip into the bundled cart and back under `vercel dev`.
 
 ## If a poster and its label disagree
 

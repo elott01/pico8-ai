@@ -53,6 +53,11 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
 
 - **`carts/tic_tac_toe.p8`** owns all game logic (turns, win detection) and a local minimax.
   On the CPU's turn it publishes the board to GPIO and waits.
+- **Gem-in-Eye is two carts in one export.** `carts/gemini.p8` boots: the hub, the shop,
+  Claude's talk and the GPIO bridge. `carts/gemini_dungeon.p8` is the combat and never touches
+  GPIO. Each door is a `load()` that resets the machine, so the run crosses in `load()`'s param
+  string, packed in `carry`'s order and read back with `stat(6)`. A load costs about a frame on
+  the web. Desktop PICO-8 is noticeably slower, so judge speed in an export, not the editor.
 - **`src/components/Pico8Game.tsx`** embeds the cart's *exported `.html`* in an iframe (not the
   `.js` — the export needs its own shell) and polls `contentWindow.pico8_gpio` every 100ms.
 - **`src/lib/gpio.ts`** is the byte-protocol source of truth, one `PROTOCOLS` entry per game
@@ -146,6 +151,12 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   annotates its response bodies with it and `src/lib/ai.ts` imports it, so the producer and
   consumer break together. Restating the shape on either side reintroduces silent drift —
   that is how `emptyCell` vs `emptyCells` shipped past typecheck, tests and build.
+- **Gem-in-Eye's two carts share a section byte for byte.** `-- >> shared` to `-- << shared`
+  holds the knight, the hud, collision, doors and `carry`. It must be identical in both carts,
+  and it draws only from sprites 0-63, which must match too. Edit it in one cart and copy it to
+  the other; `tests/cart-bundle.test.ts` fails otherwise. `carry`'s order is the param's format,
+  so a key added on one side shifts every value after it. What crosses must be a number or a
+  word, because `split` leaves `"false"` a truthy string: a flag goes as 0/1.
 
 ## Gotchas
 
@@ -156,9 +167,18 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   and for the same reason should not run `scripts/export-cart.ts` unasked.
   Comment-only edits need no re-export. A label edit does: the `.html` embeds the label as the
   poster behind the play button, and `tests/cart-labels.test.ts` fails until the two agree.
+  An edit to `gemini_dungeon.p8` means `/reexport-cart gemini`: the export bundles every cart
+  the code loads by name.
 - **`carts/` is the only copy of a cart that counts.** PICO-8 resolves a bare `load` against
   its *own* carts folder, which has already left two tic-tac-toe carts drifting apart
-  unnoticed. Never treat a cart file outside `carts/` as the source.
+  unnoticed. Never treat a cart file outside `carts/` as the source. The same goes for a cart
+  calling `load()`: run Gem-in-Eye with `pico8 -root_path <repo>/carts`, or the hub's door
+  finds no dungeon.
+- **Never name a global after a PICO-8 built-in.** A global `flip` replaced the function
+  PICO-8's main loop calls every frame and crashed the cart, with no warning beforehand.
+- **Gem-in-Eye's shop backdrop is the hub's sprites 128-255**, one `memcpy` to the screen's
+  top half. Anything drawn there shows up behind gem-in-eye. Neither cart has sound yet, so
+  music and SFX have both carts' sound memory free.
 - **Files in `api/` become public routes** unless underscore-prefixed — that is why the limiter
   lives in `api/_ratelimit.ts`.
 - **Never prefix an env var with `VITE_`** — those are inlined into the browser bundle.
