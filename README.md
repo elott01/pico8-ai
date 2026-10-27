@@ -167,14 +167,10 @@ LICENSE / NOTICE          MIT, plus the Lexaloffle carve-out for public/games/
 
 ## License
 
-[MIT](LICENSE) — with one carve-out, detailed in [NOTICE](NOTICE).
+[MIT](LICENSE), except `public/games/`. Those are PICO-8 export artifacts: each cart ships
+~1.7 MB of PICO-8 web player runtime, © Lexaloffle Games LLP, redistributed under PICO-8's
+terms for exported carts rather than relicensed. [NOTICE](NOTICE) lists the files.
 
-The MIT grant covers the source authored here (`src/`, `api/`, `carts/`, `tests/`,
-`playwright/`, `bench/`, `docs/`). It does **not** cover `public/games/`, which holds
-PICO-8 export artifacts: each cart ships ~1.7 MB of PICO-8 web player runtime,
-© Lexaloffle Games LLP, redistributed under PICO-8's terms for exported carts rather than
-relicensed.
-
-The games themselves are not third-party content — the Lua in
-[carts/](carts/) is MIT like the rest of the source. Only the player runtime that PICO-8's
-HTML export wraps around it belongs to Lexaloffle. See [NOTICE](NOTICE) for the file list.
+The games themselves are not third-party content — the Lua in [carts/](carts/) is MIT like
+the rest of the source. Only the player runtime that PICO-8's HTML export wraps around it
+belongs to Lexaloffle.

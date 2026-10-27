@@ -8,14 +8,8 @@ third-party exception noted below.
 SCOPE OF THE MIT GRANT
 ----------------------
 
-The MIT License in LICENSE covers the source authored in this repository:
-
-    api/            serverless proxy and rate limiter
-    carts/          PICO-8 cart source (.p8), including each game's Lua
-    docs/           protocol documentation
-    src/            React client, GPIO bridge, styles
-    tests/          test suites
-    index.html, package.json, vite.config.js, tsconfig.json
+The MIT License in LICENSE covers everything in this repository except the
+files under public/games/, described below.
 
 
 THIRD-PARTY CONTENT NOT COVERED BY THE MIT GRANT
@@ -27,6 +21,8 @@ is not the author's to relicense:
 
     public/games/connect_four.js    ~1.7 MB   PICO-8 web player runtime
     public/games/connect_four.html  ~44 KB    PICO-8 export shell
+    public/games/gemini.js          ~1.7 MB   PICO-8 web player runtime
+    public/games/gemini.html        ~47 KB    PICO-8 export shell
     public/games/tic_tac_toe.js     ~1.7 MB   PICO-8 web player runtime
     public/games/tic_tac_toe.html   ~44 KB    PICO-8 export shell
 
