@@ -552,9 +552,9 @@ function init_shared()
 	banner_msg = ""
 	frame = 0
 
-	-- the hub's: gem-in-eye's last verdict, and whether claude has met you.
-	-- they ride through the dungeon so a run doesn't reset them
-	verdict, met = 0, 0
+	-- the hub's: whether claude has met you. it rides through the dungeon so
+	-- a run doesn't reset it
+	met = 0
 	up0 = 0
 end
 
@@ -745,7 +745,7 @@ end
 
 -- what crosses a load(), in the order of its param. split leaves "false" a
 -- truthy string, so a flag here is 0/1. where you arrive is the door's job
-carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,verdict,met,up"
+carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,met,up"
 
 -- time() restarts with each cart: up carries the uptime, up0 offsets it
 function go(cart)

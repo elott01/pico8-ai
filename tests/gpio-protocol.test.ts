@@ -340,6 +340,16 @@ for (const id of Object.keys(TALK_PROTOCOLS) as TalkCartId[]) {
       assert.ok(m, 'could not parse gem_tints');
       assert.equal((m[1].match(/split"/g) ?? []).length, p.verdicts.length);
     });
+
+    // A tint that keeps the gem's own colours shows nothing, which is how unimpressed once
+    // looked the same as no verdict at all
+    it('gives every verdict its own gem colour, none of them the gem at rest', () => {
+      const tints = [...lua.match(/^gem_tints\s*=\s*\{(.*)\}/m)![1]!.matchAll(/split"([\d,]+)"/g)].map((t) => t[1]);
+      const art = lua.match(/pal\((\d+), t\[1\]\) pal\((\d+), t\[2\]\) pal\((\d+), t\[3\]\)/);
+      assert.ok(art, 'could not parse the pal() calls that apply a tint');
+      assert.equal(new Set(tints).size, tints.length, `two verdicts share a tint: ${tints.join(' / ')}`);
+      assert.ok(!tints.includes(art.slice(1).join(',')), `a tint is the gem's own ${art.slice(1).join(',')}`);
+    });
   });
 
   describe(`${id}: talk layout`, () => {

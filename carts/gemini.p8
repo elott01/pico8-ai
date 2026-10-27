@@ -469,9 +469,12 @@ sheet_y = 32
 eye_x = 21			-- pupil home, from the head origin
 eye_y = 12
 
--- gaze path: tl, bl, br, tr
+-- gaze: tl, bl, br, tr. he looks down at you from the bottom two, shifting
+-- between them, and now and then glances up
 sq = {{0,0},{0,1},{1,1},{1,0}}
-gaze_hold = 24		-- frames per corner
+gaze_rest = 60		-- frames he looks down, at least. up to twice that
+gaze_look = 40		-- frames a glance up holds, at least. likewise
+gaze_up = 3			-- 1 in gaze_up looks down ends in a glance up
 
 -- glint on the flower eye. box relative to the head
 shine_x = 11
@@ -490,8 +493,10 @@ wiz_msg = "greetings, traveler. the road ahead is dark, but you need not walk it
 -- his line under the menu. purchases overwrite it
 wiz_prompt = "how may i serve you?"
 
--- gem colours 14, 8, 2 per verdict: impressed, neutral, unimpressed
-gem_tints = {split"11,3,1", split"12,13,1", split"14,8,2"}
+-- the gem is red: 14, 8, 2. a verdict recolours it for gem_glints sweeps of
+-- the glint, then it's red again. impressed, neutral, unimpressed
+gem_tints = {split"11,3,1", split"12,13,1", split"10,9,4"}
+gem_glints = 3
 
 -- which diagonals the glint box covers. reads the sheet, so runs in _init
 function init_wizard()
@@ -513,7 +518,7 @@ end
 function enter_wizard(door)
 	wiz_door = door
 	scene = {update = update_wizard, draw = draw_wizard_scene}
-	shine_t = 0
+	shine_t, gem_t, gaze, gaze_t = 0, 0, 3, gaze_rest
 	menu, shelf, pages = nil
 	open_dialog(wiz_msg)
 end
@@ -532,6 +537,8 @@ end
 function update_wizard()
 	-- glint: burst, then pause. no pause while he thinks
 	shine_t = (shine_t + 1) % (shine_frames * shine_hold + (asking and 0 or shine_pause))
+	if gem_t > 0 then gem_t -= 1 end
+	update_gaze()
 	advance_dialog(dialog)
 	if asking then
 		update_ask()
@@ -547,6 +554,19 @@ function update_wizard()
 		open_shop()
 	elseif btnp(🅾️) then
 		exit_wizard()
+	end
+end
+
+-- up: back down to either corner. down: to the other bottom corner, or up
+function update_gaze()
+	gaze_t -= 1
+	if gaze_t > 0 then return end
+	if sq[gaze][2] == 0 then
+		gaze, gaze_t = rnd(split"2,3"), gaze_rest + rnd(gaze_rest)
+	elseif rnd(gaze_up) < 1 then
+		gaze, gaze_t = rnd(split"1,4"), gaze_look + rnd(gaze_look)
+	else
+		gaze, gaze_t = 5 - gaze, gaze_rest + rnd(gaze_rest)
 	end
 end
 
@@ -581,8 +601,8 @@ end
 function draw_wizard()
 	local hx, hy = wiz_x, wiz_y
 
-	-- 1. head, 0 transparent. the last verdict tints the gem
-	local t = gem_tints[verdict]
+	-- 1. head, 0 transparent. a fresh verdict tints the gem
+	local t = gem_t > 0 and gem_tints[verdict]
 	if t then pal(14, t[1]) pal(8, t[2]) pal(2, t[3]) end
 	spr(76, hx, hy, 4, 4)
 	pal()
@@ -598,7 +618,7 @@ function draw_wizard()
 	draw_shine(shine_lead())
 
 	-- 4. pupil
-	local g = sq[frame \ gaze_hold % 4 + 1]
+	local g = sq[gaze]
 	rectfill(hx + 21, hy + 12, hx + 22, hy + 13, 7)
 	pset(hx + eye_x + g[1], hy + eye_y + g[2], 12)
 
@@ -739,7 +759,10 @@ function sell(ok)
 	local it, t = shelf.it, shelf.at
 	local list, len, p, v = price(t), reply_len(ok), get(gp_price), get(gp_verdict)
 	local cost = len > 0 and p > 0 and mid(ceil(list / 2), p, list) or list
-	if len > 0 and gem_tints[v] then verdict = v end
+	-- the glint restarts, so its first sweep crosses the new colour
+	if len > 0 and gem_tints[v] then
+		verdict, gem_t, shine_t = v, gem_glints * (shine_frames * shine_hold + shine_pause), 0
+	end
 	spend(cost)
 	_ENV[it.key] = t
 	-- wear what's just bought
@@ -1011,9 +1034,9 @@ function init_shared()
 	banner_msg = ""
 	frame = 0
 
-	-- the hub's: gem-in-eye's last verdict, and whether claude has met you.
-	-- they ride through the dungeon so a run doesn't reset them
-	verdict, met = 0, 0
+	-- the hub's: whether claude has met you. it rides through the dungeon so
+	-- a run doesn't reset it
+	met = 0
 	up0 = 0
 end
 
@@ -1204,7 +1227,7 @@ end
 
 -- what crosses a load(), in the order of its param. split leaves "false" a
 -- truthy string, so a flag here is 0/1. where you arrive is the door's job
-carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,verdict,met,up"
+carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,met,up"
 
 -- time() restarts with each cart: up carries the uptime, up0 offsets it
 function go(cart)
