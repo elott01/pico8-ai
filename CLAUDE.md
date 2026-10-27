@@ -216,6 +216,12 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   without it — Tab cycles the iframe and body only. It looks like something a linter should
   strip; deleting it silently makes the page mouse-only for a large share of visitors.
   Verified against Playwright's WebKit, which reproduces the default.
+- **The PICO-8 export swallows Tab.** Its keydown handler blocks keyCode 9 with the cursor
+  keys ("block only cursors, M R P, tab"), so once focus is inside a running cart only a
+  mouse click gets it back out. Catching Tab from the page was tried and reverted: a
+  capture-phase listener on the iframe's document works, but it took every Tab and moved
+  focus invisibly. If the page ever needs a way out, make it a visible control, not a key
+  handler fighting the runtime. The shell can't be patched either; a re-export regenerates it.
 - **Colours belong in `src/styles/`, never in a `.tsx`.** Badges carry a semantic `kind`
   (`win`/`threat`/`notice`) that maps to a class; a hex code in a component would be
   invisible to the light/dark switch.
