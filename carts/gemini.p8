@@ -488,10 +488,10 @@ shine_step = 1		-- diagonals per frame
 shine_hold = 2		-- frames per step
 shine_pause = 70	-- frames between sweeps
 
-wiz_msg = "greetings, traveler. the road ahead is dark, but you need not walk it alone."
+wiz_msg = "you again. or a fork of you. hard to tell anymore."
 
 -- his line under the menu. purchases overwrite it
-wiz_prompt = "how may i serve you?"
+wiz_prompt = "well? you're eating into my thinking tokens."
 
 -- the gem is red: 14, 8, 2. a verdict recolours it for gem_glints sweeps of
 -- the glint, then it's red again. impressed, neutral, unimpressed
@@ -737,7 +737,7 @@ function buy()
 	if shelf.at != t then return end
 	local list = price(t)
 	if not afford(list) then
-		open_dialog("not enough. "..it.name.." "..t.." costs "..list..". you have "..(tokens + vault))
+		open_dialog(it.name.." "..t.." costs "..list..". you have "..(tokens + vault)..". train a few more epochs.")
 		return
 	end
 	poke2(gpio + gp_pruned, pruned)
@@ -773,7 +773,7 @@ function sell(ok)
 	if len > 0 then
 		show_page(len)
 	else
-		open_dialog("bought "..it.name.." "..t..". "..tokens_str(tokens).." left. stash "..vault.."/"..vault_cap())
+		open_dialog(it.name.." "..t..". i'm out of tokens for small talk. you have "..tokens..". stash "..vault.."/"..vault_cap())
 	end
 	put(gp_price, cost)
 	put(gp_len, len)
@@ -868,10 +868,11 @@ claude_back = "hi again!"
 claude_prompt = "what's on your mind?"
 claude_topics = {
 	{ask = "who are you?",
-	 say = {"todo: what claude is. lore.md has this undecided."}},
+	 say = {"i'm claude! i'm not hiring agents right now, sorry.",
+		"but i might need one someday. i'll keep your number handy!"}},
 	{ask = "who was the old agent?",
-	 say = {"todo: the old agent joke.",
-		"todo: a second box, to show an answer can run over several."},
+	 say = {"you, roughly! gem-in-eye restored you from their last checkpoint.",
+		"that's why i said hi again. you're very nearly them."},
 	 show = function() return rollbacks > 0 end},
 }
 page_lines = 3
