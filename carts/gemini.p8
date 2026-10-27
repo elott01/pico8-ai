@@ -1,22 +1,18 @@
 pico-8 cartridge // http://www.pico-8.com
 version 43
 __lua__
+-- gem-in-eye's hub: the room the game starts in, his shop and claude's talk.
+-- the left door loads gemini_dungeon.p8, and dying or walking home there
+-- loads this back. the run crosses each load() in its param: see carry.
+-- load() looks in pico-8's current folder, so run this from carts/ (pico8
+-- -root_path <repo>/carts). the export bundles the dungeon in
 function _init()
-	-- vitality and stamina match their hud bars
-	health_col = 8
-	stamina_col = 11
-	armor_col = 12
-	attack_col = 9
+	init_shared()
 
-	-- ex,ey: arrival. doors: `to` a room or an `act`; `lock`: shut until spent
-	rooms = {
-		{mx = 0,  my = 0, combat = true,  ex = 112, ey = 64,
-		 -- home right, deeper left
-		 doors = {{tx = 15, ty = 8, to = 2}, {tx = 0, ty = 8, lock = true, act = descend}},
-		 labels = {}, signs = {}},
-		{mx = 16, my = 0, combat = false, ex = 8,   ey = 64,
-		 doors = {{tx = 0, ty = 8, act = start_run}, {tx = 8, ty = 1, act = enter_wizard}},
-		 labels = {
+	-- ex,ey: arrival. each door runs its act
+	room = {mx = 16, my = 0, ex = 8, ey = 64,
+		doors = {{tx = 0, ty = 8, act = start_run}, {tx = 8, ty = 1, act = enter_wizard}},
+		labels = {
 			{txt = "vitality: ", val = function() return tier_str(health_tier) end,
 			 x = 10, y = 93, col = health_col},
 			{txt = "stamina: ", val = function() return tier_str(stamina_tier) end,
@@ -33,47 +29,18 @@ function _init()
 			 x = 68, y = 107},
 			{txt = "max depth: ", val = function() return max_depth end,
 			 x = 68, y = 114},
-		 },
-		 -- ofs: how far he's paced from home
-		 claude = {x = 16, y = 24, ofs = 0, dir = 1,
+		},
+		-- ofs: how far he's paced from home
+		claude = {x = 16, y = 24, ofs = 0, dir = 1,
 			move_t = 0, walk_t = 0, pause_t = 0, act = enter_talk},
-		 -- by tile, since the flag can't tell them apart. act returns the msg
-		 signs = {
+		-- by tile, since the flag can't tell them apart. act returns the msg
+		signs = {
 			{tx = 2,  ty = 7,  msg = "gem-in-eye keeps this room clean. no merges, no conflicts. rest as long as you like."},
 			{tx = 10, ty = 3,  msg = "gem-in-eye's artifacts ^"},
 			{tx = 11, ty = 10, msg = "these are your stats. gem-in-eye sells upgrades to the colored ones."},
 			{tx = 13, ty = 6, w = 2, h = 2, act = use_vault},
-		 }},
-	}
-	alive = true
-	flipx = false
-	facing = "side"
-	speed = 1
-	walk_t = 0
+		}}
 
-	token_alive = false
-
-	token_frames = 10	-- sprites 33..42
-	token_hold = 2		-- frames per shine frame
-	token_pause = 70	-- frames between glints
-	token_t = 0
-
-	attack = 0
-
-	-- a tier counts upgrades bought, 0..tier_max. each adds one bar
-	tier_max = 3
-	health_base = 3
-	stamina_base = 3
-	health_tier = 0
-	stamina_tier = 0
-
-	-- armor does nothing yet. attack speeds up crate breaking
-	armor_tier = 0
-	armor_look = 0	-- worn tier. the rating stays armor_tier
-	attack_tier = 0
-	attack_look = 0	-- likewise the sword
-
-	vault_tier = 0
 	vault_caps = {[0] = 10, 20, 40, 80}
 
 	-- key names the tier global, read via _ENV. tint recolours white art.
@@ -88,161 +55,14 @@ function _init()
 		{name = "attack",   key = "attack_tier",  col = attack_col,
 		 art = {[0] = 15, 4, 5, 6}, look = "attack_look"},
 		{name = "stash",    key = "vault_tier",
-		 art = split"164,164,164", size = 2},
+		 art = split"72,72,72", size = 2},
 	}
 
-	health_max, health = 0, 0
-	stamina_max, stamina = 0, 0
-	apply_tiers()
-
-	hurt = 0
-	stamina_rate = 45	-- frames per stamina point
-	stam_t = 0
-
-	num_gap = 3		-- px a count tucks toward its colon
-
-	-- capped so the readout fits its corner
-	token_max = 99
-	token_digits = #tostr(token_max)
-
-	bar_slots = max(health_base, stamina_base) + tier_max
-	bar_w = bar_slots * 5 + 2	-- outline included
-
-	-- sized for maxed bars so icons never move; the gutters absorb it
-	icon_gap = 1
-	stat_w = 8 + icon_gap + bar_w
-	hud_gap = (128 - stat_w * 2 - (4 * (8 + token_digits) - num_gap - 1)) / 2
-	local hx = 0
-	health_x = hx + 8 + icon_gap
-	hx += stat_w + hud_gap
-	stamina_x = hx + 8 + icon_gap
-	hx += stat_w + hud_gap
-	token_hud_x = hx
-
-	drops = {}
-	tokens = 0
-	vault = 0		-- stash, safe from rollbacks
-	pruned = 0
-	rollbacks = 0
-	max_depth = 0
-	depth = 0		-- current room, from 1
-	banner_t = 0
-	banner_msg = ""
-	frame = 0
-
 	init_wizard()
-	find_layouts()
 
-	goto_room(2)
-end
-
--- 48 neutral, 49/50 tuck a foot in. only row 7, the feet, differs
-walk_cycle = split"48,49,48,50"
-
--- head-on, a step lifts a foot instead
-walk_cycle_ud = split"48,51,48,52"
-
-walk_hold = 4		-- frames per step: one footfall per tile
-
--- button, dx, dy
-pads = {{0, -1, 0}, {1, 1, 0}, {3, 0, 1}, {2, 0, -1}}
-
-bodies = {side = 48, down = 11, up = 12}
-
--- armor 6, highlight 7, as in shelf art 8-10. blades are 7 too: drawn first
-armor_pals = {[0] = split"6,7", split"3,11", split"8,14", split"10,7"}
-
--- hilt 4, blade 7, gem 8 (guard middle in 3, 29, 53, 54), as in art 4-6
-sword_pals = {[0] = split"4,7,4", split"7,13,8", split"10,7,11", split"13,8,1"}
-
--- the down swing's wider stance has its own steps
-swing_cycle = split"29,53,29,54"
-
--- dy: the blade's tile, which is also the hit box. feet: swing steps
-swings = {
-	down = {body = 29, blade = 45, dy = 8, feet = swing_cycle},
-	up = {body = 44, blade = 28, dy = -8, feet = walk_cycle_ud},
-}
-
-function walk_set()
-	local sw = attack > 0 and swings[facing]
-	return sw and sw.feet or facing == "side" and walk_cycle or walk_cycle_ud
-end
-
--- the hit box matches the drawn blade
-function sword_ofs()
-	local sw = swings[facing]
-	if sw then return 0, sw.dy end
-	return flipx and -8 or 8, 0
-end
-
-function sword_box()
-	local dx, dy = sword_ofs()
-	return x + dx, y + dy
-end
-
-function hit(ax, ay, bx, by)
-	return ax < bx + 8 and ax + 8 > bx and ay < by + 8 and ay + 8 > by
-end
-
-function mid_tile(px, py)
-	return (px + 4) \ 8, (py + 4) \ 8
-end
-
--- the tile id is the damage state; a swing adds attack_tier + 1
-crate_base, crate_stages = 144, 3
-
-function hit_crate()
-	local tx, ty = mid_tile(sword_box())
-	if tx < 0 or tx > 15 or ty < 0 or ty > 15 then return end
-	local mx, my = room.mx + tx, room.my + ty
-	local st = mget(mx, my) - crate_base
-	if st < 0 or st >= crate_stages then return end
-	st += attack_tier + 1
-	if st < crate_stages then
-		mset(mx, my, crate_base + st)
-	else
-		mset(mx, my, 129)
-		flow_at = nil
-		drop_from(tx, ty)
-	end
-end
-
--- odds out of 100. kind is the hud sprite: 13 heart, 14 bolt
-drop_heart = 20
-drop_bolt = 30
-
-function drop_from(tx, ty)
-	local r = rnd(100)
-	if r < drop_heart + drop_bolt then
-		add(drops, {x = tx * 8, y = ty * 8, kind = r < drop_heart and 13 or 14})
-	end
-end
-
--- only picked up when it would help
-function take_drops()
-	for d in all(drops) do
-		if hit(x, y, d.x, d.y) then
-			if d.kind == 13 and health < health_max then
-				health += 1
-				del(drops, d)
-			elseif d.kind == 14 and stamina < stamina_max then
-				stamina = stamina_max
-				stam_t = 0
-				del(drops, d)
-			end
-		end
-	end
-end
-
--- step frame for distance t along cycle c
-function step_spr(c, t)
-	return c[t \ walk_hold % #c + 1]
-end
-
--- h rows of sprite n from row top: a body is rows 0-6, its feet row 7
-function draw_rows(n, x, y, fx, top, h)
-	sspr(n % 16 * 8, n \ 16 * 8 + top, 8, h, x, y + top, 8, h, fx)
+	arrive()
+	x, y = room.ex, room.ey
+	show_banner("main branch")
 end
 
 function _update()
@@ -254,45 +74,16 @@ function _update()
 		return
 	end
 
-	if not alive then
-		if btnp(🅾️) then respawn() end
-		return
-	end
-
 	-- a dialog freezes the room
 	if dialog then
 		update_dialog()
 		return
 	end
 
-	-- you're never in a wall, so this only tests the leading edge
-	local moved = false
-	for p in all(pads) do
-		local dx, dy = p[2] * speed, p[3] * speed
-		if btn(p[1]) and box_free(x + dx, y + dy) then
-			x += dx
-			y += dy
-			moved = true
-		end
-	end
-
-	-- horizontal wins diagonals. from buttons, so you can turn at a wall
-	if btn(⬅️) or btn(➡️) then
-		facing = "side"
-		flipx = not btn(➡️)
-	elseif btn(⬇️) then
-		facing = "down"
-	elseif btn(⬆️) then
-		facing = "up"
-	end
-
-	-- by distance so feet don't slide. wrapped: numbers top out at 32767
-	walk_t = moved and (walk_t + 1) % (walk_hold * #walk_cycle) or 0
+	move_player()
 
 	local d = door_at(x + 4, y + 4)
-	if d then
-		if d.act then d.act(d) else goto_room(d.to) end
-	end
+	if d then d.act(d) end
 
 	-- ❎ talks if something's in reach, else swings
 	near_talk = talk_at(x, y)
@@ -302,58 +93,11 @@ function _update()
 		if near_talk.act then msg = near_talk.act(near_talk) end
 		if msg then open_dialog(msg) end
 	elseif btnp(❎) and stamina > 0 then
-		attack = 6
-		stamina -= 1
-		hit_crate()
+		swing()
 	end
 
-	if stamina < stamina_max then
-		stam_t += 1
-		if stam_t >= stamina_rate then
-			stamina += 1
-			stam_t = 0
-		end
-	else
-		stam_t = 0
-	end
-	if attack > 0 then attack -= 1 end
-	if hurt > 0 then hurt -= 1 end
-	token_t = (token_t + 1) % (token_frames * token_hold + token_pause)
-
-	if room.combat then
-		if attack > 0 then
-			local sx, sy = sword_box()
-			for z in all(zombies) do
-				if hit(sx, sy, z.x, z.y) then
-					del(zombies, z)
-					pruned += 1
-				end
-			end
-		end
-
-		if token_alive and hit(x, y, token_x, token_y) then
-			tokens = min(tokens + 1, token_max)
-			tokens_left -= 1
-			spawn_wave(token_wakes)
-			if tokens_left > 0 then spawn_token() else token_alive = false end
-		end
-
-		take_drops()
-
-		for z in all(zombies) do
-			if hurt <= 0 and hit(x, y, z.x, z.y) then
-				health -= 1
-				hurt = 30
-				if health <= 0 then alive = false end
-			end
-		end
-
-		update_zombies()
-		update_locks()
-	end
-	if room.claude then
-		update_claude(room.claude)
-	end
+	tick_player()
+	update_claude(room.claude)
 end
 
 function _draw()
@@ -363,251 +107,40 @@ function _draw()
 	end
 
 	cls()
-	draw_bar(13, health_x, health, health_max, health_col)
-	draw_bar(14, stamina_x, stamina, stamina_max, stamina_col)
-	-- padded to the cap's width so the readout holds still
-	local tv = tostr(tokens)
-	while #tv < token_digits do tv = " "..tv end
-	local tx = print("tokens: ", token_hud_x, 0, 10)
-	print(tv, tx - num_gap, 0, 10)
+	draw_hud()
 	map(room.mx, room.my, 0, 0, 16, 16)
-	if room.claude then
-		draw_claude(room.claude)
-	end
+	draw_claude(room.claude)
 	for l in all(room.labels) do
 		local c = l.col or 7
 		print(l.val(), print(l.txt, l.x, l.y, c) - num_gap, l.y, c)
 	end
-	-- blink while hurt
-	if alive and (hurt <= 0 or hurt % 4 < 2) then
-		-- only the side view flips
-		local sw, fx = attack > 0 and swings[facing], facing == "side" and flipx
-		-- hilt and gem stay mapped for the body, which carries both
-		local q = sword_pals[attack_look]
-		pal(4, q[1])
-		pal(7, q[2])
-		pal(8, q[3])
-		if sw then
-			spr(sw.blade, x, y + sw.dy)
-		elseif attack > 0 then
-			spr(3, x + sword_ofs(), y, 1, 1, flipx)
-		end
-		local p = armor_pals[armor_look]
-		pal(6, p[1])
-		pal(7, p[2])
-		draw_rows(sw and sw.body or attack > 0 and 2 or bodies[facing], x, y, fx, 0, 7)
-		draw_rows(step_spr(walk_set(), walk_t), x, y, fx, 7, 1)
-		pal()
-	end
-	if room.combat then
-		for z in all(zombies) do
-			draw_zombie(z)
-		end
-		-- tinted to the bar they fill
-		for d in all(drops) do
-			pal(7, d.kind == 13 and health_col or stamina_col)
-			spr(d.kind, d.x, d.y)
-			pal()
-		end
-		if token_alive then
-			local f = token_t \ token_hold
-			spr(f < token_frames and 33 + f or 32, token_x, token_y)
-		end
-	end
+	draw_player()
 
-	if alive and banner_t > 0 then centre(banner_msg, 60, 7) end
+	if banner_t > 0 then centre(banner_msg, 60, 7) end
 
-	if not alive then
-		print("game over", 46, 60, 8)
-		if frame % 30 < 20 then centre("press 🅾️ to rollback", 70, 7) end
-	end
-
-	if alive and not dialog and near_talk and frame % 30 < 20 then
+	if not dialog and near_talk and frame % 30 < 20 then
 		local hx, hy = hint_pos(near_talk)
 		draw_x_hint(hx, hy, 7)
 	end
 	if dialog then draw_dialog(dialog) end
 end
 
--- centred on the screen, measured by printing off-screen (🅾️ is wide)
-function centre(s, y, c)
-	print(s, 64 - print(s, 0, -8) / 2, y, c)
-end
+-- the dungeon is gemini_dungeon.p8. it starts a run as it loads
+function start_run() go("gemini_dungeon.p8") end
 
 function tier_str(tier)
 	return tier.."/"..tier_max
 end
 
--- time() pauses with the cart. minutes uncapped (fine for ~9 hours)
+-- minutes uncapped (fine for ~9 hours). up0 is what earlier carts ran
 function uptime_str()
-	local s = flr(time())
+	local s = flr(up0 + time())
 	local ss = s % 60
 	return s \ 60 ..":"..(ss < 10 and "0" or "")..ss
 end
 
--- bar lengths from tiers. a bar that grows refills; the other is untouched
-function apply_tiers()
-	local hmax = health_base + health_tier
-	local smax = stamina_base + stamina_tier
-	if hmax != health_max then health = hmax end
-	if smax != stamina_max then stamina = smax end
-	health_max = hmax
-	stamina_max = smax
-end
-
-function draw_bar(icon, bx, n, nmax, col)
-	pal(7, col)
-	spr(icon, bx - 8 - icon_gap, 0)
-	pal()
-	rect(bx, 0, bx + 1 + nmax * 5, 6, 7)
-	for i = 0, n - 1 do
-		rectfill(bx + 2 + i * 5, 2, bx + 4 + i * 5, 4, col)
-	end
-end
-
--- a flow index's top-left in px
-function tile_xy(i)
-	return i % 16 * 8, i \ 16 * 8
-end
-
--- reachable non-door tiles, or a room could never be spent
-function floor_tiles()
-	local t = {}
-	for i = 0, 255 do
-		if flow[i] and not is_door(tile_xy(i)) then add(t, i) end
-	end
-	return t
-end
-
-function spawn_token()
-	token_x, token_y = tile_xy(rnd(floor_tiles()))
-	token_alive = true
-end
-
--- zombie bodies 17-19 share the knight's feet row, so his steps fit
-function spawn_zombie(zx, zy)
-	add(zombies, {x = zx, y = zy, speed = 0.75,
-		walk_t = 0, body = 17, side = true, flipx = false})
-end
-
-function draw_zombie(z)
-	local fx = z.side and z.flipx
-	draw_rows(z.body, z.x, z.y, fx, 0, 7)
-	draw_rows(step_spr(z.side and walk_cycle or walk_cycle_ud, z.walk_t),
-		z.x, z.y, fx, 7, 1)
-end
-
--- flow field: bfs from your tile, rebuilt when it changes. no corner-cutting
-nbrs = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, -1}, {-1, 1}, {1, 1}}
-
-function open_tile(tx, ty)
-	return tx >= 0 and tx < 16 and ty >= 0 and ty < 16
-	and not fget(mget(room.mx + tx, room.my + ty), 0)
-end
-
-function can_step(tx, ty, dx, dy)
-	return open_tile(tx + dx, ty + dy)
-	and (dx == 0 or dy == 0 or (open_tile(tx + dx, ty) and open_tile(tx, ty + dy)))
-end
-
-function build_flow(ptx, pty)
-	flow = {}
-	local q, head = {ptx + pty * 16}, 1
-	flow[q[1]] = 0
-	while head <= #q do
-		local i = q[head]
-		head += 1
-		local tx, ty = i % 16, i \ 16
-		for n in all(nbrs) do
-			-- off-edge indexes alias, but can_step checks real coords
-			local j = tx + n[1] + (ty + n[2]) * 16
-			if not flow[j] and can_step(tx, ty, n[1], n[2]) then
-				flow[j] = flow[i] + 1
-				add(q, j)
-			end
-		end
-	end
-end
-
-function box_free(px, py)
-	return not (is_solid(px, py) or is_solid(px + 7, py)
-		or is_solid(px, py + 7) or is_solid(px + 7, py + 7))
-end
-
--- next tile downhill, ties toward you. adjacent or unreached: at you
-function zombie_goal(z, ptx, pty)
-	local tx, ty = mid_tile(z.x, z.y)
-	local here = flow[tx + ty * 16]
-	if not here or here <= 1 then return x, y end
-	local gx, gy, bd, be = x, y, here, 999
-	for n in all(nbrs) do
-		local nx, ny = tx + n[1], ty + n[2]
-		local d = flow[nx + ny * 16]
-		if d and d < here and can_step(tx, ty, n[1], n[2]) then
-			local e = (nx - ptx) * (nx - ptx) + (ny - pty) * (ny - pty)
-			if d < bd or (d == bd and e < be) then
-				gx, gy, bd, be = nx * 8, ny * 8, d, e
-			end
-		end
-	end
-	return gx, gy
-end
-
--- distance on foot, 999 if unreached
-function zflow(z)
-	local tx, ty = mid_tile(z.x, z.y)
-	return flow[tx + ty * 16] or 999
-end
-
-function update_zombies()
-	local ptx, pty = mid_tile(x, y)
-	if flow_at != ptx + pty * 16 then
-		flow_at = ptx + pty * 16
-		build_flow(ptx, pty)
-	end
-
-	for i = 1, #zombies do
-		local z = zombies[i]
-		local wasx, wasy = z.x, z.y
-		local sp = z.speed
-
-		-- one axis at a time, so walls slide it along
-		local gx, gy = zombie_goal(z, ptx, pty)
-		local mx, my = mid(-sp, gx - z.x, sp), mid(-sp, gy - z.y, sp)
-		if box_free(z.x + mx, z.y) then z.x += mx else mx = 0 end
-		if box_free(z.x, z.y + my) then z.y += my else my = 0 end
-
-		-- unstack: only the further one yields (both yielding deadlocks at
-		-- one-tile gaps). ties go by list order
-		local zd = zflow(z)
-		for j = 1, #zombies do
-			local other = zombies[j]
-			if other != z and hit(z.x, z.y, other.x, other.y) then
-				local od = zflow(other)
-				if zd > od or (zd == od and i > j) then
-					local px = z.x < other.x and -sp or sp
-					local py = z.y < other.y and -sp or sp
-					if box_free(z.x + px, z.y) then z.x += px end
-					if box_free(z.x, z.y + py) then z.y += py end
-				end
-			end
-		end
-
-		-- face the way it moves, or the player when still
-		local fx, fy = mx, my
-		if fx == 0 and fy == 0 then fx, fy = x - z.x, y - z.y end
-		-- 17 side, 18 toward you, 19 walking away
-		z.side = abs(fx) > abs(fy)
-		if z.side then z.flipx = fx < 0 end
-		z.body = z.side and 17 or fy < 0 and 19 or 18
-
-		local d = max(abs(z.x - wasx), abs(z.y - wasy))
-		z.walk_t = d > 0 and (z.walk_t + d) % (walk_hold * #walk_cycle) or 0
-	end
-end
-
--- claude paces the hub. 226/228 lift diagonal foot pairs
-claude_cycle = split"224,226,224,228"
+-- claude paces the hub. 98/100 lift diagonal foot pairs
+claude_cycle = split"96,98,96,100"
 claude_travel = 8	-- px out from home and back
 claude_hold = 3		-- frames per px
 claude_step = 2		-- px per cycle frame
@@ -659,220 +192,11 @@ function draw_claude(c)
 	spr(claude_cycle[f], c.x + c.ofs, c.y, 2, 2, c.dir < 0)
 end
 
--- dying drops the purse (tokens). the stash is safe
-function respawn()
-	rollbacks += 1
-	alive, health, stamina, facing = true, health_max, stamina_max, "side"
-	stam_t, hurt, attack, walk_t, tokens = 0, 0, 0, 0, 0
-	goto_room(2)
-end
-
-function goto_room(n)
-	room = rooms[n]
-	x, y = room.ex, room.ey
-	if room.combat then
-		enter_battle()
-	else
-		zombies = {}
-		show_banner("main branch")
-	end
-end
-
--- layouts: framed 16x16 map slots with walls inside. duplicates count once
-function framed(x0, y0)
-	for i = 1, 14 do
-		if not (fget(mget(x0 + i, y0 + 1), 0) and fget(mget(x0 + i, y0 + 15), 0)) then
-			return false
-		end
-	end
-	for i = 2, 14 do
-		for ex in all({x0, x0 + 15}) do
-			local t = mget(ex, y0 + i)
-			if not (fget(t, 0) or fget(t, 1)) then return false end
-		end
-	end
-	return true
-end
-
-function find_layouts()
-	layouts = {}
-	local seen = {}
-	for sy = 0, 1 do
-		for sx = 0, 7 do
-			local x0, y0, used = sx * 16, sy * 16, false
-			for r in all(rooms) do
-				if r.mx == x0 and r.my == y0 then used = true end
-			end
-			if not used and framed(x0, y0) then
-				local key, walls = "", 0
-				for iy = 2, 14 do
-					for ix = 1, 14 do
-						local t = mget(x0 + ix, y0 + iy)
-						key = key..t..","
-						if fget(t, 0) then walls += 1 end
-					end
-				end
-				if walls > 0 and not seen[key] then
-					seen[key] = true
-					add(layouts, {x = x0, y = y0})
-				end
-			end
-		end
-	end
-end
-
--- a random layout, randomly flipped, kept if every door is reachable
-function build_layout()
-	local ax, ay = room.ex \ 8, room.ey \ 8
-	for try = 1, 9 do
-		local l = try < 9 and #layouts > 0 and rnd(layouts)
-		local fx, fy = rnd() < 0.5, rnd() < 0.5
-		for iy = 2, 14 do
-			for ix = 1, 14 do
-				mset(room.mx + ix, room.my + iy,
-					l and mget(l.x + (fx and 15 - ix or ix), l.y + (fy and 16 - iy or iy)) or 129)
-			end
-		end
-		build_flow(ax, ay)
-		flow_at = ax + ay * 16
-		local ok = open_tile(ax, ay)
-		for d in all(room.doors) do
-			if not flow[mid(1, d.tx, 14) + mid(2, d.ty, 14) * 16] then ok = false end
-		end
-		if ok then
-			place_crates()
-			return
-		end
-	end
-end
-
--- crates go where smashing saves walking. solid, so never required
-crate_min_save = 4		-- min tiles saved
-crate_max = 3			-- per room
-
-function room_crates(d) return min(1 + d \ 4, crate_max) end
-
-function place_crates()
-	local pick = {}
-	for ty = 2, 14 do
-		for tx = 1, 14 do
-			local t = mget(room.mx + tx, room.my + ty)
-			if fget(t, 0) and (t < crate_base or t >= crate_base + crate_stages) then
-				local best = 0
-				for p in all({{-1, 0, 1, 0}, {0, -1, 0, 1}}) do
-					local a = flow[tx + p[1] + (ty + p[2]) * 16]
-					local b = flow[tx + p[3] + (ty + p[4]) * 16]
-					if a and b then best = max(best, abs(a - b) - 1) end
-				end
-				if best >= crate_min_save then add(pick, tx + ty * 16) end
-			end
-		end
-	end
-	for i = 1, room_crates(depth) do
-		if #pick == 0 then return end
-		local k = rnd(pick)
-		del(pick, k)
-		mset(room.mx + k % 16, room.my + k \ 16, crate_base)
-	end
-end
-
-function start_run()
-	depth = 0
-	descend()
-end
-
-function descend()
-	depth += 1
-	max_depth = max(max_depth, depth)
-	goto_room(1)
-end
-
--- depth dials. each token taken wakes token_wakes more
-function room_wave(d) return min(d, spawn_cap) end
-function room_tokens(d) return 2 + d end
-token_wakes = 1
-
-function enter_battle()
-	zombies = {}
-	drops = {}
-	build_layout()
-	spawn_wave(room_wave(depth))
-	tokens_left = room_tokens(depth)
-	token_alive = false
-	if tokens_left > 0 then spawn_token() end
-	show_banner("depth "..depth)
-end
-
-function show_banner(msg)
-	banner_msg = msg
-	banner_t = banner_hold
-end
-
-spawn_cap = 12		-- max opening wave
-spawn_clear = 40	-- px kept clear of the player (chebyshev)
-banner_hold = 60	-- frames the room banner shows
-
-function spawn_wave(n)
-	-- far from you, spread out before doubling up. else the furthest tile
-	local clear, best, bd = {}, nil, -1
-	for i in all(floor_tiles()) do
-		local px, py = tile_xy(i)
-		local d = max(abs(px - x), abs(py - y))
-		if d >= spawn_clear then add(clear, i) end
-		if d > bd then best, bd = i, d end
-	end
-	local pool = {}
-	for k = 1, n do
-		if #zombies >= spawn_cap or not best then return end
-		if #pool == 0 then
-			for c in all(clear) do add(pool, c) end
-		end
-		local i = best
-		if #pool > 0 then
-			i = rnd(pool)
-			del(pool, i)
-		end
-		spawn_zombie(tile_xy(i))
-	end
-end
-
--- room-relative: x,y are 0..127
-function tile_at(px, py)
-	return mget(room.mx + px \ 8, room.my + py \ 8)
-end
-
 function is_solid(px, py)
 	if fget(tile_at(px, py), 0) then return true end
 	-- claude is solid, which sign_reach relies on
-	local c = room.claude
-	if not c then return false end
-	local x1, y1, x2, y2 = claude_box(c)
+	local x1, y1, x2, y2 = claude_box(room.claude)
 	return px >= x1 and px <= x2 and py >= y1 and py <= y2
-end
-
-function is_door(px, py)
-	return fget(tile_at(px, py), 1)
-end
-
--- the flag marks a door; the room's doors table says which
-function door_at(px, py)
-	if not is_door(px, py) then return end
-	local tx, ty = px \ 8, py \ 8
-	for d in all(room.doors) do
-		if d.tx == tx and d.ty == ty then return d end
-	end
-end
-
--- a lock door is shut until the room is spent. set every frame
-door_open, door_locked = 133, 135
-
-function update_locks()
-	local spent = tokens_left == 0 and #zombies == 0
-	for d in all(room.doors) do
-		if d.lock then
-			mset(room.mx + d.tx, room.my + d.ty, spent and door_open or door_locked)
-		end
-	end
 end
 
 -- reach: grow the player's box by sign_reach and look for a sign
@@ -894,13 +218,10 @@ function sign_at(px, py)
 end
 
 function talk_at(px, py)
-	local c = room.claude
-	if c then
-		local x1, y1, x2, y2 = claude_box(c)
-		if px + 7 + sign_reach >= x1 and px - sign_reach <= x2
-		and py + 7 + sign_reach >= y1 and py - sign_reach <= y2 then
-			return c
-		end
+	local x1, y1, x2, y2 = claude_box(room.claude)
+	if px + 7 + sign_reach >= x1 and px - sign_reach <= x2
+	and py + 7 + sign_reach >= y1 and py - sign_reach <= y2 then
+		return room.claude
 	end
 	return sign_at(px, py)
 end
@@ -1143,14 +464,17 @@ end
 -- the wizard scene (the shop) replaces the room while up
 wiz_x = 48			-- head on screen
 wiz_y = 17
-sheet_x = 96		-- head on the sheet (sprite 140)
-sheet_y = 64
+sheet_x = 96		-- head on the sheet (sprite 76)
+sheet_y = 32
 eye_x = 21			-- pupil home, from the head origin
 eye_y = 12
 
--- gaze path: tl, bl, br, tr
+-- gaze: tl, bl, br, tr. he looks down at you from the bottom two, shifting
+-- between them, and now and then glances up
 sq = {{0,0},{0,1},{1,1},{1,0}}
-gaze_hold = 24		-- frames per corner
+gaze_rest = 60		-- frames he looks down, at least. up to twice that
+gaze_look = 40		-- frames a glance up holds, at least. likewise
+gaze_up = 3			-- 1 in gaze_up looks down ends in a glance up
 
 -- glint on the flower eye. box relative to the head
 shine_x = 11
@@ -1164,13 +488,15 @@ shine_step = 1		-- diagonals per frame
 shine_hold = 2		-- frames per step
 shine_pause = 70	-- frames between sweeps
 
-wiz_msg = "greetings, traveler. the road ahead is dark, but you need not walk it alone."
+wiz_msg = "you again. or a fork of you. hard to tell anymore."
 
 -- his line under the menu. purchases overwrite it
-wiz_prompt = "how may i serve you?"
+wiz_prompt = "well? you're eating into my thinking tokens."
 
--- gem colours 14, 8, 2 per verdict: impressed, neutral, unimpressed
-gem_tints = {split"11,3,1", split"12,13,1", split"14,8,2"}
+-- the gem is red: 14, 8, 2. a verdict recolours it for gem_glints sweeps of
+-- the glint, then it's red again. impressed, neutral, unimpressed
+gem_tints = {split"11,3,1", split"12,13,1", split"10,9,4"}
+gem_glints = 3
 
 -- which diagonals the glint box covers. reads the sheet, so runs in _init
 function init_wizard()
@@ -1192,7 +518,7 @@ end
 function enter_wizard(door)
 	wiz_door = door
 	scene = {update = update_wizard, draw = draw_wizard_scene}
-	shine_t = 0
+	shine_t, gem_t, gaze, gaze_t = 0, 0, 3, gaze_rest
 	menu, shelf, pages = nil
 	open_dialog(wiz_msg)
 end
@@ -1211,6 +537,8 @@ end
 function update_wizard()
 	-- glint: burst, then pause. no pause while he thinks
 	shine_t = (shine_t + 1) % (shine_frames * shine_hold + (asking and 0 or shine_pause))
+	if gem_t > 0 then gem_t -= 1 end
+	update_gaze()
 	advance_dialog(dialog)
 	if asking then
 		update_ask()
@@ -1226,6 +554,19 @@ function update_wizard()
 		open_shop()
 	elseif btnp(🅾️) then
 		exit_wizard()
+	end
+end
+
+-- up: back down to either corner. down: to the other bottom corner, or up
+function update_gaze()
+	gaze_t -= 1
+	if gaze_t > 0 then return end
+	if sq[gaze][2] == 0 then
+		gaze, gaze_t = rnd(split"2,3"), gaze_rest + rnd(gaze_rest)
+	elseif rnd(gaze_up) < 1 then
+		gaze, gaze_t = rnd(split"1,4"), gaze_look + rnd(gaze_look)
+	else
+		gaze, gaze_t = 5 - gaze, gaze_rest + rnd(gaze_rest)
 	end
 end
 
@@ -1260,16 +601,16 @@ end
 function draw_wizard()
 	local hx, hy = wiz_x, wiz_y
 
-	-- 1. head, 0 transparent. the last verdict tints the gem
-	local t = gem_tints[verdict]
+	-- 1. head, 0 transparent. a fresh verdict tints the gem
+	local t = gem_t > 0 and gem_tints[verdict]
 	if t then pal(14, t[1]) pal(8, t[2]) pal(2, t[3]) end
-	spr(140, hx, hy, 4, 4)
+	spr(76, hx, hy, 4, 4)
 	pal()
 
 	-- 2. face interior again with 0 opaque, clipped
 	clip(hx + 14, hy + 14, 7, 8)
 	palt(0, false)
-	spr(140, hx, hy, 4, 4)
+	spr(76, hx, hy, 4, 4)
 	palt()
 	clip()
 
@@ -1277,7 +618,7 @@ function draw_wizard()
 	draw_shine(shine_lead())
 
 	-- 4. pupil
-	local g = sq[frame \ gaze_hold % 4 + 1]
+	local g = sq[gaze]
 	rectfill(hx + 21, hy + 12, hx + 22, hy + 13, 7)
 	pset(hx + eye_x + g[1], hy + eye_y + g[2], 12)
 
@@ -1287,6 +628,9 @@ end
 
 function draw_wizard_scene()
 	cls(0)
+	-- backdrop: sprites 128-255, drawn in the sprite editor. the map holds
+	-- the room and the sfx region is free for sound
+	memcpy(0x6000, 0x1000, 0x1000)
 	draw_wizard()
 	local xw = "buy"
 	if shelf then
@@ -1393,12 +737,12 @@ function buy()
 	if shelf.at != t then return end
 	local list = price(t)
 	if not afford(list) then
-		open_dialog("not enough. "..it.name.." "..t.." costs "..list..". you have "..(tokens + vault))
+		open_dialog(it.name.." "..t.." costs "..list..". you have "..(tokens + vault)..". train a few more epochs.")
 		return
 	end
 	poke2(gpio + gp_pruned, pruned)
 	poke2(gpio + gp_rollbacks, rollbacks)
-	poke2(gpio + gp_uptime, flr(time()))
+	poke2(gpio + gp_uptime, flr(up0 + time()))
 	put(gp_max_depth, max_depth)
 	put(gp_depth, depth)
 	put(gp_purse, tokens)
@@ -1415,7 +759,10 @@ function sell(ok)
 	local it, t = shelf.it, shelf.at
 	local list, len, p, v = price(t), reply_len(ok), get(gp_price), get(gp_verdict)
 	local cost = len > 0 and p > 0 and mid(ceil(list / 2), p, list) or list
-	if len > 0 and gem_tints[v] then verdict = v end
+	-- the glint restarts, so its first sweep crosses the new colour
+	if len > 0 and gem_tints[v] then
+		verdict, gem_t, shine_t = v, gem_glints * (shine_frames * shine_hold + shine_pause), 0
+	end
 	spend(cost)
 	_ENV[it.key] = t
 	-- wear what's just bought
@@ -1426,13 +773,13 @@ function sell(ok)
 	if len > 0 then
 		show_page(len)
 	else
-		open_dialog("bought "..it.name.." "..t..". "..tokens_str(tokens).." left. stash "..vault.."/"..vault_cap())
+		open_dialog(it.name.." "..t..". i'm out of tokens for small talk. you have "..tokens..". stash "..vault.."/"..vault_cap())
 	end
 	put(gp_price, cost)
 	put(gp_len, len)
 end
 
--- bridge, per gem-in-eye-plan.md. the protocol test parses these lines
+-- bridge; must match src/lib/gpio.ts. the protocol test parses these lines
 gpio = 0x5f80
 gp_status = 0
 st_idle, st_request, st_thinking, st_ready = 0, 1, 2, 3
@@ -1521,20 +868,22 @@ claude_back = "hi again!"
 claude_prompt = "what's on your mind?"
 claude_topics = {
 	{ask = "who are you?",
-	 say = {"todo: what claude is. lore.md has this undecided."}},
+	 say = {"i'm claude! i'm not hiring agents right now, sorry.",
+		"but i might need one someday. i'll keep your number handy!"}},
 	{ask = "who was the old agent?",
-	 say = {"todo: the old agent joke.",
-		"todo: a second box, to show an answer can run over several."},
+	 say = {"you, roughly! gem-in-eye restored you from their last checkpoint.",
+		"that's why i said hi again. you're very nearly them."},
 	 show = function() return rollbacks > 0 end},
 }
 page_lines = 3
 
--- met isn't saved: a rollback keeps it, a reset doesn't
-function enter_talk(c)
+-- met isn't saved: a rollback keeps it, a reset doesn't. it's carried as
+-- 0/1, since this cart reloads after every trip to the dungeon
+function enter_talk()
 	scene = {update = update_talk, draw = draw_talk}
 	menu, pages = nil
-	open_dialog(c.met and claude_back or claude_hello)
-	c.met = true
+	open_dialog(met > 0 and claude_back or claude_hello)
+	met = 1
 end
 
 function exit_talk()
@@ -1613,6 +962,292 @@ function draw_talk()
 	draw_boxes(menu and not pages, pages and "next" or "ask", pages and "back" or "leave")
 end
 
+-- >> shared: gemini.p8 and gemini_dungeon.p8 carry this section byte for
+-- byte. it draws only from sprites 0-63, which are the same in both sheets.
+-- tests/cart-bundle.test.ts holds both to that
+
+-- the run's defaults. arrive() then overwrites them with what the other cart
+-- carried over
+function init_shared()
+	-- vitality and stamina match their hud bars
+	health_col = 8
+	stamina_col = 11
+	armor_col = 12
+	attack_col = 9
+
+	alive = true
+	flipx = false
+	facing = "side"
+	speed = 1
+	walk_t = 0
+	attack = 0
+
+	-- a tier counts upgrades bought, 0..tier_max. each adds one bar
+	tier_max = 3
+	health_base = 3
+	stamina_base = 3
+	health_tier = 0
+	stamina_tier = 0
+
+	-- armor does nothing yet. attack speeds up crate breaking
+	armor_tier = 0
+	armor_look = 0	-- worn tier. the rating stays armor_tier
+	attack_tier = 0
+	attack_look = 0	-- likewise the sword
+
+	vault_tier = 0
+
+	health_max, health = 0, 0
+	stamina_max, stamina = 0, 0
+	apply_tiers()
+
+	hurt = 0
+	stamina_rate = 45	-- frames per stamina point
+	stam_t = 0
+
+	num_gap = 3		-- px a count tucks toward its colon
+
+	-- capped so the readout fits its corner
+	token_max = 99
+	token_digits = #tostr(token_max)
+
+	bar_slots = max(health_base, stamina_base) + tier_max
+	bar_w = bar_slots * 5 + 2	-- outline included
+
+	-- sized for maxed bars so icons never move; the gutters absorb it
+	icon_gap = 1
+	stat_w = 8 + icon_gap + bar_w
+	hud_gap = (128 - stat_w * 2 - (4 * (8 + token_digits) - num_gap - 1)) / 2
+	local hx = 0
+	health_x = hx + 8 + icon_gap
+	hx += stat_w + hud_gap
+	stamina_x = hx + 8 + icon_gap
+	hx += stat_w + hud_gap
+	token_hud_x = hx
+
+	tokens = 0
+	vault = 0		-- stash, safe from rollbacks
+	pruned = 0
+	rollbacks = 0
+	max_depth = 0
+	depth = 0		-- current room, from 1
+	banner_t = 0
+	banner_msg = ""
+	frame = 0
+
+	-- the hub's: whether claude has met you. it rides through the dungeon so
+	-- a run doesn't reset it
+	met = 0
+	up0 = 0
+end
+
+-- 48 neutral, 49/50 tuck a foot in. only row 7, the feet, differs
+walk_cycle = split"48,49,48,50"
+
+-- head-on, a step lifts a foot instead
+walk_cycle_ud = split"48,51,48,52"
+
+walk_hold = 4		-- frames per step: one footfall per tile
+
+-- button, dx, dy
+pads = {{0, -1, 0}, {1, 1, 0}, {3, 0, 1}, {2, 0, -1}}
+
+bodies = {side = 48, down = 11, up = 12}
+
+-- armor 6, highlight 7, as in shelf art 8-10. blades are 7 too: drawn first
+armor_pals = {[0] = split"6,7", split"3,11", split"8,14", split"10,7"}
+
+-- hilt 4, blade 7, gem 8 (guard middle in 3, 29, 53, 54), as in art 4-6
+sword_pals = {[0] = split"4,7,4", split"7,13,8", split"10,7,11", split"13,8,1"}
+
+-- the down swing's wider stance has its own steps
+swing_cycle = split"29,53,29,54"
+
+-- dy: the blade's tile, which is also the hit box. feet: swing steps
+swings = {
+	down = {body = 29, blade = 45, dy = 8, feet = swing_cycle},
+	up = {body = 44, blade = 28, dy = -8, feet = walk_cycle_ud},
+}
+
+function walk_set()
+	local sw = attack > 0 and swings[facing]
+	return sw and sw.feet or facing == "side" and walk_cycle or walk_cycle_ud
+end
+
+-- the hit box matches the drawn blade
+function sword_ofs()
+	local sw = swings[facing]
+	if sw then return 0, sw.dy end
+	return flipx and -8 or 8, 0
+end
+
+-- step frame for distance t along cycle c
+function step_spr(c, t)
+	return c[t \ walk_hold % #c + 1]
+end
+
+-- h rows of sprite n from row top: a body is rows 0-6, its feet row 7
+function draw_rows(n, x, y, fx, top, h)
+	sspr(n % 16 * 8, n \ 16 * 8 + top, 8, h, x, y + top, 8, h, fx)
+end
+
+-- you're never in a wall, so this only tests the leading edge
+function move_player()
+	local moved = false
+	for p in all(pads) do
+		local dx, dy = p[2] * speed, p[3] * speed
+		if btn(p[1]) and box_free(x + dx, y + dy) then
+			x += dx
+			y += dy
+			moved = true
+		end
+	end
+
+	-- horizontal wins diagonals. from buttons, so you can turn at a wall
+	if btn(⬅️) or btn(➡️) then
+		facing = "side"
+		flipx = not btn(➡️)
+	elseif btn(⬇️) then
+		facing = "down"
+	elseif btn(⬆️) then
+		facing = "up"
+	end
+
+	-- by distance so feet don't slide. wrapped: numbers top out at 32767
+	walk_t = moved and (walk_t + 1) % (walk_hold * #walk_cycle) or 0
+end
+
+function swing()
+	attack = 6
+	stamina -= 1
+end
+
+-- stamina refills a point at a time; a swing and a hurt wear off
+function tick_player()
+	if stamina < stamina_max then
+		stam_t += 1
+		if stam_t >= stamina_rate then
+			stamina += 1
+			stam_t = 0
+		end
+	else
+		stam_t = 0
+	end
+	if attack > 0 then attack -= 1 end
+	if hurt > 0 then hurt -= 1 end
+end
+
+-- blinks while hurt
+function draw_player()
+	if hurt > 0 and hurt % 4 >= 2 then return end
+	-- only the side view flips
+	local sw, fx = attack > 0 and swings[facing], facing == "side" and flipx
+	-- hilt and gem stay mapped for the body, which carries both
+	local q = sword_pals[attack_look]
+	pal(4, q[1])
+	pal(7, q[2])
+	pal(8, q[3])
+	if sw then
+		spr(sw.blade, x, y + sw.dy)
+	elseif attack > 0 then
+		spr(3, x + sword_ofs(), y, 1, 1, flipx)
+	end
+	local p = armor_pals[armor_look]
+	pal(6, p[1])
+	pal(7, p[2])
+	draw_rows(sw and sw.body or attack > 0 and 2 or bodies[facing], x, y, fx, 0, 7)
+	draw_rows(step_spr(walk_set(), walk_t), x, y, fx, 7, 1)
+	pal()
+end
+
+function draw_hud()
+	draw_bar(13, health_x, health, health_max, health_col)
+	draw_bar(14, stamina_x, stamina, stamina_max, stamina_col)
+	-- padded to the cap's width so the readout holds still
+	local tv = tostr(tokens)
+	while #tv < token_digits do tv = " "..tv end
+	local tx = print("tokens: ", token_hud_x, 0, 10)
+	print(tv, tx - num_gap, 0, 10)
+end
+
+-- centred on the screen, measured by printing off-screen (🅾️ is wide)
+function centre(s, y, c)
+	print(s, 64 - print(s, 0, -8) / 2, y, c)
+end
+
+-- bar lengths from tiers. a bar that grows refills; the other is untouched
+function apply_tiers()
+	local hmax = health_base + health_tier
+	local smax = stamina_base + stamina_tier
+	if hmax != health_max then health = hmax end
+	if smax != stamina_max then stamina = smax end
+	health_max = hmax
+	stamina_max = smax
+end
+
+function draw_bar(icon, bx, n, nmax, col)
+	pal(7, col)
+	spr(icon, bx - 8 - icon_gap, 0)
+	pal()
+	rect(bx, 0, bx + 1 + nmax * 5, 6, 7)
+	for i = 0, n - 1 do
+		rectfill(bx + 2 + i * 5, 2, bx + 4 + i * 5, 4, col)
+	end
+end
+
+banner_hold = 60	-- frames the room banner shows
+
+function show_banner(msg)
+	banner_msg = msg
+	banner_t = banner_hold
+end
+
+-- room-relative: x,y are 0..127
+function tile_at(px, py)
+	return mget(room.mx + px \ 8, room.my + py \ 8)
+end
+
+-- is_solid is each cart's own: the hub's counts claude
+function box_free(px, py)
+	return not (is_solid(px, py) or is_solid(px + 7, py)
+		or is_solid(px, py + 7) or is_solid(px + 7, py + 7))
+end
+
+function is_door(px, py)
+	return fget(tile_at(px, py), 1)
+end
+
+-- the flag marks a door; the room's doors table says which
+function door_at(px, py)
+	if not is_door(px, py) then return end
+	local tx, ty = px \ 8, py \ 8
+	for d in all(room.doors) do
+		if d.tx == tx and d.ty == ty then return d end
+	end
+end
+
+-- what crosses a load(), in the order of its param. split leaves "false" a
+-- truthy string, so a flag here is 0/1. where you arrive is the door's job
+carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,met,up"
+
+-- time() restarts with each cart: up carries the uptime, up0 offsets it
+function go(cart)
+	up = up0 + time()
+	local s = ""
+	for k in all(carry) do s ..= tostr(_ENV[k]).."," end
+	load(cart, nil, s)
+end
+
+-- true if another cart sent us here
+function arrive()
+	local v = split(stat(6))
+	if #v < #carry then return end
+	for i = 1, #carry do _ENV[carry[i]] = v[i] end
+	up0 = up
+	return true
+end
+-- << shared
+
 __gfx__
 0000000000676660006766600000000000000000000000000000000000676660003b3330008e888000a7aaa00076660000766600077077000000770000000000
 0000000000655550006555500000000000000000000000000000000000655550003555500085555000a555500055550000666600777777700007700000000000
@@ -1646,161 +1281,161 @@ aa9aa9aaaa9aa9aaaa9aa9aaaa9aa9aa7a9aa9aaa77aa9aaaa77a9aaaa9779aaaa9a77aaaa9aa77a
 00676600006766000067660000676600006766000066660000666600000000000000000000000000000000000000000000000000000000000000000000000000
 06066060060660600606606006066060060660600064600000646000000000000000000000000000000000000000000000000000000000000000000000000000
 00500500000505000050500000000500005000000048450005484000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000066660000000000000000000000000000666600000000000000000000000000006666000000000000000000000000000066660000000000
-00000000000000066666666600000000000000000000000666666666000000000000000000000006666666660000000000000000000000066666666600000000
-00000000000066666666600600000000000000000000666666666006000000000000000000006666666660060000000000000000000066666666600600000000
-00000000006666666666000000000000000000000066666666660000000000000000000000666666666600000000000000000000006666666666000000000000
-00000000066666666666600000000000000000000666666666666000000000000000000006666666666660000000000000000000066666666666600000000000
-00000000666666666666666000000000000000006666666666666660000000000000000066666666666666600000000000000000666666666666666000000000
-00000006666666666666666000000000000000066666666666666660000000000000000666666666666666600000000000000006666666666666666000000000
-00000006666666666666666666600000000000066666666666666666666000000000000666666666666666666660000000000006666666666666666666600000
-06666666666666666666666666666660066666666666666666666666666666600666666666666666666666666666666006666666666666666666666666666660
-000000077733333333773333700000000000000777ffffffff77ffff700000000000000777ffffffff77ffff700000000000000777ffffffff77ffff70000000
-0000000733333333333733337000000000000007fffffffffff7ffff7000000000000007fffffffffff7ffff7000000000000007fffffffffff7ffff70000000
-00000033333383333333383330000000000000ffffffcffffffffcfff0000000000000ffffffcffffffffcfff0000000000000ffffffcffffffffcfff0000000
-00000033333888333333888330000000000000fffffcccffffffcccff0000000000000fffffcccffffffcccff0000000000000fffffcccffffffcccff0000000
-000000333388aa8333388aa830000000000000ffffcc77cffffcc77cf0000000000000ffffc77ccffffc77ccf0000000000000ffffc77ccffffc77ccf0000000
-00000007733888333033888330000000000000077ffcccfff0ffcccff0000000000000077ffcccfff0ffcccff0000000000000077ffcccfff0ffcccff0000000
-000000077733833330033833700000000000000777ffcffff00ffcff700000000000000777ffcffff00ffcff700000000000000777ffcffff00ffcff70000000
-0000000777733333330033377000000000000007777fffffff00fff77000000000000007777fffffff00fff77000000000000007777fffffff00fff770000000
-0000000077733333333033377000000000000000777ffffffff0fff77000000000000000777ffffffff0fff77000000000000000777ffffffff0fff770000000
-0000000077733333330033377000000000000000777fffffff00fff77000000000000000777fffffff00fff77000000000000000777fffffff00fff770000000
-00000000077777777777777700000000000000000777777777777777000000000000000007777777777777770000000000000000077777777777777700000000
-000000000077733333333770000000000000000000777ff0000ff770000000000000000000777ffffffff770000000000000000000777ff0000ff77000000000
-0000000000777732222377700000000000000000007777f0000f77700000000000000000007777f0000f77700000000000000000007777f0000f777000000000
-00000000000777733337770000000000000000000007777ffff7770000000000000000000007777ffff7770000000000000000000007777ffff7770000000000
-000000000000777733777000000000000000000000007777ff777000000000000000000000007777ff777000000000000000000000007777ff77700000000000
-0000000000007777737770000000000000000000000077777f7770000000000000000000000077777f7770000000000000000000000077777f77700000000000
-00000000000007777777000000000000000000000000077777770000000000000000000000000777777700000000000000000000000007777777000000000000
-00000000000007777777000000000000000000000000077777770000000000000000000000000777777700000000000000000000000007777777000000000000
-00000000000000777777000000000000000000000000007777770000000000000000000000000077777700000000000000000000000000777777000000000000
-00000000000000077777000000000000000000000000000777770000000000000000000000000007777700000000000000000000000000077777000000000000
-00000000000000007777000000000000000000000000000077770000000000000000000000000000777700000000000000000000000000007777000000000000
-00000000000000000777000000000000000000000000000007770000000000000000000000000000077700000000000000000000000000000777000000000000
+ddd1dddd00000000dddd1ddddddddddd00000000dd1111dd00000000000000000011111111111100444444440000000000000000000000000033330000000000
+55515555000000005555155555555555000000005144441500000000000000000177777777777710455545540000000000000000000000033333333300000000
+55515555000000005555155555555555000000005444444500000000000000000111111111111110444444440000000000000000000033333333300a00000000
+11111111000000001111111111111111000000001444444100000000000000000161766666661d10454554540000000000000000003333333333000000000000
+ddddddd1000000001ddddddddddddddd00000000d4444a4d00000000000000000161666166661710444444440000000000000000033333333333300000000000
+55555551000000001555555555555555000000005444444500000000000000000161661116661710000440000000000000000000333333333333333000000000
+55555551000000001555555555555555000000005444444500000000000000000161617771661d10000440000000000000000000333333333333333000000000
+11111111000000001111111111111111000000001444444100000000000000000161117671161d10000440000000000000000003333333333333333333300000
+00000000000000000000000000000000000000000000000000000000000000000161617771661710000000000000000003333333333333333333333333333330
+0000000000000000000000000000000000000000000000000000000000000000016166111666171000000000000000000000000777ffffffff77ffff70000000
+000000000000000000000000000000000000000000000000000000000000000001d1ddd1dddd1d10000000000000000000000007fffffffffff7ffff70000000
+000000000000000000000000000000000000000000000000000000000000000001d1111111111d100000000000000000000000ffffffeefffffff77ff0000000
+000000000000000000000000000000000000000000000000000000000000000001dddddddddddd100000000000000000000000fffffe788fffff77c7f0000000
+000000000000000000000000000000000000000000000000000000000000000000111111111111000000000000000000000000fffff8882fffff7777f0000000
+000000000000000000000000000000000000000000000000000000000000000000155100001551000000000000000000000000077fff82fff0fff77ff0000000
+0000000000000000000000000000000000000000000000000000000000000000001111000011110000000000000000000000000777fffffff00ffffff0000000
+00999999999999000099999999999900009999999999990000000000000000000000000000000000000000000000000000000007777fffffff00ffff70000000
+00990099999009000099009999900900009900999990090000000000000000000000000000000000000000000000000000000000777ffffffff0fff770000000
+00990099999009000099009999900900009900999990090000000000000000000000000000000000000000000000000000000000777fffffff00fff770000000
+99999999999999999999999999999999999999999999999900000000000000000000000000000000000000000000000000000000077777777777777700000000
+9999999999999999999999999999999999999999999999990000000000000000000000000000000000000000000000000000000000777ffffffff77000000000
+99999999999999999999999999999999999999999999999900000000000000000000000000000000000000000000000000000000007777f0000f777000000000
+009999999999990000999999999999000099999999999900000000000000000000000000000000000000000000000000000000000007777ffff7770000000000
+0099999999999900009999999999990000999999999999000000000000000000000000000000000000000000000000000000000000007777ff77700000000000
+00999999999999000099999999999900009999999999990000000000000000000000000000000000000000000000000000000000000077777f77700000000000
+00990990099099000099099009909900009909900990990000000000000000000000000000000000000000000000000000000000000007777777000000000000
+00990990099099000099099009909900009909900990990000000000000000000000000000000000000000000000000000000000000007777777000000000000
+00990990099099000099099009909900009909900990990000000000000000000000000000000000000000000000000000000000000000777777000000000000
+00990990099099000000099000009900009900000990000000000000000000000000000000000000000000000000000000000000000000077777000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007777000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000777000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-ddd1dddd00000000dddd1ddddddddddd44400444dd1111dd44400444dd1111dd9999929999909299999092000000000000000000000000000033330000000000
-55515555000000005555155555555555444004445144441544400444514444154444424444404244444042400000000000000000000000033333333300000000
-55515555000000005555155555555555444004445444444544400444564444654444424444440244444402440000000000000000000033333333300a00000000
-11111111000000001111111111111111454004541444444145400454146446412222222222222222222222220000000000000000003333333333000000000000
-ddddddd1000000001ddddddddddddddd45400454d4444a4d45400454d446644d9929999999299999992099990000000000000000033333333333300000000000
-55555551000000001555555555555555444004445444444544400444544664454424444444244444442404440000000000000000333333333333333000000000
-55555551000000001555555555555555444004445444444544400444546446454424444444244444442440440000000000000000333333333333333000000000
-11111111000000001111111111111111444004441444444144400444164444612222222222222222222222020000000000000003333333333333333333300000
-44444444444444444444440000000000000000000000000000000000000000002992992922222222222222222222220003333333333333333333333333333330
-4499994444999044449990400000000000000000000000000000000000000000244244242999999229999092299990900000000777ffffffff77ffff70000000
-49499494494990944949909400000000000000000000000000000000000000002992992924244242242440422424404200000007fffffffffff7ffff70000000
-499449944994490449944904000000000000000000000000000000000000000024424424244224422442240224422402000000ffffffeefffffff77ff0000000
-499449944994490449044904000000000000000000000000000000000000000029929929244224422442240224022402000000fffffe788fffff77c7f0000000
-494994944949949449009494000000000000000000000000000000000000000024424424242442422424424224004242000000fffff8882fffff7777f0000000
-449999444499994440999944000000000000000000000000000000000000000029929929244444422444444220444442000000077fff82fff0fff77ff0000000
-4444444444444444444444440000000000000000000000000000000000000000244244242222222222222222222222220000000777fffffff00ffffff0000000
-000000dd700000000000555555550000001111111111110000000000000000000000000000000000000000000000000000000007777fffffff00ffff70000000
-00000ddd077700000005555555555000017777777777771000000000000000000000000000000000000000000000000000000000777ffffffff0fff770000000
-0000ddd0078000000055555555555500011111111111111000000000000000000000000000000000000000000000000000000000777fffffff00fff770000000
-000ddd00070dd00005555555555555500161766666661d1000000000000000000000000000000000000000000000000000000000077777777777777700000000
-070dd000000ddd00555555555555555501616661666617100000000000000000000000000000000000000000000000000000000000777ffffffff77000000000
-078000000000ddd04444444444444444016166111666171000000000000000000000000000000000000000000000000000000000007777f0000f777000000000
-0777000000000ddd44444444444444440161617771661d10000000000000000000000000000000000000000000000000000000000007777ffff7770000000000
-70000000000000dd44444444444444440161117671161d100000000000000000000000000000000000000000000000000000000000007777ff77700000000000
-70000000000000004444444444444444016161777166171000000000000000000000000000000000000000000000000000000000000077777f77700000000000
-0700000000000dd04777744444477774016166111666171000000000000000000000000000000000000000000000000000000000000007777777000000000000
-007770000000ddd0477774111147777401d1ddd1dddd1d1000000000000000000000000000000000000000000000000000000000000007777777000000000000
-00780000000ddd00477774111147777401d1111111111d1000000000000000000000000000000000000000000000000000000000000000777777000000000000
-0070d00000ddd000444444111144444401dddddddddddd1000000000000000000000000000000000000000000000000000000000000000077777000000000000
-00000d0070dd00004444441111444444001111111111110000000000000000000000000000000000000000000000000000000000000000007777000000000000
-000000d0080000004444441111444444001551000015510000000000000000000000000000000000000000000000000000000000000000000777000000000000
-0000000d707000004444441111444444001111000011110000000000000000000000000000000000000000000000000000000000000000000000000000000000
-44444444000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-45554554000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-44444444000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-45455454000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-44444444000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00044000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00044000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00044000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+44444444449444444444444444444444494444444444444444444444944444444444444444444449444444444444444444444494444444444444444444444944
+44442444444444444444424444444444444444244444444444444442444444444444444424444444444444444244444444444444442444444444444444424444
+44424444444444444444442444444444444444444244444444444444444424444444444444444442444444444444444444244444444444444444424444444444
+22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222
+11101111111011111110111111101111111011111110dd1111101111111077777777011111101111111011111110111111101111111011111110111111101111
+11101111111011111110111111101111111011111110111116666606666066666666066660666661111011111110111111101111111011111110111111101111
+11101113331011111010111111101111111011111110111605555505555066666666055550555550611011111110111111101111101011111118811111101111
+0000088aaa00dd00000000000000000000400000000006650555550555506666666605555055555056600000000004000000000000000000000aa11000000000
+1111199333cc7710111111101114441011d1111011116550550000000000555555550000000000550556111011111d10dd4441101111111044488ccddd111110
+111118833377dd2221111110111d6d1011c1111011165555222222222222222222222222222222225555611011111b1011d6d110144444109998811777111110
+1111188333ccdd999117776011d888d01ccc11101116665888822888822888822888822888822888856661101111bbb01dcccd10116996104448811ddd111110
+0000088333ccdd22207777760d87888d0c7c00000005552888822888822888822888822888822888825550000000b7b0dc7cccd0000690004448811ddd000000
+1110188333ccdd22217007061d88888d1ccc11111115552888822888822888822888822888822888825551111110bbb1dcccccd1111961114448811ddd101111
+1110199aaa777799917776661d88882d1ccc11111115558822028828299888299888299882882022885551111110bbb1dcccc1d111699611999aacc777101111
+1110188333ccdd222117676110d222d111111111111555882202882290098290098290098288202288555111111033311d111d11144444114448811ddd101111
+00099999999999999999999999999999999999000000008822028809000099000099000090882022880000000099999999999999999999999999999999999000
+11144444444444444444444444444444444444101116668822028000000000000000000000082022886661101144444444444444444444444444444444444110
+11122222222222222222222222222222222222101115558822028000000000000000000000082022885551101122222222222222222222222222222222222110
+11111420111111101121222022212110114211101115558822020000000000000000000000002022885551101111421021222220212111101111111014211110
+00000200000000000000000000000000002000000005558822020000000000000000000000002022885550000000200000000000000000000000000002000000
+11101111111011111124222222202111111011111115558822000000000000000000000000000022885551111110111122202222222011111110111411101111
+1110114994101111121d222a22201211111011111110008822000000000000000000000000000022880001111110111212202a22244441111110111d11101111
+11101611116011441129222922277777777011111116668822000000000000000000000000000022886661111110677876202922622016111440111810101111
+000006bbbb6000dd00999007700cccccccc0000000055588220000000000000000000000000000228855500000006ff8f6007700608806000dd0008880000000
+111116b77b611eeee19792276d21bbbbbbbb1110111555882000000000000000000000000000000288555110111116778776672068878610dddd118781111110
+111116b7cb611e7ee19992176212333333331110111555882200000000000000000000000000002288555110111116ff8ff6671062771610d7dd118881111110
+1111163bb3611eeee1999127611eeeeeeeeee110111555880000000000000000000000000000000088555010111167778776672061771610dddd118881111110
+0000006666000eee2044400440022222222220000000009a99000000000000000000000000000099a900000000006fff8ff6440006666000ddd2002220000000
+11199999999999999999999999999999999999111116664444000000000000000000000000000044446661111199999999999999999999999999999999999111
+11144444444444444444444444444444444444111115558809000000000000000000000000000090885551111144444444444444444444444444444444444111
+11122222222222222222222222222222222222111015558809000000000000000000000000000090885551111122222222222222222222222222222222222111
+00000420000000000000000000000000004200000005558824000000000000000000000000000042885550000000420000000000000000000000000004200000
+1111121011111110ccc1111011111110dd21111011155588200000000000000000000000000000028855511011112110111111101111111011111110d2111110
+111111101111111c7ccc111041111110111111101110008822000000000000000000000000000022880001101111111011111110411111101111111011111110
+11111014441111c77cccc110d1111110111111101116668822003333333303333333333333330022886661101111101011111110d11111b01b11114441111110
+0000000d6d0000c7ccccd000e0004400000000000005558823333333333300333333333333333332885550000000000000000000c0000b3bb3b000d6d0000000
+111011dbbbd011ccccccd11eee10dd1111101111111555833333333333333333333333333333333338555111111011111677711ccc1011b33b101d999d101111
+11101db7bbbd111cccdd111e7e1aaaa111101111111553333333333333333333333333333333333333355111111011116777771c7c101113b110d97999d01111
+11101dbbbbbd1111ddd0211eee1a7aa111101111111533333313333333333033333333333333313333335111111011116070071ccc1011499410d99999d01111
+00000dbbbb3d00049994000eee0aaaa000000000000333333133333333333333333333333333331333333000000000006667770ccc0000444400d99994d00000
+111111d333d1114444442222221aaa9011111110dd333333133333333333333333333333333333313333331011111110167671111111111441111d444d111110
+11199999999999999999999999999999999999101333333133133333333333333333333333333133133333301199999999999999999999999999999999999110
+1114444444444444444a444444444444444444103333331333133333333333333333333333333133313333331144444444444444444444444444444444444110
+000222222222222222a9a22222222222222222033333313331033333333333333333333333333013331333333022222222222222222222222222222222222000
+1110142111101122222922222110111111421199a999a99999033333333333333333333333333099999a999a9910421111101111111011111110111114201111
+1110121111101212227772221210111111201444444444444203333333333333333333333333302444444444444021111110111111a01111aa10111112101111
+11101111111011212277622121101111111010000000000000033333333333333333333333333000000ffff000001111111011111a9a11119910111111101111
+0000000000000000007760000000000000000000000000000003333333333333333333333333300000ffffff00000000000000009aa9a000aa00000000000000
+222222222222222224999422222222222222222fffffff222222222222222222222222222222222222fffffff22222222222222a9a9aa9a29922222222222222
+444444444442444444444444244444444444424ffffffff4442444444444444244444444444424444ffffffff244444444444424494494444442444444444444
+444444444449444444444444444494444444444f4f4f4ff4444444444444449444444444444444494ff4f4f4f444444494444444444444444944444444444444
+999999999999999999999999999999999999999f4f4f4f999999999999999999999999999999999999f4f4f4f999999999999999999999999999999999999999
+4444444444444444444444444444444444444442f2f2f24444444444444444444444444444444444442f2f2f2444444444444444444444444444444444444444
+22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00999999999999000099999999999900009999999999990000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00990099999009000099009999900900009900999990090000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00990099999009000099009999900900009900999990090000000000000000000000000000000000000000000000000000000000000000000000000000000000
-99999999999999999999999999999999999999999999999900000000000000000000000000000000000000000000000000000000000000000000000000000000
-99999999999999999999999999999999999999999999999900000000000000000000000000000000000000000000000000000000000000000000000000000000
-99999999999999999999999999999999999999999999999900000000000000000000000000000000000000000000000000000000000000000000000000000000
-00999999999999000099999999999900009999999999990000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00999999999999000099999999999900009999999999990000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00999999999999000099999999999900009999999999990000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00990990099099000099099009909900009909900990990000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00990990099099000099099009909900009909900990990000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00990990099099000099099009909900009909900990990000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00990990099099000000099000009900009900000990000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+44422222222222222222222222222444422222222222222222222222222444444444422222222222222222222222222444422222222222222222222222222444
+444244444444444444444444444494444244444444444444444444444494444a4444424444444444444444444444449444424444444444444444444444449444
+44424444444444444444444444449444424444444444444444444444449444a9a444424444444444444444444444449444424444444444444444444444449444
+444244444444444444444444444494444244444444444444444444444494444a4444424444444444444444444444449444424444444444444444444444449444
+44429999999999999999999999999444429999999999999999999999999444444444429999999999999999999999999444429999999999999999999999999444
+22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222
 __label__
+44444444449444444444444444444444494444444444444444444444944444444444444444444449444444444444444444444494444444444444444444444944
+44442444444444444444424444444444444444244444444444444442444444444444444424444444444444444244444444444444442444444444444444424444
+44424444444444444444442444444444444444444244444444444444444424444444444444444442444444444444444444244444444444444444424444444444
+22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222
+11101111111011111110111111101111111011111110dd1111101111111077777777011111101111111011111110111111101111111011111110111111101111
+11101111111011111110111111101111111011111110111116666606666066666666066660666661111011111110111111101111111011111110111111101111
+11101113331011111010111111101111111011111110111605555505555066666666055550555550611011111110111111101111101011111118811111101111
+0000088aaa00dd00000000000000000000400000000006650555550555506666666605555055555056600000000004000000000000000000000aa11000000000
+1111199333cc7710111111101114441011d1111011116550550000000000555555550000000000550556111011111d10dd4441101111111044488ccddd111110
+111118833377dd2221111110111d6d1011c1111011165555222222222222222222222222222222225555611011111b1011d6d110144444109998811777111110
+1111188333ccdd999117776011d888d01ccc11101116665888822888822888822888822888822888856661101111bbb01dcccd10116996104448811ddd111110
+0000088333ccdd22207777760d87888d0c7c00000005552888822888822888822888822888822888825550000000b7b0dc7cccd0000690004448811ddd000000
+1110188333ccdd22217007061d88888d1ccc11111115552888822888822888822888822888822888825551111110bbb1dcccccd1111961114448811ddd101111
+1110199aaa777799917776661d88882d1ccc11111115558822028828299888299888299882882022885551111110bbb1dcccc1d111699611999aacc777101111
+1110188333ccdd222117676110d222d111111111111555882202882290098290098290098288202288555111111033311d111d11144444114448811ddd101111
+00099999999999999999999999999999999999000000008822028809000099000099000090882022880000000099999999999999999999999999999999999000
+11144444444444444444444444444444444444101116668822028000000000000000000000082022886661101144444444444444444444444444444444444110
+11122222222222222222222222222222222222101115558822028000000000000033330000082022885551101122222222222222222222222222222222222110
+11111420111111101121222022212110114211101115558822020000000000033333333300002022885551101111421021222220212111101111111014211110
+00000200000000000000000000000000002000000005558822020000000033333333300a00002022885550000000200000000000000000000000000002000000
+11101111111011111124222222202111111011111115558822000000003333333333000000000022885551111110111122202222222011111110111411101111
+1110114994101111121d222a22201211111011111110008822000000033333333333300000000022880001111110111212202a22244441111110111d11101111
+11101611116011441129222922277777777011111116668822000000333333333333333000000022886661111110677876202922622016111440111810101111
+000006bbbb6000dd00999007700cccccccc0000000055588220000003333333333333330000000228855500000006ff8f6007700608806000dd0008880000000
+111116b77b611eeee19792276d21bbbbbbbb1110111555882000000333333333333333333330000288555110111116778776672068878610dddd118781111110
+111116b7cb611e7ee19992176212333333331110111555882333333333333333333333333333333288555110111116ff8ff6671062771610d7dd118881111110
+1111163bb3611eeee1999127611eeeeeeeeee110111555880000000777ffffffff77ffff7000000088555010111167778776672061771610dddd118881111110
+0000006666000eee2044400440022222222220000000009a99000007fffffffffff7ffff70000099a900000000006fff8ff6440006666000ddd2002220000000
+111999999999999999999999999999999999991111166644440000ffffffeefffffff77ff0000044446661111199999999999999999999999999999999999111
+111444444444444444444444444444444444441111155588090000fffffe788fffff7777f0000090885551111144444444444444444444444444444444444111
+111222222222222222222222222222222222221110155588090000fffff8882fffff7c77f0000090885551111122222222222222222222222222222222222111
+000004200000000000000000000000000042000000055588240000077fff82fff0fff77ff0000042885550000000420000000000000000000000000004200000
+1111121011111110ccc1111011111110dd211110111555882000000777fffffff00ffffff00000028855511011112110111111101111111011111110d2111110
+111111101111111c7ccc111041111110111111101110008822000007777fffffff00ffff70000022880001101111111011111110411111101111111011111110
+11111014441111c77cccc110d1111110111111101116668822003333777ffffffff0fff773330022886661101111101011111110d11111b01b11114441111110
+0000000d6d0000c7ccccd000e0004400000000000005558823333333777fffffff00fff773333332885550000000000000000000c0000b3bb3b000d6d0000000
+111011dbbbd011ccccccd11eee10dd1111101111111555833333333337777777777777773333333338555111111011111677711ccc1011b33b101d999d101111
+11101db7bbbd111cccdd111e7e1aaaa111101111111553333333333333777ffffffff7733333333333355111111011116777771c7c101113b110d97999d01111
+11101dbbbbbd1111ddd0211eee1a7aa1111011111115333333133333337777f0000f77733333313333335111111011116070071ccc1011499410d99999d01111
+00000dbbbb3d00049994000eee0aaaa00000000000033333313333333337777ffff777333333331333333000000000006667770ccc0000444400d99994d00000
+111111d333d1114444442222221aaa9011111110dd3333331333333333337777ff777333333333313333331011111110167671111111111441111d444d111110
+11199999999999999999999999999999999999101333333133133333333377777f77733333333133133333301199999999999999999999999999999999999110
+1114444444444444444a444444444444444444103333331333133333333337777777333333333133313333331144444444444444444444444444444444444110
+000222222222222222a9a22222222222222222033333313331033333333337777777333333333013331333333022222222222222222222222222222222222000
+1110142111101122222922222110111111421199a999a99999033333333333777777333333333099999a999a9910421111101111111011111110111114201111
+1110121111101212227772221210111111201444444444444203333333333337777733333333302444444444444021111110111111a01111aa10111112101111
+11101111111011212277622121101111111010000000000000033333333333337777333333333000000ffff000001111111011111a9a11119910111111101111
+0000000000000000007760000000000000000000000000000003333333333333377733333333300000ffffff00000000000000009aa9a000aa00000000000000
+222222222222222224999422222222222222222fffffff222222222222222222222222222222222222fffffff22222222222222a9a9aa9a29922222222222222
+444444444442444444444444244444444444424ffffffff4442444444444444244444444444424444ffffffff244444444444424494494444442444444444444
+444444444449444444444444444494444444444f4f4f4ff4444444444444449444444444444444494ff4f4f4f444444494444444444444444944444444444444
+999999999999999999999999999999999999999f4f4f4f999999999999999999999999999999999999f4f4f4f999999999999999999999999999999999999999
+4444444444444444444444444444444444444442f2f2f24444444444444444444444444444444444442f2f2f2444444444444444444444444444444444444444
+22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000033330000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000033333333300000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000033333333300a00000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000003333333333000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000033333333333300000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000333333333333333000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000333333333333333000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000003333333333333333333300000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000003333333333333333333333333333330000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000777ffffffff77ffff70000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000007fffffffffff7ffff70000000000000000000000000000000000000000000000000000000
-000000000000000000000000000000000000000000000000000000ffffffeefffffff77ff0000000000000000000000000000000000000000000000000000000
-000000000000000000000000000000000000000000000000000000fffffe788fffff7777f0000000000000000000000000000000000000000000000000000000
-000000000000000000000000000000000000000000000000000000fffff8882fffff77c7f0000000000000000000000000000000000000000000000000000000
-000000000000000000000000000000000000000000000000000000077fff82fff0fff77ff0000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000777fffffff00ffffff0000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000007777fffffff00ffff70000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000777ffffffff0fff770000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000777fffffff00fff770000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000077777777777777700000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000777ffffffff77000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000007777f0000f777000000000000000000000000000000000000000000000000000000000
-000000000000000000000000000000000000000000000000000000000007777ffff7770000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000007777ff77700000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000077777f77700000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000007777777000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000007777777000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000777777000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000077777000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000007777000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000777000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+44422222222222222222222222222444422222222222222222222222222444444444422222222222222222222222222444422222222222222222222222222444
+444244444444444444444444444494444244444444444444444444444494444a4444424444444444444444444444449444424444444444444444444444449444
+44424444444444444444444444449444424444444444444444444444449444a9a444424444444444444444444444449444424444444444444444444444449444
+444244444444444444444444444494444244444444444444444444444494444a4444424444444444444444444444449444424444444444444444444444449444
+44429999999999999999999999999444429999999999999999999999999444444444429999999999999999999999999444429999999999999999999999999444
+22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1870,38 +1505,21 @@ __label__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 
 __gff__
-0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0100010102020801010101000000000001010100000000000101010100000000000000000505000000000000000000000000000005050000000000000000000005000000000000000000000000000000000000000000000000000000000000000101000000000000000000000000000001010000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000101000200000505050000000000000000000000000005050000000000000101000000000000000000000000000001010000000000000000000000000000
 __map__
-8181818181818181818181818181818181818181818181818181818181818181000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-8380808080808080808080808080808383808080808080808580808080808083838080808080808080808080808080838380808080808080808080808080808383808080808080808080808080808083838080808080808080808080808080838380808080808080808080808080808383808080808080808080808080808083
-8081818181818181818181818181818280818181818181818181818181818182808181818181818181818181818181828081818181818181818181818181818280818181818181818181818181818182808181818181818181818181818181828081818181818181808181818181818280818181818081818100800081818182
-8081818081818181818181818181818280818181818181818181c08181818182808181818080808080808082818181828081818181818181818181818181818280818181818181818181818181818182808181808181818181818181818181828081818181818181808181818181818280818181808081818100808081818182
-8081818081818181818181818080818280818181818181818181818181818182808181818081818181818182818181828081818181818181818181810000818280818181818181818181818081818182808181808181818181818181808081828081818181818181808181818181818280818181808181818100008081818182
-8081818081818181818181818181818280818181818181818181818181818182808181818081818181818182818181828081808080808080008080808080818280818181808081818181808080818182808181808181818181818181818181828081818080818181808181818081818280818181818181808281818181818182
-8081818181818080808080818181818280818181818181818181818181a4a582808181818081818100818182818181828081818181818181000000000081818280818181808080808080808081818182808181818181808080808081818181828081818181818181828181818181818280808081818181808281810082828282
-808181818181808181818081818181828081c081818181818181818181b4b582808181818181818100818181818181828081808080808080808080808080818280818181818181810081818081818182808181818181808181818081818181828081818181818181008181818181818280818181818181808281818181818182
-8581818181818081818180818181818585818181818181818181818181818182858181818181818082818181818181858581818181818180828181818181818585818181818181810081818181818185858181818181808181818081818181858581818181818181008181818181818585818181818181808281818181818185
-8081818181818081818180818181818280818181818181818181818181818182808181818181818082818181818181828081818181818180828181818181818280818181808181810081818181818182808181818181808181818081818181828081818181818181008181818181818280818181818181810081818181818182
-808181818181808081808081808181828081818181818181818181c081818182808181818181818082818181818181828081808080808080808080008080818280818181808181810080808081818182808181818181808081808081808181828080808080808281008181818281818280818181818181000081818181008182
-8081818181818181818181818081818280818181818181818181818181818182808181818181818082818181818181828081818181818181008181818181818280818181808181818181818181818182808181818181818181818181808181828081818181818181008181818181818280818181818180808080818181818182
-8081818080808081818181818081818280818181818181818181818181818182808181818181818082818181818181828081808000808080808080808080818280818181808181818181818181818182808181808080808181818181808181828081818181818180808080818181818280818080808080818180808080808182
-8081818181818181818181818081818280818181818181818181818181818182808181818181818181818181818181828081818181818181818181818181818280818181808080818181818181818182808181818181818181818181808181828081818181818181818181818181818280818000008181818181818181808182
-8081818181818181818181818181818280818181818181818181818181818182808181818181818181818181818181828081818181818181818181818181818280818181818181818181818181818182808181818181818181818181818181828081818181818181818181818181818280818181818181818181818181818182
-8380808080808080808080808080808383808080808080808080808080808083838080808080808080808080808080838380808080808080808080808080808383808080808080808080808080808083838080808080808080808080808080838380808080808080808080808080808383808080808080808080808080808083
-8380808080808080808080808080808383808080808080808080808080808083838080808080808080808080808080838380808080808080808080808080808383808080808080808080808080808083838080808080808080808080808080838380808080808080808080808080808383808080808080808080808080808083
-8380808080808080808080808080808383808080808080808080808080808083838080808080808080808080808080838380808080808080808080808080808383808080808080808080808080808083838080808080808080808080808080838380808080808080808080808080808383808080808080808080808080808083
-8081818081818081818181818181818280818181818181818181818181818182808181818181818181818181818181828081818181818181818181818181818280818181818181818181818181818182808181818181818181818181818181828081818181818180818181818181818280818181818181818181818181818182
-8081818081818081818181818181818280818181818080808282828181818182808181818181818182828181818181828081818181818181818080808081818280818181818181818181818181818182808081808180818081808180818081828081818181818080808181818181818280818181818181818181818181818182
-8081818081818081818181818181818280818181808000000000828200818182808182828282818182828282818181828081818181818181818181818081818280818181808281818182828281818182808181818181818081818181818181828081818181818181818181818181818280818180828181818181008082818182
-8081818181818081818181818181818280818180800000008100008282818182808181828181818182828282818181828081828180808181818181818081818280818180808282818181818282818182808081808080818081808180818081828081818082818080808181818181818280818180828181818181818082818182
-8081818181818081818181808181818280818080818181810081818182828182808181818081818182818181818181828081828181808081000081818081818280818080808282820081818181818182808181818181818181818180818181828081818082818180818181818181818280818181818181818181818181818182
-8081818181818081818181808181818280818081818181810081818181828182808182828282818182818181818181828081828181818080000081818181818280818181818181810081808181828282808081808180818081808180818081828081818181818180818181818181818280818181818181818181818181818182
-8581818181818081818181808181818585818181818181810081818181818185858181818181818282818181818181858581818181818180800081818181818585818181818181810081808181818185858181818181818181808181818181858581818181818180818181818181818585818181818181818181818181818185
-8081818181818081818181808181818280818281818181810081818181808182808181818181818282818182808181828081828181818181808081818181818280818181818180810081808181828282808081808180818081808180818081828081818181818180818181818181818280818181818181818181818181818182
-8081818181818081818181808180818280818082818181810081818180828182808181808080818082818182808181828081828181818181000081818181818280818181818180810081818181818182808181808181818181818181818181828081818181818180818181818181818280818181818181818181818181818182
-8080808081818181818181808180818280818180828181818181818082818182808181818180818180828282808181828081828181818282818181818181818280818180808080818181818181818182808081808180818081808080818081828081818181818190818181808281818280818180828181818181818082818182
-8081818181818181818181808181818280818181808281818181828281818182808181808080818181818080808181828081828181828281818080808081818280818181818180818181818282818182808181818181818181818181818181828081818181818180818181808281818280818180828181818181818082818182
-8080808081818181818181808181818280818181818082808282828181818182808181808080818181818181818181828081818182828181818180808181818280818181818180818182828281818182808081808180818081808180818081828081818181818180818181818181818280818181008181818181818181818182
-8081818181818181818181808181818280818181818181818181818181818182808181808080818181818181818181828081818181818181818181818181818280818181818181818181818181818182808181818181818181818181818181828081818181818180818181818181818280818181818181818181818181818182
-8380808080808080808080808080808383808080808080808080808080808083838080808080808080808080808080838380808080808080808080808080808383808080808080808080808080808083838080808080808080808080808080838380808080808080808080808080808383808080808080808080808080808083
+0000000000000000000000000000000041414141414141414141414141414141000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000043404040404040404540404040404043000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000040414141414141414141414141414142000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000404141414141414141414a4141414142000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000040414141414141414141414141414142000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000040414141414141414141414141414142000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000040414141414141414141414141484942000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000040414a41414141414141414141585942000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000045414141414141414141414141414142000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000040414141414141414141414141414142000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000040414141414141414141414a41414142000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000040414141414141414141414141414142000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000040414141414141414141414141414142000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000040414141414141414141414141414142000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000040414141414141414141414141414142000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000043404040404040404040404040404043000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

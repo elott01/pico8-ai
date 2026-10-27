@@ -30,8 +30,9 @@ const IP_MAX = 40;
 // Raising this does NOT increase total spend: CALLS_PER_DAY is the budget guard and is
 // unchanged. This one only shapes bursts.
 //
-// MUST stay below Google's own RPM for the key, which for the free tier on
-// gemini-3.1-flash-lite is **15** (AI Studio → Rate Limit). Going above it does not fail
+// MUST stay below Google's own RPM for the key and the model `_gemini.ts` names (AI Studio
+// → Rate Limit). For the free tier on gemini-3.1-flash-lite, where everything below was
+// measured, that was **15**; recheck it whenever the model changes. Going above it does not fail
 // loudly: Google queues the excess rather than rejecting it, so requests still succeed with
 // ~100% success rate while latency collapses. Measured directly — paced at 10/min the p50
 // was 1.5s; bursting to 15-20/min during live play the p50 was 8s with a 21s outlier, and
@@ -41,7 +42,14 @@ const IP_MAX = 40;
 // quality-of-service. 12 leaves room for the extra calls a 503 retry can issue within the
 // same minute. Raise it only alongside a paid key with a higher RPM.
 const CALLS_PER_MIN = Number(process.env.GEMINI_MAX_CALLS_PER_MIN) || 12;
-const CALLS_PER_DAY = Number(process.env.GEMINI_MAX_CALLS_PER_DAY) || 800;
+
+// MUST stay below Google's RPD for the model, which on the free tier is **500** for both
+// gemini-3.5-flash-lite and 3.1 before it (AI Studio → Rate Limit, 2026-10-18). This was
+// 800, so past 500 calls Google's own 429s answered first. 450 is a margin, not a
+// guarantee: Google's day resets at midnight Pacific and this window at midnight UTC, so
+// one of Google's days spans two of ours. An upstream 429 is still handled as a rate
+// limit. The benches draw on the same 500.
+const CALLS_PER_DAY = Number(process.env.GEMINI_MAX_CALLS_PER_DAY) || 450;
 
 /** Which counter answered — 'kv' when the shared store is live, 'mem' when it fell open
  *  to the per-instance Map (in which case the global cap is no longer global). */

@@ -17,7 +17,6 @@ import type { Page } from '@playwright/test';
 
 const PHANTOM = 'PHANTOM-STALE-TURN';
 const MOVE_DELAY = 2000;
-const cards = '[aria-label="Choose a cart"] button';
 
 /** Make /api/move answer slowly, with a move tagged so a leak is unmistakable. */
 async function stubSlowModel(page: Page) {
@@ -81,7 +80,7 @@ test.describe('switching carts mid-turn', () => {
       )
       .toBe(2); // ST_THINKING — the page has taken the turn and is awaiting the model
 
-    await page.locator(`${cards}:not([aria-pressed="true"])`).click();
+    await page.getByRole('button', { name: /Connect Four/ }).click();
     await expect(page.locator('iframe')).toHaveAttribute('src', /connect_four/);
 
     // Past the stubbed delay AND the read-back timeout, which is when it used to appear.
@@ -103,7 +102,7 @@ test.describe('switching carts mid-turn', () => {
     await stageCartRequest(page);
     await expect(page.locator('aside')).toContainText('first cart turn');
 
-    await page.locator(`${cards}:not([aria-pressed="true"])`).click();
+    await page.getByRole('button', { name: /Connect Four/ }).click();
     // Analysis from the previous cart would be rendered against the wrong board shape.
     await expect(page.locator('aside')).not.toContainText('first cart turn');
   });

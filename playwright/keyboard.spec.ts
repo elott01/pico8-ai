@@ -26,20 +26,21 @@ test.describe('keyboard', () => {
   // Not because keyboards are impossible on mobile.
   test.skip(({ isMobile }) => !!isMobile, 'duplicate engine coverage — see the webkit project');
 
-  test('Tab reaches both cart cards', async ({ page }) => {
+  test('Tab reaches every cart card', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator(cards)).toHaveCount(2);
+    await expect(page.locator(cards)).toHaveCount(3);
 
     const seen: string[] = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
       await page.keyboard.press('Tab');
       seen.push(await focused(page));
     }
 
     // Not asserting exact positions — the theme toggle's button count is not this file's
-    // business. What matters is that both cards are in the order at all.
+    // business. What matters is that every card is in the order at all.
     expect(seen.join(' | ')).toContain('Tic-Tac-Toe');
     expect(seen.join(' | ')).toContain('Connect Four');
+    expect(seen.join(' | ')).toContain('Gem-in-Eye');
   });
 
   test('a focused card shows a visible focus ring', async ({ page }) => {

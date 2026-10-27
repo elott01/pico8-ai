@@ -9,10 +9,68 @@ record of one measurement, not as a checked-in fixture.
 | `ab-connect_four.json` | `node bench/ab.ts --suite connect_four` | other Connect Four runs |
 | `ab-connect_four-parity.log` | an earlier Connect Four run — **console log only** | see below |
 | `before.json` | `node bench/baseline.ts before` — **pre-fix runner** | nothing (see below) |
+| `talk.json` + `talk.md` | `node bench/talk.ts` (gem-in-eye's dialogue) | other `talk` runs with the same `--variants` and fixtures |
 
 Runs of the same suite with different `--variants` are different measurements. Pass
 `--label <name>` to give one its own file; without it the suite's default file is replaced,
 and the runner prints a NOTE when it is about to do that.
+
+## `*-flash-lite-3.5` files are the model switch
+
+Every file without that suffix was measured on `gemini-3.1-flash-lite`. The
+`-flash-lite-3.5` runs repeat only the shipping variant of each suite on
+`gemini-3.5-flash-lite`, with the same run counts, to check the switch: compare
+`ab-tic_tac_toe-flash-lite-3.5.json` with the `schema-full` row of `ab-tic_tac_toe-enum.json`,
+`ab-connect_four-flash-lite-3.5.json` with its `facts+threats` row, and
+`talk-flash-lite-3.5.json` with `talk-ab-v4.json`. Accuracy held in both games. Latency fell
+sharply, the talk p95 from 13.0s to 1.2s. The speeches garbled or invented a number in
+about 7 of 45 (`forty-one sixteen` for agent 4016 with 41 new prunes), which 3.1 did not.
+
+## `talk-digits` and `talk-agent-digits` chose the agent-number rule
+
+Two fixes for those numbers, measured with the `stray(speech/notice)` column, which flags
+any number in a line that the fixture's stats don't support. Both variants are at commit
+`936982a`; the winner is now part of `current`.
+
+| run | variant | stray speeches | stray notices | opens with a number |
+| --- | --- | --- | --- | --- |
+| `talk-flash-lite-3.5` | `current` (words) | 7/45 | 3/45 | 0 |
+| `talk-digits` | `current` (words) | 6/45 | 1/45 | 0 |
+| `talk-digits` | `digits`: every number as digits | 3/45 | 2/45 | 15 |
+| `talk-agent-digits` | `agent-digits`: only the agent's own number | 3/45 | 0/45 | 2 |
+
+`digits` halved the strays but cost the voice: a third of its speeches opened with the
+agent's number against an owner rule, and the lines read as stat readouts ("agent 4014,
+depth 8 with 140 pruned and only 2 rollbacks"). `agent-digits` matched it on strays and read
+like the control. Its one remaining fusion was the agent's number used as a count, spelled
+out: "forty-one hundred agents" for agent 4014. `talk-agent-digits` has no control of its
+own; compare it with both `current` rows above, which ran on the same model the same day.
+
+## The `talk` runs measured prompts that are no longer in the code
+
+`current` always means the shipping prompt. The four runs here are how it was chosen, and
+three of the variants they name have since been removed from `api/_talk_prompt.ts`:
+
+| file | variants | what they are |
+| --- | --- | --- |
+| `talk.json` | `current` | the first prompt, v1, which was shipping at the time |
+| `talk-ab-v2.json` | `current`, `v2` | v1 again, against v2 |
+| `talk-ab-v3.json` | `v3`, `v3-notice`, `v3-temp-1.3` | v3 three ways |
+| `talk-ab-v4.json` | `v4` | v4 with the notice step: the prompt that shipped, before it was renamed `current` |
+
+To re-run an old version, its prompt and variant list are at commit `e3b5902`:
+`git show e3b5902:api/_talk_prompt.ts`. The A/B ideas that were never run (`rates`,
+`examples`, and temperatures 0.8 and 1.2) are there too.
+
+## `talk` runs are read, not just scored
+
+A speech has no right answer, so most of `talk.json`'s columns are flags rather than grades:
+`specific` (does it point at this agent's numbers or purchase), `saysPrice` (it recites the
+price the shop already shows), `memRepeat` (it rewords a line from its memory), and variety
+within a fixture (distinct speeches, reworded pairs). Only two fixtures carry an expected
+verdict, the owner's own praise and mockery examples, and the price is checked for being in
+band. `talk.md` is the same run as a list of every speech, paged the way the cart would show
+it. Reading that file is the actual review; the numbers only say where to look.
 
 ## `before.json` latency is not comparable to anything
 

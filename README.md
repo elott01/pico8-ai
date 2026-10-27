@@ -2,42 +2,46 @@
 
 **[▶ Play it](https://pico8-ai.vercel.app)** &nbsp;·&nbsp; [![tests](https://github.com/elott01/pico8-ai/actions/workflows/test.yml/badge.svg)](https://github.com/elott01/pico8-ai/actions/workflows/test.yml)
 
-Turn-based PICO-8 games embedded in a React app, played against a Gemini-powered
-opponent. One Vercel deploy: a static Vite/React frontend plus a serverless proxy
-(`api/move.ts`) that holds the API key.
+PICO-8 games embedded in a React app, with Gemini on the other side of each: the opponent
+in two board games, and the shopkeeper in a dungeon crawler. One Vercel deploy: a static
+Vite/React frontend plus two serverless functions (`api/move.ts` and `api/talk.ts`) that
+hold the API key.
 
-Two carts, switchable in the browser:
+Three carts, switchable in the browser:
 
 | cart | why it is here |
 | --- | --- |
 | **Tic-tac-toe** | 3×3. Solved by 40 lines of minimax, so it proves the pipeline — not the model |
 | **Connect Four** | 7×6. No cheap perfect play, so the model's judgement does real work |
+| **Gem-in-Eye** | A dungeon crawler whose shopkeeper is Gemini. No board and no right answer, so the model does what code can't: judge the run and talk about it, in character |
 
-The side panel shows the model's own analysis for every move, so you can see what it saw —
-and when it fell back to the cart's built-in solver instead. Which prompt each cart ships
-was **chosen by measurement**, not taste: see [`bench/`](bench/results/README.md).
+The side panel shows the model's own output for every turn — its analysis of a move, or
+what gem-in-eye was shown and what he said — so you can see what it saw, and when the cart
+stood in for it instead. Which prompt each cart ships was **chosen by measurement**, not
+taste: see [`bench/`](bench/results/README.md).
 
 ## Architecture
 
-One Vercel project: static frontend + serverless proxy sharing an origin (no CORS, one
-URL). The Gemini key lives only in the function's environment, never in the browser.
+One Vercel project: static frontend + two serverless functions sharing an origin (no CORS,
+one URL). The Gemini key lives only in the functions' environment, never in the browser.
 
 ```
-┌─ Vercel ─────────────────────────────────────────────────┐
-│                                                          │
-│  Browser                          Serverless             │
-│  ┌───────────────────────┐        ┌───────────────────┐  │
-│  │ React app (static)    │  fetch │ /api/move         │  │
-│  │  ┌─────────────────┐  │ ──────►│ holds the API key │  │
-│  │  │ PICO-8 player   │  │        │ builds the prompt │  │
-│  │  │ cart ⇄ gpio     │  │◄────── │ returns move+why  │  │
-│  │  └─────────────────┘  │  JSON  └─────────┬─────────┘  │
-│  │    ▲ poll + r/w       │                  │            │
-│  └────┴──────────────────┘                  │ HTTPS      │
-│                                             │            │
-└─────────────────────────────────────────────┼────────────┘
-                                              ▼
-                                         Gemini API
+┌─ Vercel ─────────────────────────────────────────────────────────┐
+│                                                                  │
+│  Browser                          Serverless                     │
+│  ┌───────────────────────┐  fetch ┌─────────────────────────┐    │
+│  │ React app (static)    │ ──────►│ /api/move               │──┐ │
+│  │                       │◄────── │ board → move + analysis │  │ │
+│  │  ┌─────────────────┐  │  JSON  └─────────────────────────┘  │ │
+│  │  │ PICO-8 player   │  │                                     │ │
+│  │  │ cart ⇄ gpio     │  │  fetch ┌─────────────────────────┐  │ │
+│  │  └─────────────────┘  │ ──────►│ /api/talk               │──┤ │
+│  │    ▲ poll + r/w       │◄────── │ stats → price + speech  │  │ │
+│  └────┴──────────────────┘  JSON  └─────────────────────────┘  │ │
+│                                   same key, quota and retries  │ │
+└────────────────────────────────────────────────────────────────┼─┘
+                                                           HTTPS ▼
+                                                            Gemini API
 ```
 
 **The core trick:** a PICO-8 cart can't make network calls. It talks to the page through
@@ -46,10 +50,24 @@ array (`pico8_gpio`). The cart pokes/peeks; the JS reads/writes the same array a
 networking. The cart is embedded via an iframe, so that array lives on the iframe's
 same-origin `contentWindow`.
 
+Gem-in-Eye uses the same 128 bytes with no board in them. When the player's knight (an
+"agent", in the game's fiction) buys an upgrade, the cart publishes the agent's record
+(kills and deaths, which the game calls *pruned* and *rollbacks*, plus uptime, depth,
+tokens, upgrade tiers, and the item and its list price) and gets back a verdict, a price
+and a page of speech. It is the one cart where text crosses the
+bridge, and only into the cart. The server cleans the speech and pages it to the cart's own
+word wrap, so one `/api/talk` call serves every page, and the panel shows exactly what the
+cart printed.
+
+The two functions are siblings rather than one with a branch: a speech has no legal move
+and no right answer, which is everything `api/_games.ts` dispatches on. They share the
+Gemini call, its retries, the origin check and the rate limiter (`api/_ask_gemini.ts`), so
+both spend one quota under one set of rules.
+
 Two processes with no shared clock, coordinating through 128 bytes, need a protocol —
 [docs/gpio-protocol.md](docs/gpio-protocol.md) walks the whole handshake end to end: the
-byte layout, why the move byte carries two different values in one exchange, and the
-timeout budget that keeps the cart and the page from both giving up at once.
+byte layout for each cart, why the move byte carries two different values in one exchange,
+and the timeout budget that keeps the cart and the page from both giving up at once.
 
 ## Design decisions
 
@@ -67,11 +85,33 @@ make each derivation an explicit output field (per-line `twos`/`ones`, then `win
 re-deriving in its head. Since JSON keys generate in order, that ordering is load-bearing:
 `commentary` comes last, after `move`, so flavour text can never steer the game.
 
+**Code supplies the facts; the model supplies the words.** In the board carts, code owns
+the rules and the model picks the move. Gem-in-Eye makes the same split on a different
+kind of task. The cart owns every number: the agent's record, the list price, and a price
+band of half to full list. The band only discounts, because pressing buy agreed to list
+price. The response schema makes a price outside it unrepresentable, and the Lua clamps
+the quote to it anyway. Gemini gets the raw stats and owns what code can't produce: a
+verdict on the agent, a price inside the band, and a line in character about *this*
+agent's numbers. The prompt never says whether the agent is doing well; that judgement is
+the model's, and it is what the panel shows. The board carts ask the model to count lines,
+which code does better. The shop asks it for speech grounded in real state, which nothing
+else in the stack can do. If the call fails, the cart charges list price and says its own
+line, and the panel labels it as the cart's.
+
+**Nothing the player types reaches a prompt.** The cart has no text entry, and everything
+it sends is a number from a fixed range. `api/_talk_request.ts` rebuilds each request field
+by field and rejects any record the cart could not have produced, such as a stash bigger
+than its safe or a tier bought out of order. The one free text in the prompt is
+gem-in-eye's memory: his last three speeches, which the page keeps in `localStorage` so he
+doesn't repeat himself. A player can edit those, so they arrive untrusted: cleaned to the
+cart's character set, capped in count and length, and quoted as data. That confines an edit
+to the player's own session, but it can't tell a forged speech from a real one.
+
 **Known limits.** The move priority (win → block → center → corner) has no concept of
 forks, so a player who takes two opposite corners can still win. Gemini's free-tier quota
-is per-project rather than per-key, so `/api/move` is limited two ways: per IP, and a
-global cap counted in *actual Gemini calls* rather than requests, since one request can
-retry several times.
+is per-project rather than per-key, so both endpoints share one budget, limited two ways:
+per IP, and a global cap counted in *actual Gemini calls* rather than requests. One request
+can retry several times, and `/api/talk` sends a second call when the first is slow.
 
 ## Setup
 
@@ -85,47 +125,70 @@ vercel login
 cp .env.example .env.local  # paste your GEMINI_API_KEY into it
 ```
 
-Without a key, `api/move.ts` answers with the first empty cell — enough to exercise the
-whole loop, and obviously not the model.
+Without a key, `api/move.ts` answers with the first empty cell, and `api/talk.ts` answers
+with nothing, so the shop sells at list price in the cart's own words. That is enough to
+exercise every loop, and obviously not the model.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `vercel dev` | **Local dev — use this.** Serves the frontend *and* the `api/` functions on `localhost:3000`. The only local command where the AI works. |
-| `npm run dev` | Frontend only. `/api/move` 404s, so no AI — fine for pure UI work. |
+| `npm run dev` | Frontend only. `/api/move` and `/api/talk` 404, so no AI — fine for pure UI work. |
 | `npm test` | Unit suite (`node --test`), ~3s, needs nothing. `npm run test:watch` to watch. |
 | `npm run test:playwright` | Browser suite across Chromium, WebKit and mobile Safari. Boots Vite itself; no API key needed. |
 | `npm run bench` | Prompt benchmark against the real model. **Spends Gemini quota.** |
+| `node bench/talk.ts` | gem-in-eye's dialogue benchmark. Writes every speech to `bench/results/talk.md` for reading. `--dry` spends nothing. |
 | `npm run build` | Production build → `dist/`. Vercel runs this on deploy. |
-| `vercel --prod` | Deploy to production, or just push to the connected repo. |
+| `vercel` | One-off preview of the working tree, uncommitted files included. Production comes from pushing `main`, not `vercel --prod`. |
 
 ## Deploy
 
-1. Push to GitHub and import the repo in Vercel (auto-deploys on push), or `vercel --prod`.
-2. Set these for the **Production** environment in Vercel → Settings → Environment
-   Variables — `.env.local` is local-only and does not ship:
+Deploys come from Git. Pushing `main` deploys production; every other branch gets a preview
+at a stable `<project>-git-<branch>-<scope>.vercel.app` URL, linked from its pull request.
+
+1. Import the repo in Vercel, or connect an existing project under Settings → Git. That
+   installs the Vercel GitHub App — give it this repository only, not every repository.
+2. Set these for **both Production and Preview** in Vercel → Settings → Environment
+   Variables — previews call Gemini too, and `.env.local` is local-only and does not ship:
    - `GEMINI_API_KEY`
    - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (from the Upstash/KV integration). Without
      them the rate limiter falls back to per-instance memory, which cannot enforce a
-     global cap.
-3. Smoke-test the live URL on desktop and mobile.
+     global cap. Its keys carry no environment, so environments sharing one KV store share
+     one daily Gemini cap.
+3. Leave Deployment Protection on for previews and Git fork protection on. The repo is
+   public and every preview build runs with the key: an open preview is a public copy of
+   the game on your quota, and an unreviewed fork PR is a stranger's code holding the key.
+   To let a tester in, send a share link for that deployment rather than lifting protection.
+4. Smoke-test the live URL on desktop and mobile.
+
+Only committed files ship, so a re-exported cart in `public/games/` goes out when it is
+pushed. Don't mix in `vercel --prod`: production would flip between a hand-deployed working
+tree and whatever `main` last built. `vercel rollback` undoes a bad production deploy, and a
+deploy that fails where `npm run build` passes reproduces with `vercel build`, which compiles
+`api/` the way the real deploy does.
 
 ## Project layout
 
 ```
-api/move.ts               serverless proxy — game-agnostic; per-cart bits live in _games.ts
+api/move.ts               board carts' proxy — game-agnostic; per-cart bits live in _games.ts
+api/talk.ts               gem-in-eye's voice: judges the agent, prices the sale, speaks
+api/_talk_*.ts            his prompt, request checks, and paging speech to the cart's wrap
+api/_ask_gemini.ts        the Gemini call both endpoints share: retries, quota, origin check
 api/_games.ts             per-cart dispatch: board size, prompt, schema, legality, analysis
 api/_ratelimit.ts         per-IP + global quota limiting, KV-backed, fails open
-api/_types.ts             the /api/move wire contract, shared with the client
+api/_types.ts             the /api/move and /api/talk wire contracts, shared with the client
 carts/*.p8                PICO-8 sources; exported into public/games/
+carts/gemini*.p8          Gem-in-Eye: the hub (shop, GPIO) loads the dungeon; one export
 public/games/*.{html,js}  exported carts; the iframe loads the .html
-src/components/           iframe embed, GPIO poll loop, cart switcher, reasoning panel
-src/lib/                  gpio.ts (byte protocol per cart) + ai.ts (calls /api/move)
+src/components/           iframe embed, GPIO poll loops, cart switcher, move and talk panels
+src/lib/                  gpio.ts (byte protocol per cart), ai.ts + talk.ts (API clients),
+                          and gem-in-eye's memory in localStorage
 src/styles/               design tokens (PICO-8 palette, geometry) + global reset
 tests/                    node:test suites — fast, no browser, no network
 playwright/               browser suite — Chromium, WebKit, mobile Safari
 bench/                    prompt benchmarks against the real model + recorded results
+scripts/                  headless cart re-export (bundles Gem-in-Eye's two carts), label tool
 LICENSE / NOTICE          MIT, plus the Lexaloffle carve-out for public/games/
 ```
 
@@ -141,8 +204,9 @@ LICENSE / NOTICE          MIT, plus the Lexaloffle carve-out for public/games/
   times, across every prompt variant tested**. Two carts, two prompt styles, the same blind
   spot. Closing it means computing "this move creates two threats" in code, which is a
   decision about how much the program plays rather than a prompt to tune.
-- **A third cart.** `api/_games.ts` and `PROTOCOLS` already make this one entry each and no
-  edit to `move.ts` — the shared contract exists and has been exercised once.
+- **Another board cart.** `api/_games.ts` and `PROTOCOLS` make it one entry each and no
+  edit to `move.ts`; Connect Four proved that contract. Gem-in-Eye has no board, so it got
+  its own endpoint instead.
 - **Not on the list: a perception layer for tic-tac-toe.** It was built, benchmarked and
   rejected. Computing the line facts in code made play *worse*: generating the derivation
   buys the model's *attention*, not its arithmetic, and handed the same facts as a table it
@@ -152,14 +216,10 @@ LICENSE / NOTICE          MIT, plus the Lexaloffle carve-out for public/games/
 
 ## License
 
-[MIT](LICENSE) — with one carve-out, detailed in [NOTICE](NOTICE).
+[MIT](LICENSE), except `public/games/`. Those are PICO-8 export artifacts: each cart ships
+~1.7 MB of PICO-8 web player runtime, © Lexaloffle Games LLP, redistributed under PICO-8's
+terms for exported carts rather than relicensed. [NOTICE](NOTICE) lists the files.
 
-The MIT grant covers the source authored here (`src/`, `api/`, `carts/`, `tests/`,
-`playwright/`, `bench/`, `docs/`). It does **not** cover `public/games/`, which holds
-PICO-8 export artifacts: each cart ships ~1.7 MB of PICO-8 web player runtime,
-© Lexaloffle Games LLP, redistributed under PICO-8's terms for exported carts rather than
-relicensed.
-
-The games themselves are not third-party content — the Lua in
-[carts/](carts/) is MIT like the rest of the source. Only the player runtime that PICO-8's
-HTML export wraps around it belongs to Lexaloffle. See [NOTICE](NOTICE) for the file list.
+The games themselves are not third-party content — the Lua in [carts/](carts/) is MIT like
+the rest of the source. Only the player runtime that PICO-8's HTML export wraps around it
+belongs to Lexaloffle.

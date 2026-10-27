@@ -27,3 +27,6 @@ dist
 /test-results/
 /playwright-report/
 /blob-report/
+
+# Claude Code's per-machine settings. Skills and shared settings in .claude/ are committed.
+.claude/settings.local.json

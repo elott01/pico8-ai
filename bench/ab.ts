@@ -98,7 +98,7 @@ if (!suite) {
 const RUNS = Number(arg('--runs') ?? 4);
 
 // 5s ≈ 12 calls/minute, deliberately under Google's free-tier 15 RPM for
-// gemini-3.1-flash-lite. The old 3s default was 20/min — above the limit — and Google
+// gemini-3.1-flash-lite, the model this was measured on. The old 3s default was 20/min — above the limit — and Google
 // queues the excess rather than rejecting it, so the harness was throttling itself and
 // reporting the result as latency. Accuracy numbers were unaffected (only HTTP 200s are
 // scored) but every p50/p95 measured at 3s is inflated.

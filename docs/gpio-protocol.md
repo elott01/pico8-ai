@@ -20,8 +20,9 @@ poll loop in [src/components/Pico8Game.tsx](../src/components/Pico8Game.tsx).
 **Not covered here:** prompt construction, rate limiting, and quota accounting. Those live
 in [api/move.ts](../api/move.ts) and [api/_ratelimit.ts](../api/_ratelimit.ts).
 
-**Source of truth:** [src/lib/gpio.ts](../src/lib/gpio.ts) declares both layouts, one
-`PROTOCOLS` entry per cart. The Lua constants in each `.p8` are a hand-maintained copy —
+**Source of truth:** [src/lib/gpio.ts](../src/lib/gpio.ts) declares every layout: one
+`PROTOCOLS` entry per game cart, and one `TALK_PROTOCOLS` entry for gem-in-eye's shop (see
+[The talk cart](#the-talk-cart--gem-in-eyes-shop) below). The Lua constants in each `.p8` are a hand-maintained copy —
 nothing at runtime enforces that they agree, so
 [tests/gpio-protocol.test.ts](../tests/gpio-protocol.test.ts) parses them back out of the
 Lua and checks them against `PROTOCOLS` for **both** carts. This document is the prose
@@ -244,6 +245,44 @@ Both carts use the same two frame budgets. Connect Four adds one constraint: its
 animation must not run inside the `ai_max_frames` window, or the timeout budget quietly
 shrinks by the animation length on every turn.
 
+## The talk cart — gem-in-eye's shop
+
+[carts/gemini.p8](../carts/gemini.p8) uses the same byte 0 and the same four-state handshake,
+but no board and no move. When the agent buys something, the cart publishes the agent's
+record. The page asks [/api/talk](../api/talk.ts), and writes back a verdict, a price and a
+page of speech. **Here, unlike the game carts, text does cross the bridge**: up to 100 bytes
+per page, already cleaned and paged by the server to the cart's own `wrap_text`.
+
+| Byte | Meaning | Written by |
+|---|---|---|
+| 0 | status, the same four states | both, alternating |
+| 1–2, 3–4, 5–6 | pruned, rollbacks, uptime in seconds: 16-bit, low byte first (`poke2`) | cart |
+| 7, 8, 9, 10 | max depth, last run's depth, purse, stash | cart |
+| 11–15 | tiers 0–3, in shop order: vitality, stamina, armor, attack, stash | cart |
+| 16 | occasion: `2` purchase · `3` next page | cart |
+| 17, 18, 19 | item (1–5, shop order), tier being bought, list price | cart |
+| 20–23 | reserved | — |
+| 24 | verdict: `0` none · `1` impressed · `2` neutral · `3` unimpressed | page |
+| 25 | price: the page's quote, then the price the cart actually charged | both |
+| 26 | flags: bit 0 = more pages follow | page |
+| 27 | page length: the page's, then `0` if the cart showed its own line | both |
+| 28–127 | page text | page |
+
+**A purchase is one `/api/talk` call; every later page is free.** The server returns the
+whole speech, so the page answers occasion 3 from memory on the next poll, with no request.
+
+**Bytes 25 and 27 are the read-back**, like byte 10 in tic-tac-toe. Before returning to idle,
+the cart overwrites them with what it charged and whether it printed the page's speech, and
+the panel credits Gemini only with what the cart actually showed.
+
+**Length 0 is the fallback**, the talk cart's `NO_MOVE`. The cart then sells at list price with
+its own line, and so does every other failure: no ack in 15 frames, no reply in 450, a rate
+limit, an error.
+
+**A late reply is dropped, not written.** If the cart stopped waiting while `/api/talk` was
+out, byte 0 is no longer `2` when the reply lands. Writing then would put a stale speech onto
+whatever the cart asks next, so the page records the turn as late and writes nothing.
+
 ## This doc is stale if…
 
 - a cart's Lua constants and its `PROTOCOLS` entry no longer agree (the protocol test
@@ -252,5 +291,8 @@ shrinks by the animation length on every turn.
   also needs an edit inside `move.ts`, that dispatch table has stopped doing its job
 - byte 11+ is used by tic-tac-toe, byte 44+ by Connect Four, or a third cart joins
 - `getAiTurn`'s timeout rises to meet `ai_max_frames`
-- `commentary` starts crossing the bridge instead of arriving over HTTP
+- `commentary` starts crossing the bridge for a *game* cart, instead of arriving over HTTP
+  (the talk cart sends text by design; see above)
+- the talk cart's `gp_*` constants and `TALK_PROTOCOLS` disagree (the protocol test parses
+  them, so a red suite is the signal)
 - the Connect Four fallback rate gets measured, or its fallback stops being one-ply

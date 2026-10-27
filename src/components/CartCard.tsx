@@ -5,7 +5,7 @@
 // treats drag as an affordance over a working button, never as the only way to switch,
 // because drag-only excludes keyboard and screen-reader users entirely.
 
-import { PROTOCOLS } from '../lib/gpio.ts';
+import { PROTOCOLS, isBoardCart } from '../lib/gpio.ts';
 import type { CartId } from '../lib/gpio.ts';
 import { CARTS } from '../lib/carts.ts';
 import MiniBoard, { emptyBoard } from './MiniBoard.tsx';
@@ -24,7 +24,8 @@ export default function CartCard({
   onSelect: (id: CartId) => void;
 }) {
   const meta = CARTS[id];
-  const protocol = PROTOCOLS[id];
+  // A talk cart has no board to draw, so it gets the gem from gem-in-eye's eye instead.
+  const protocol = isBoardCart(id) ? PROTOCOLS[id] : null;
 
   return (
     <button
@@ -43,9 +44,15 @@ export default function CartCard({
     >
       <span className={styles.label}>
         {/* The board shape IS the label art — an empty 3x3 beside an empty 7x6 says which
-            game faster than the name does. Real PICO-8 cart labels are phase 2; they need
-            a Ctrl-7 capture and a decode step, and the HTML export drops them anyway. */}
-        <MiniBoard board={emptyBoard(protocol)} protocol={protocol} size="9px" />
+            game faster than the name does. Real PICO-8 cart labels are phase 2. Each cart
+            saves one in its .p8's __label__ section, and the export shows it dimmed as the
+            poster behind the play button, but nothing decodes it into an image the card
+            could use yet. */}
+        {protocol ? (
+          <MiniBoard board={emptyBoard(protocol)} protocol={protocol} size="9px" />
+        ) : (
+          <span className={styles.gem} aria-hidden="true" />
+        )}
       </span>
       <span className={styles.text}>
         <span className={styles.name}>{meta.name}</span>

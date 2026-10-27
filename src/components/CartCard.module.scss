@@ -78,3 +78,16 @@
   font-size: 0.72rem;
   color: var(--ink-dim);
 }
+
+// The label art for a talk cart, which has no board to draw: the gem from gem-in-eye's eye,
+// as a diamond. Tokens only, so it follows the light/dark switch like the boards do.
+.gem {
+  display: block;
+  width: 1.4rem;
+  height: 1.4rem;
+  margin: 0.55rem;
+  transform: rotate(45deg);
+  background: var(--accent);
+  border: 2px solid var(--rule);
+  border-radius: 2px;
+}
