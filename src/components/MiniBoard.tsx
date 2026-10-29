@@ -1,8 +1,5 @@
-// A board rendered small, in whatever shape the cart's protocol says.
-//
-// Extracted from TurnPanel because the cart switcher wants the same thing for a different
-// reason: an empty 3x3 next to an empty 7x6 says "which game" faster than any label. One
-// implementation means a new cart gets a correct mini-board in both places for free, and a
+// A board rendered small, in whatever shape the cart's protocol says, for the turn panel.
+// One component for every cart, so a new cart gets a correct mini-board for free and a
 // board-size change cannot make one of them wrong.
 
 import type { CSSProperties } from 'react';
@@ -16,14 +13,11 @@ export default function MiniBoard({
   board,
   protocol,
   move = null,
-  size,
 }: {
   board: Board;
   protocol: Protocol;
   /** The move to ring, in this cart's move unit. Omit for a plain board. */
   move?: number | null;
-  /** Cell size override; defaults to something that fits the turn panel. */
-  size?: string;
 }) {
   // `board` is the position *before* the move, so the ringed cell has to be derived rather
   // than read: in Connect Four `move` is a column and gravity decides the row. landingCell
@@ -35,7 +29,7 @@ export default function MiniBoard({
   // get smaller cells so a 7-wide grid still fits its container.
   const vars = {
     '--board-cols': protocol.cols,
-    '--cell-size': size ?? (protocol.cols > 4 ? '14px' : '18px'),
+    '--cell-size': protocol.cols > 4 ? '14px' : '18px',
   } as CSSProperties;
 
   return (
@@ -47,9 +41,4 @@ export default function MiniBoard({
       ))}
     </div>
   );
-}
-
-/** An empty board of this cart's shape — the switcher's label art. */
-export function emptyBoard(protocol: Protocol): Board {
-  return new Array(protocol.cells).fill(0);
 }

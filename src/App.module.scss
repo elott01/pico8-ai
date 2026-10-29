@@ -73,29 +73,45 @@
   }
 }
 
-.carts {
+// The cart shelf: a heading over a box of cartridges.
+.shelf {
   grid-area: carts;
-  justify-self: center;
+  min-width: 0;
   display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  gap: 0.75rem;
-  justify-content: center;
-  // Bounded so two cards do not stretch across a wide desktop viewport. Without it
-  // `flex: 1` on the cards makes them grow to fill whatever is available.
-  width: 100%;
-  max-width: 34rem;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
 
-  // A column beside the device. The cards' `flex: 1 1 0` shares out a row's width; in a
-  // column it would share out height instead, so here they keep their own.
+// Silkscreen at a multiple of 8px only; see .title.
+.shelfHeading {
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.25;
+  color: var(--ink-dim);
+}
+
+.carts {
+  display: flex;
+  gap: 20px;
+  padding: 16px 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  // A centred row that scrolls sideways inside the box when it doesn't fit, as on a phone.
+  // `safe` keeps the first cart in reach when the row overflows, where plain `center` would
+  // push it off the start, past where scrolling can go. An engine without `safe` keeps the
+  // flex-start before it.
+  justify-content: flex-start;
+  justify-content: safe center;
+  overflow-x: auto;
+
+  // A column beside the device.
   @media (min-width: bp.$wide) {
     flex-direction: column;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-
-    > * {
-      flex: none;
-    }
+    align-items: center;
+    overflow-x: visible;
   }
 }
 

@@ -1,14 +1,14 @@
-// One selectable cartridge in the switcher.
+// One selectable cartridge in the switcher: grey plastic, three grip ridges, and a sticker
+// showing the cart's own label, the picture saved in its .p8. The image is
+// public/labels/<cart>.png, which tests/cart-labels.test.ts keeps level with the cart.
 //
 // A real <button>, not a div with handlers: that buys the focus ring, Enter/Space, and
-// screen-reader semantics for free. Phase 2 layers dragging on top of this — the plan
-// treats drag as an affordance over a working button, never as the only way to switch,
-// because drag-only excludes keyboard and screen-reader users entirely.
+// screen-reader semantics for free. Anything like drag-to-insert goes on top of this as an
+// affordance over a working button, never as the only way to switch, because drag-only
+// excludes keyboard and screen-reader users entirely.
 
-import { PROTOCOLS, isBoardCart } from '../lib/gpio.ts';
 import type { CartId } from '../lib/gpio.ts';
 import { CARTS } from '../lib/carts.ts';
-import MiniBoard, { emptyBoard } from './MiniBoard.tsx';
 import styles from './CartCard.module.scss';
 
 export default function CartCard({
@@ -24,8 +24,6 @@ export default function CartCard({
   onSelect: (id: CartId) => void;
 }) {
   const meta = CARTS[id];
-  // A talk cart has no board to draw, so it gets the gem from gem-in-eye's eye instead.
-  const protocol = isBoardCart(id) ? PROTOCOLS[id] : null;
 
   return (
     <button
@@ -42,22 +40,24 @@ export default function CartCard({
       disabled={busy && !selected}
       onClick={() => !selected && onSelect(id)}
     >
-      <span className={styles.label}>
-        {/* The board shape IS the label art — an empty 3x3 beside an empty 7x6 says which
-            game faster than the name does. Real PICO-8 cart labels are phase 2. Each cart
-            saves one in its .p8's __label__ section, and the export shows it dimmed as the
-            poster behind the play button, but nothing decodes it into an image the card
-            could use yet. */}
-        {protocol ? (
-          <MiniBoard board={emptyBoard(protocol)} protocol={protocol} size="9px" />
-        ) : (
-          <span className={styles.gem} aria-hidden="true" />
-        )}
+      {/* Drawn even while this cart is in the device, only hidden, so the outline it leaves
+          on the shelf is exactly a cartridge's size. */}
+      <span className={styles.ridges} aria-hidden="true">
+        <span />
+        <span />
+        <span />
       </span>
-      <span className={styles.text}>
+      <span className={styles.sticker}>
+        <img className={styles.label} src={`/labels/${id}.png`} alt="" width={128} height={128} />
         <span className={styles.name}>{meta.name}</span>
         <span className={styles.tagline}>{meta.tagline}</span>
       </span>
+      {selected && (
+        <span className={styles.slot}>
+          <span className={styles.slotName}>{meta.name}</span>
+          <span className={styles.slotNote}>in the device</span>
+        </span>
+      )}
     </button>
   );
 }

@@ -33,20 +33,25 @@ export default function App() {
           two. The grid moves them between layouts, but the carts always come first in the
           DOM: the cart's iframe swallows Tab, so Tab has to reach them before it. */}
       <div className={styles.arcade}>
-        <div className={styles.carts} role="group" aria-label="Choose a cart">
-          {CART_ORDER.map((id) => (
-            <CartCard
-              key={id}
-              id={id}
-              selected={id === game}
-              busy={swapping}
-              onSelect={(next) => {
-                setSwapping(true);
-                setGame(next);
-              }}
-            />
-          ))}
-        </div>
+        <section className={styles.shelf} aria-labelledby="carts-heading">
+          <h2 id="carts-heading" className={styles.shelfHeading}>
+            Carts
+          </h2>
+          <div className={styles.carts} role="group" aria-label="Choose a cart">
+            {CART_ORDER.map((id) => (
+              <CartCard
+                key={id}
+                id={id}
+                selected={id === game}
+                busy={swapping}
+                onSelect={(next) => {
+                  setSwapping(true);
+                  setGame(next);
+                }}
+              />
+            ))}
+          </div>
+        </section>
 
         {/* The game area changes underneath the buttons, which is invisible without this. */}
         <p className={styles.srOnly} role="status">

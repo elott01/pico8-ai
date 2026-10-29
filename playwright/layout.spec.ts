@@ -14,16 +14,27 @@ test('the page never scrolls sideways', async ({ page }) => {
   expect(overflows).toBe(false);
 });
 
-test('both cart cards are the same width', async ({ page }) => {
-  await page.goto('/');
-  const [a, b] = await page.locator(cards).all();
-  const ra = await a.boundingBox();
-  const rb = await b.boundingBox();
+test('every cartridge is the same size, the empty slot included', async ({ page, isMobile }) => {
+  // A cartridge whose tagline ran longer would otherwise be taller than the rest, and the
+  // selected cart's dashed outline would stop matching the cartridge it stands in for. The
+  // tagline's reserved three lines and the outline drawn over hidden contents keep them
+  // equal. In a row, stretching would hide a mismatch, so the wide layout's column is
+  // checked too.
+  const expectSameSize = async () => {
+    const boxes = await Promise.all((await page.locator(cards).all()).map((card) => card.boundingBox()));
+    expect(boxes).toHaveLength(3);
+    for (const box of boxes) {
+      expect(Math.abs(box!.width - boxes[0]!.width)).toBeLessThan(1);
+      expect(Math.abs(box!.height - boxes[0]!.height)).toBeLessThan(1);
+    }
+  };
 
-  // Each card sizes to its content otherwise, and Connect Four's 7x6 mini-board makes it
-  // visibly wider than Tic-Tac-Toe — which reads as a layout bug rather than a difference
-  // between the games. `flex: 1 1 0` is what equalises them; `flex: 1 1 auto` does not.
-  expect(Math.abs(ra!.width - rb!.width)).toBeLessThan(1);
+  await page.goto('/');
+  await expectSameSize();
+  if (!isMobile) {
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await expectSameSize();
+  }
 });
 
 test('cart cards are large enough to tap', async ({ page }) => {
