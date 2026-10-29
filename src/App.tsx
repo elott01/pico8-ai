@@ -18,8 +18,12 @@ export default function App() {
       <div className={styles.topbar}>
         <ThemeToggle />
       </div>
-      <h1 className={styles.title}>PICO-8 + Gemini</h1>
-      <p className={styles.tagline}>Turn-based carts with a Gemini-powered AI opponent.</p>
+      <h1 className={styles.title}>
+        Ethan’s Pico-<span className={styles.ai}>AI</span>ght Arcade
+      </h1>
+      {/* Has to name PICO-8: without it, anyone who doesn't know the console reads the
+          title's pun as "aight". */}
+      <p className={styles.tagline}>PICO-8 carts with Google Gemini built in.</p>
 
       <div className={styles.carts} role="group" aria-label="Choose a cart">
         {CART_ORDER.map((id) => (
