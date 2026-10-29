@@ -1,0 +1,253 @@
+@use '../styles/breakpoints' as bp;
+
+// Every colour is a handheld or cartridge token from src/styles/tokens.scss. The device is a
+// physical object, so none of them change with the theme. Silkscreen only at multiples of
+// 8px; see .title in App.module.scss.
+
+// Wherever the page has room for it, from $full-device, the shell is --device-width across:
+// the 512px screen, 2 x 20 bezel and 2 x 36 padding. On a phone both thin down so the screen
+// gets the width.
+.shell {
+  position: relative;
+  width: 100%;
+  max-width: var(--device-width);
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 16px;
+  background: var(--shell);
+  border-radius: 36px;
+  box-shadow:
+    inset 0 2px 0 var(--shell-hi),
+    inset 0 -8px 0 var(--shell-lo),
+    0 30px 60px -30px rgba(0, 0, 0, 0.8);
+  text-align: left;
+
+  @media (min-width: bp.$full-device) {
+    padding: 40px 36px 32px;
+  }
+}
+
+// The slot the cart stands in, on the shell's top edge. Drawn even when it's empty.
+.slot {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 232px;
+  height: 6px;
+  transform: translateX(-50%);
+  background: var(--recess);
+  border-radius: 0 0 4px 4px;
+}
+
+// The selected cart's top, standing up out of the slot. It sits above the shell, in the
+// 40px Pico8Game's .device leaves for it. 216px wide: "Connect Four" needs 138px of the 152
+// left after the padding and the ridges.
+.cartTop {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  width: 216px;
+  height: 40px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px 0 14px;
+  background: var(--cart);
+  border-radius: 6px 22px 0 0;
+  box-shadow: inset 0 2px 0 var(--cart-hi);
+}
+
+.cartTopName {
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: var(--sticker);
+}
+
+.ridges {
+  flex: 0 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 2px;
+
+  > span {
+    height: 2px;
+    background: var(--cart-lo);
+  }
+}
+
+.bezel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bezel);
+  border-radius: 16px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+
+  @media (min-width: bp.$full-device) {
+    gap: 12px;
+    padding: 14px 20px 20px;
+  }
+}
+
+// 8px, the font's own size: these two labels only echo state the panel already gives.
+.status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  line-height: 1;
+  color: var(--bezel-print);
+}
+
+.light {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--led-off);
+}
+
+.power {
+  background: var(--led-power);
+}
+
+.gemini {
+  background: var(--led-gemini);
+  animation: blink 0.8s steps(1, end) infinite;
+
+  // Lit and still: the light keeps its meaning without the motion.
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.lettering {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px 16px;
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  line-height: 1.25;
+  color: var(--print);
+}
+
+.model {
+  font-weight: 700;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: 0 4px;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.caption {
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  line-height: 1.25;
+  color: var(--print);
+}
+
+// Four 44px arms around a filled centre, in a 3 x 3 grid.
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(3, 44px);
+  grid-template-areas:
+    '. up .'
+    'left centre right'
+    '. down .';
+  color: var(--shell);
+
+  > span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--recess);
+  }
+}
+
+.up {
+  grid-area: up;
+  border-radius: 6px 6px 0 0;
+}
+
+.left {
+  grid-area: left;
+  border-radius: 6px 0 0 6px;
+}
+
+.centre {
+  grid-area: centre;
+}
+
+.right {
+  grid-area: right;
+  border-radius: 0 6px 6px 0;
+}
+
+.down {
+  grid-area: down;
+  border-radius: 0 0 6px 6px;
+}
+
+.keys {
+  display: flex;
+  gap: 20px;
+}
+
+// Staggered on a diagonal, O lower and X higher.
+.low {
+  padding-top: 32px;
+}
+
+.high {
+  padding-bottom: 32px;
+}
+
+.key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--btn);
+  box-shadow: inset 0 -4px 0 var(--btn-lo);
+  font-family: var(--font-pixel);
+  font-size: 24px;
+  line-height: 1;
+  color: var(--btn-ink);
+}

@@ -81,6 +81,11 @@
   flex-direction: column;
   gap: 12px;
   text-align: left;
+
+  // Beside the device, its top lines up with the shell's, below the cart in the slot.
+  @media (min-width: bp.$wide) {
+    margin-top: 40px;
+  }
 }
 
 // Silkscreen at a multiple of 8px only; see .title.

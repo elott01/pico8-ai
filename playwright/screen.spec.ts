@@ -1,4 +1,5 @@
-// The cart's screen on the wide layouts: a 512px window onto a larger iframe.
+// The cart's screen: a 512px window onto a larger iframe wherever the handheld is
+// full-size, and PICO-8's page with no scrollbars at any size.
 //
 // PICO-8's exported page draws the game at a whole multiple of 128 only when the iframe is
 // big enough, so Pico8Game.module.scss makes the iframe 540 x 539 and crops it to the 512px
@@ -39,23 +40,55 @@ function expectFills({ view, game }: { view: Box; game: Box }) {
   expect(Math.abs(game.y - view.y)).toBeLessThan(0.5);
 }
 
-test.describe('the screen', () => {
-  // Phones get the plain iframe at column width; PICO-8 lays itself out differently for touch
-  test.skip(({ isMobile }) => !!isMobile, 'the crop is for the wide layouts only');
+/** Start the cart and wait until its canvas is laid out. */
+async function start(page: Page) {
+  // The export waits for a click before it starts
+  await page.frameLocator('iframe').locator('#p8_start_button').click();
+  await expect
+    .poll(async () => (await measure(page, 'canvas')).game.width, { timeout: 15_000 })
+    .toBeGreaterThan(0);
+}
 
-  test('the start screen fills the window at 4x', async ({ page }) => {
-    await page.goto('/');
-    await expect.poll(async () => (await measure(page, 'p8_container')).game.width).toBe(512);
-    expectFills(await measure(page, 'p8_container'));
-  });
+// 1280 has the device beside the panel. 780 has it alone in one column, but still full-size,
+// which is the case the crop first missed.
+for (const width of [1280, 780]) {
+  test.describe(`the screen at ${width}px`, () => {
+    test.use({ viewport: { width, height: 1000 } });
+    // Phones get the plain iframe at column width; PICO-8 lays itself out differently for touch
+    test.skip(({ isMobile }) => !!isMobile, 'the crop is for the full-size handheld only');
 
-  test('the running game fills the window at 4x', async ({ page }) => {
-    await page.goto('/');
-    // The export waits for a click before it starts
-    await page.frameLocator('iframe').locator('#p8_start_button').click();
-    await expect
-      .poll(async () => (await measure(page, 'canvas')).game.width, { timeout: 15_000 })
-      .toBe(512);
-    expectFills(await measure(page, 'canvas'));
+    test('the start screen fills the window at 4x', async ({ page }) => {
+      await page.goto('/');
+      await expect.poll(async () => (await measure(page, 'p8_container')).game.width).toBe(512);
+      expectFills(await measure(page, 'p8_container'));
+    });
+
+    test('the running game fills the window at 4x', async ({ page }) => {
+      await page.goto('/');
+      await start(page);
+      await expect.poll(async () => (await measure(page, 'canvas')).game.width).toBe(512);
+      expectFills(await measure(page, 'canvas'));
+    });
   });
+}
+
+// PICO-8's page is wider than the iframe, because its menu buttons hang off the game's right
+// edge, so the iframe would give it scrollbars. In a real browser they showed inside the
+// screen, and where the screen is cropped they would narrow the page and slide the game out
+// of the window. scrolling="no" is what stops them.
+//
+// This checks the attribute, not the scrollbars, because it can't see them: headless
+// browsers hide scrollbars, so the page measured the same with and without it. It is here
+// so the attribute, which looks obsolete, isn't deleted as such.
+test('the cart’s page gets no scrollbars', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('iframe')).toHaveAttribute('scrolling', 'no');
+
+  // And the reason still holds: the page overflows the iframe once the cart runs
+  await start(page);
+  const overflows = await page.locator('iframe').evaluate((frame: HTMLIFrameElement) => {
+    const inner = frame.contentDocument!.scrollingElement!;
+    return inner.scrollWidth > inner.clientWidth || inner.scrollHeight > inner.clientHeight;
+  });
+  expect(overflows).toBe(true);
 });

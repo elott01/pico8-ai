@@ -24,7 +24,6 @@
   --threat: var(--p8-dark-peach); // 5.0:1 on --surface-raised; red was 3.5:1
   --notice: var(--p8-orange);
   --cell-bg: #0a1030;
-  --glow: 0 0 60px -20px var(--p8-blue);
 }
 
 @mixin light-tokens {
@@ -39,7 +38,6 @@
   --threat: var(--p8-dark-red); // 5.6:1 on white; red was 3.9:1
   --notice: var(--p8-brown);
   --cell-bg: #ffffff;
-  --glow: 0 18px 40px -22px rgba(29, 43, 83, 0.45);
 }
 
 :root {
@@ -72,7 +70,6 @@
   // The handheld, and the grid column it sits in: the screen plus 2 × 20 bezel and 2 × 36
   // shell padding.
   --device-width: 624px;
-  --bezel-pad: clamp(10px, 2vw, 18px);
 
   --radius-sm: 2px;
   --radius-md: 8px;
@@ -93,6 +90,7 @@
   --recess: var(--p8-dark-blue); // the slot and the D-pad
   --print: var(--p8-black); // lettering on the shell, 5.0:1
   --bezel: #0b1024;
+  --bezel-print: var(--p8-light-grey); // the status lights' labels
   --btn: var(--p8-red);
   --btn-lo: #a8003a;
   --btn-ink: var(--p8-white);

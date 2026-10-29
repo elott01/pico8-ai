@@ -3,6 +3,9 @@
 //
 // They come from the arcade grid in App.module.scss. $wide fits the carts column, the
 // device (--device-width), a panel at its 280px minimum and two 28px gaps inside the page's
-// 3% gutters. $medium fits the device and the panel alone.
+// 3% gutters. $medium fits the device and the panel alone. $full-device fits the device
+// alone at its full 624px, with room for a 15px page scrollbar: from there the handheld has
+// its full padding and the cropped 512px screen, and below it the phone's thin shell.
+$full-device: 680px;
 $medium: 1020px;
 $wide: 1300px;

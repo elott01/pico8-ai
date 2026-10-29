@@ -25,6 +25,8 @@ import TurnPanel from './TurnPanel.tsx';
 import type { Turn } from './TurnPanel.tsx';
 import TalkPanel from './TalkPanel.tsx';
 import type { TalkTurn } from './TalkPanel.tsx';
+import Handheld from './Handheld.tsx';
+import { CARTS } from '../lib/carts.ts';
 import styles from './Pico8Game.module.scss';
 
 type CartStatus = 'loading' | 'ready' | 'missing';
@@ -313,20 +315,26 @@ export default function Pico8Game({
             <code>public/games/</code> to play.
           </p>
         )}
-        <div className={`${styles.stage} ${status === 'missing' ? styles.hidden : ''}`}>
-          <div className={styles.screen}>
-            <iframe
-              // Keyed so switching carts remounts the element. Reusing it with a new `src`
-              // leaves the old cart's pico8_gpio reachable during the swap.
-              key={game}
-              ref={iframeRef}
-              className={styles.frame}
-              src={src}
-              title={game}
-              onLoad={() => applyStatus('ready')}
-              onError={() => applyStatus('missing')}
-            />
-          </div>
+        <div className={status === 'missing' ? styles.hidden : undefined}>
+          <Handheld cartName={CARTS[game].name} powered={status === 'ready'} thinking={thinking}>
+            <div className={styles.screen}>
+              <iframe
+                // Keyed so switching carts remounts the element. Reusing it with a new `src`
+                // leaves the old cart's pico8_gpio reachable during the swap.
+                key={game}
+                ref={iframeRef}
+                className={styles.frame}
+                // PICO-8's page is a little bigger than the iframe (its menu buttons hang off
+                // the game's right edge), so without this it gets its own scrollbars. Those
+                // would also narrow the page and shift the game out of the crop.
+                scrolling="no"
+                src={src}
+                title={game}
+                onLoad={() => applyStatus('ready')}
+                onError={() => applyStatus('missing')}
+              />
+            </div>
+          </Handheld>
         </div>
       </div>
       {status !== 'missing' && (
