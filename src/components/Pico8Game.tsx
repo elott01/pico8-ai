@@ -91,6 +91,14 @@ export default function Pico8Game({
     setThinking(false);
   }, [game, applyStatus]);
 
+  // The handheld's D-pad and keys. pico8_buttons is the export's own hook for on-page
+  // controls, read every frame beside the keyboard. Before the cart's page has loaded there is
+  // nothing to write to, and nothing is lost: Handheld lets go of everything on a cart change.
+  const pressButtons = useCallback((held: number) => {
+    const buttons = iframeRef.current?.contentWindow?.pico8_buttons;
+    if (buttons) buttons[0] = held;
+  }, []);
+
   // The page's half of the GPIO protocol; the cart's half is in carts/<game>.p8 and both
   // byte layouts are declared in lib/gpio.ts. Nothing below may hardcode an offset — the
   // effect re-runs when `game` changes, so it reads the whole layout off `protocol`.
@@ -330,6 +338,7 @@ export default function Pico8Game({
             // Live once a cart has loaded, like the switcher, which is latched while one loads
             canEject={status === 'ready'}
             onEject={onEject}
+            onButtons={pressButtons}
           >
             <div className={styles.screen}>
               {game === null ? (
@@ -347,7 +356,10 @@ export default function Pico8Game({
                   scrolling="no"
                   src={src}
                   title={game}
-                  onLoad={() => applyStatus('ready')}
+                  onLoad={() => {
+                    keepTouchOut(iframeRef.current);
+                    applyStatus('ready');
+                  }}
                   onError={() => applyStatus('missing')}
                 />
               )}
@@ -368,6 +380,20 @@ export default function Pico8Game({
       )}
     </>
   );
+}
+
+// PICO-8's page switches to its own touch layout once it has seen a touch: it shrinks the
+// game to two thirds of its window, draws its own controller over it, and reads every later
+// touch as a press of that controller, zeroing pico8_buttons. The handheld's D-pad and keys
+// are this page's touch controls, so touches inside the cart's page stop at its window,
+// in the capture phase, before any of PICO-8's listeners see them. A tap still clicks,
+// because a click is an event of its own, so the play button still starts the cart.
+function keepTouchOut(frame: HTMLIFrameElement | null) {
+  const win = frame?.contentWindow;
+  if (!win) return;
+  for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
+    win.addEventListener(type, (event) => event.stopImmediatePropagation(), { capture: true });
+  }
 }
 
 function filled(board: Board) {

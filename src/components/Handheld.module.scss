@@ -164,6 +164,30 @@
   align-items: center;
   gap: 24px;
   padding: 0 4px;
+  // Held, not dragged or selected: a long press mustn't scroll the page, zoom, or select
+  // the captions.
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+
+  button {
+    appearance: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+
+    &:disabled {
+      cursor: default;
+    }
+
+    // Black on the shell; see .eject.
+    &:focus-visible {
+      outline: 2px solid var(--print);
+      outline-offset: 3px;
+    }
+  }
 }
 
 .control {
@@ -191,11 +215,17 @@
     '. down .';
   color: var(--shell);
 
-  > span {
+  > * {
     display: flex;
     align-items: center;
     justify-content: center;
     background: var(--recess);
+    color: inherit;
+  }
+
+  // A held arm sinks into the darker bezel colour.
+  > .held {
+    background: var(--bezel);
   }
 }
 
@@ -286,4 +316,10 @@
   font-size: 24px;
   line-height: 1;
   color: var(--btn-ink);
+
+  // Pressed in: down by the depth of its shadow.
+  &.held {
+    transform: translateY(4px);
+    box-shadow: none;
+  }
 }
