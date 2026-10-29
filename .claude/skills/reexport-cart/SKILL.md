@@ -31,6 +31,9 @@ What each export file carries:
 - **`.html`**: the label, at half brightness, as the poster behind the play button. Every
   visitor sees it, because autoplay is off.
 
+The export script also rewrites `public/labels/<cart>.png`, the label at full colour that the
+cart switcher shows. It isn't an export file: the script draws it from the `.p8`.
+
 ## 1. Work out what is needed
 
 Do this for the cart named, or for every cart in `CART_ORDER` if none was. `git status` can't
@@ -55,7 +58,7 @@ Read the diff by section:
 |---|---|
 | code in `__lua__` | export; the `.js` changes |
 | `__gfx__`, `__gff__`, `__map__`, `__sfx__`, `__music__` | export; the `.js` changes |
-| `__label__` | export; the `.html` changes |
+| `__label__` | export; the `.html` and `public/labels/<cart>.png` change |
 | only comments or blank lines in `__lua__`, including `--[[ ]]` blocks | nothing |
 
 A line holding code and a trailing comment counts as code. A comment-only edit would still
@@ -65,7 +68,10 @@ only if the user asks.
 The `__label__` row has one exception. If
 `node scripts/cart-label.ts check carts/<cart>.p8 public/games/<cart>.html` passes, the live
 poster already shows the new label, as after a `restore`, so the label is no reason to export.
-That only removes the label as a reason: if any other row applies, export anyway.
+That only removes the label as a reason: if any other row applies, export anyway. The label
+image can still be behind; `npm test` says so, and
+`node scripts/cart-label.ts png carts/<cart>.p8 public/labels/<cart>.png 1` brings it level
+without PICO-8.
 
 If nothing needs exporting and no label was asked for, say so and stop.
 
@@ -99,8 +105,8 @@ Afterwards:
   ```
 
   Read the PNG, say what it shows, and ask whether it's the screen they meant. Exit code 2
-  means the cart has no label or a blank one, so the capture or the save didn't happen. The
-  PNG is only for checking; don't add it to the repo.
+  means the cart has no label or a blank one, so the capture or the save didn't happen. This
+  PNG is only for checking; don't add it to the repo. The export writes the real one.
 
 ## 3. Export
 
@@ -111,7 +117,8 @@ node scripts/export-cart.ts <cart>
 It runs PICO-8 headless in a temp folder (an export lands wherever PICO-8 was started), with a
 temp `-home` so the user's PICO-8 config is never touched. It bundles every cart the code
 loads by name. It copies both files into `public/games/` only once both exist and the `.js`
-lists every cart it should carry. It takes a second or two, with a 60s limit.
+lists every cart it should carry, then rewrites `public/labels/<cart>.png` from the saved
+label. It takes a second or two, with a 60s limit.
 
 - **Exit 2:** the cart has no saved label, which `-export` requires. Go to step 2.
 - **Exit 1:** something else failed; show the user what PICO-8 printed. If PICO-8 isn't in
@@ -121,11 +128,13 @@ lists every cart it should carry. It takes a second or two, with a 60s limit.
 
 ## 4. Check it
 
-- `git status --short carts/<cart>.p8 public/games/<cart>.*`: what changed should match the
-  table in step 1. A label alone changes only the `.html`; code alone, only the `.js`. Use
+- `git status --short carts/<cart>.p8 public/games/<cart>.* public/labels/<cart>.png`: what
+  changed should match the table in step 1. A label alone changes only the `.html` and the
+  label image; code alone, only the `.js`. Use
   `--stat` for any diff of the `.js`. An export of an unchanged cart is byte-identical to the
   last one, so no change there is expected, not a failure.
-- `npm test`: `cart-labels.test.ts` checks every poster against its cart's saved label, and
+- `npm test`: `cart-labels.test.ts` checks every poster and every label image against its
+  cart's saved label, and
   `gpio-protocol.test.ts` checks that the Lua side still matches `src/lib/gpio.ts`.
   `cart-bundle.test.ts` checks that the export carries every cart the code loads, and that
   bundled carts share their `-- >> shared` section and sprites 0-63.
@@ -148,6 +157,11 @@ node scripts/cart-label.ts restore carts/<cart>.p8 public/games/<cart>.html
 
 The poster is the label at half brightness, and halving keeps every colour distinct, so this
 recovers the label exactly. Ask before running it, since it overwrites the cart's saved label.
+A restore doesn't touch the label image, so bring that level afterwards:
+
+```sh
+node scripts/cart-label.ts png carts/<cart>.p8 public/labels/<cart>.png 1
+```
 
 ## 5. Report
 

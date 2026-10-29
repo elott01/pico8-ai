@@ -168,6 +168,9 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   and for the same reason should not run `scripts/export-cart.ts` unasked.
   Comment-only edits need no re-export. A label edit does: the `.html` embeds the label as the
   poster behind the play button, and `tests/cart-labels.test.ts` fails until the two agree.
+  The cart switcher shows `public/labels/<cart>.png`, which the export rewrites and the same
+  test checks. After a `cart-label.ts restore`, which skips it, regenerate it with
+  `node scripts/cart-label.ts png carts/<cart>.p8 public/labels/<cart>.png 1`.
   An edit to `gemini_dungeon.p8` means `/reexport-cart gemini`: the export bundles every cart
   the code loads by name.
 - **`carts/` is the only copy of a cart that counts.** PICO-8 resolves a bare `load` against
