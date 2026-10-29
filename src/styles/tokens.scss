@@ -66,11 +66,13 @@
   --p8-dark-peach: #ff6e59; // 142
 
   // ---- Geometry ----------------------------------------------------------------------
-  // The cart renders square. Both the iframe and the panel's height derive from this, so
-  // the two stay in step from one place instead of a magic number copied per component.
-  --stage-size: min(90vw, 640px);
+  // The cart renders square, at most 4 × 128 so each PICO-8 pixel is a whole 4 × 4 block.
+  // Narrower than that, it shrinks with its column.
+  --stage-size: 512px;
+  // The handheld, and the grid column it sits in: the screen plus 2 × 20 bezel and 2 × 36
+  // shell padding.
+  --device-width: 624px;
   --bezel-pad: clamp(10px, 2vw, 18px);
-  --panel-width: 320px;
 
   --radius-sm: 2px;
   --radius-md: 8px;

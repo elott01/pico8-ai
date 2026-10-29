@@ -1,14 +1,41 @@
-.layout {
+@use '../styles/breakpoints' as bp;
+
+// Pico8Game renders two items of App's .arcade grid, which names the areas they go in.
+.device {
+  grid-area: device;
+  min-width: 0;
   display: flex;
-  gap: 1rem;
-  justify-content: center;
-  align-items: stretch; // lets the panel match the bezel's full height, not just the cart's
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: center;
+}
+
+// The panel follows the row's height rather than setting it. Out of flow, it adds nothing
+// to the row, so the device decides how tall the row is and the panel fills that. In one
+// column there is no device beside it, so it flows and stops at a cap.
+.panel {
+  grid-area: panel;
+  position: relative;
+  min-width: 0;
+
+  > * {
+    max-height: 30rem;
+  }
+
+  @media (min-width: bp.$medium) {
+    > * {
+      position: absolute;
+      inset: 0;
+      max-height: none;
+    }
+  }
 }
 
 // Arcade bezel. The cart itself is left unobstructed — no scanline overlay, since anything
 // covering the canvas has to intercept pointer events to avoid eating clicks.
 .stage {
+  // As wide as the column allows, up to the screen's full size plus padding and border.
+  width: 100%;
+  max-width: calc(var(--stage-size) + 2 * var(--bezel-pad) + 2px);
   padding: var(--bezel-pad);
   background: linear-gradient(160deg, #2a3766, #070b1a 65%);
   border: 1px solid var(--rule);
@@ -18,16 +45,42 @@
     inset 0 2px 6px rgba(0, 0, 0, 0.5),
     var(--glow);
   line-height: 0; // kills the inline descender gap under the iframe
-  flex: 0 0 auto;
+}
+
+// The window the game shows through. Square, and --stage-size across on the wide layouts.
+.screen {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  // clip, not hidden: a hidden box can still be scrolled by script, and focusing the iframe
+  // scrolls it into view, which slid the crop sideways and showed PICO-8's grey margin.
+  overflow: clip;
+  border-radius: var(--radius-sm);
+  background: var(--p8-black);
 }
 
 .frame {
   display: block;
   border: 0;
-  width: var(--stage-size);
-  height: var(--stage-size);
-  border-radius: var(--radius-sm);
-  background: var(--p8-black);
+  width: 100%;
+  height: 100%;
+
+  // PICO-8's page draws the game at a whole multiple of 128 only when its frame, 95% of the
+  // iframe, is at least 512px; in a 512px iframe it draws a blurry 486. So on the wide
+  // layouts the iframe is 540 x 539, where the game lands at exactly 512 x 512, 14px in
+  // from the left, and the window shows only that square. Cut away with the rest: PICO-8's
+  // grey margin and its menu buttons, which hang off the game's right edge.
+  //
+  // The offset is the export's layout, not ours, so a new PICO-8 could move it.
+  // playwright/screen.spec.ts fails if it does. Phones keep the plain iframe, because
+  // PICO-8 lays itself out differently for touch.
+  @media (min-width: bp.$medium) {
+    position: absolute;
+    top: 0;
+    left: -14px;
+    width: 540px;
+    height: 539px;
+  }
 }
 
 .hidden {

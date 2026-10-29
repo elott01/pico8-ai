@@ -302,36 +302,43 @@ export default function Pico8Game({
 
   const src = `/games/${game}.html`;
 
+  // Two items of App's grid rather than one box of its own, so the cart switcher can sit
+  // beside them on a wide screen.
   return (
-    <div>
-      {status === 'missing' && (
-        <p className={styles.missing}>
-          No cart found at <code>{src}</code>. Export a PICO-8 game to{' '}
-          <code>public/games/</code> to play.
-        </p>
-      )}
-      <div className={styles.layout}>
+    <>
+      <div className={styles.device}>
+        {status === 'missing' && (
+          <p className={styles.missing}>
+            No cart found at <code>{src}</code>. Export a PICO-8 game to{' '}
+            <code>public/games/</code> to play.
+          </p>
+        )}
         <div className={`${styles.stage} ${status === 'missing' ? styles.hidden : ''}`}>
-          <iframe
-            // Keyed so switching carts remounts the element. Reusing it with a new `src`
-            // leaves the old cart's pico8_gpio reachable during the swap.
-            key={game}
-            ref={iframeRef}
-            className={styles.frame}
-            src={src}
-            title={game}
-            onLoad={() => applyStatus('ready')}
-            onError={() => applyStatus('missing')}
-          />
+          <div className={styles.screen}>
+            <iframe
+              // Keyed so switching carts remounts the element. Reusing it with a new `src`
+              // leaves the old cart's pico8_gpio reachable during the swap.
+              key={game}
+              ref={iframeRef}
+              className={styles.frame}
+              src={src}
+              title={game}
+              onLoad={() => applyStatus('ready')}
+              onError={() => applyStatus('missing')}
+            />
+          </div>
         </div>
-        {status !== 'missing' &&
-          (boardProtocol ? (
+      </div>
+      {status !== 'missing' && (
+        <div className={styles.panel}>
+          {boardProtocol ? (
             <TurnPanel turns={turns} thinking={thinking} />
           ) : (
             <TalkPanel talks={talks} thinking={thinking} />
-          ))}
-      </div>
-    </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

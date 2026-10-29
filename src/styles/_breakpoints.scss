@@ -1,0 +1,8 @@
+// Layout breakpoints, for every module that changes at them. Sass variables rather than
+// tokens because a media query can't read a custom property.
+//
+// They come from the arcade grid in App.module.scss. $wide fits the carts column, the
+// device (--device-width), a panel at its 280px minimum and two 28px gaps inside the page's
+// 3% gutters. $medium fits the device and the panel alone.
+$medium: 1020px;
+$wide: 1300px;

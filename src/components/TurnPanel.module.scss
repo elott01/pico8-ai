@@ -1,8 +1,5 @@
+// Sized by the grid area Pico8Game puts it in: the device's height beside it, a cap below.
 .panel {
-  width: min(var(--panel-width), 100%);
-  // Matches the bezel, not the cart: the frame adds its padding on both edges. Derived
-  // rather than hard-coded, so resizing the stage keeps the two aligned.
-  max-height: calc(var(--stage-size) + 2 * var(--bezel-pad));
   overflow-y: auto;
   text-align: left;
   border: 1px solid var(--rule);

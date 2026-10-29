@@ -1,5 +1,7 @@
+@use './styles/breakpoints' as bp;
+
 .page {
-  padding: clamp(1rem, 3vw, 2rem) 1rem;
+  padding: clamp(1rem, 3vw, 2rem) max(16px, 3%);
   text-align: center;
 }
 
@@ -31,6 +33,12 @@
   }
 }
 
+// A phone wraps the title, and the hyphen is a place it may break, which split the pun
+// into "Pico-" and "AIght" on two lines.
+.pun {
+  white-space: nowrap;
+}
+
 .ai {
   color: var(--ai);
 }
@@ -42,16 +50,53 @@
   font-size: 13px;
 }
 
+// The carts, the device and the panel. One column, as wide as the device, with the panel
+// before the carts; from $medium the carts drop under a device-and-panel row; from $wide
+// they get a column of their own beside the device.
+.arcade {
+  display: grid;
+  grid-template-columns: minmax(0, var(--device-width));
+  grid-template-areas: 'device' 'panel' 'carts';
+  justify-content: center;
+  gap: 28px;
+  max-width: 1240px;
+  margin-inline: auto;
+
+  @media (min-width: bp.$medium) {
+    grid-template-columns: var(--device-width) minmax(280px, 340px);
+    grid-template-areas: 'device panel' 'carts carts';
+  }
+
+  @media (min-width: bp.$wide) {
+    grid-template-columns: auto var(--device-width) minmax(280px, 340px);
+    grid-template-areas: 'carts device panel';
+  }
+}
+
 .carts {
+  grid-area: carts;
+  justify-self: center;
   display: flex;
   flex-wrap: wrap;
+  align-content: flex-start;
   gap: 0.75rem;
   justify-content: center;
-  margin: 0 0 1.25rem;
   // Bounded so two cards do not stretch across a wide desktop viewport. Without it
   // `flex: 1` on the cards makes them grow to fill whatever is available.
+  width: 100%;
   max-width: 34rem;
-  margin-inline: auto;
+
+  // A column beside the device. The cards' `flex: 1 1 0` shares out a row's width; in a
+  // column it would share out height instead, so here they keep their own.
+  @media (min-width: bp.$wide) {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+
+    > * {
+      flex: none;
+    }
+  }
 }
 
 // Visible to screen readers only — the game area swaps underneath the cart buttons, and
