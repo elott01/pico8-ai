@@ -29,7 +29,8 @@ import Handheld from './Handheld.tsx';
 import { CARTS } from '../lib/carts.ts';
 import styles from './Pico8Game.module.scss';
 
-type CartStatus = 'loading' | 'ready' | 'missing';
+// 'empty' is no cart in the device at all: ejected.
+type CartStatus = 'loading' | 'ready' | 'missing' | 'empty';
 
 // The cart is embedded as its exported .html in an iframe rather than by injecting the
 // .js: the export expects its own shell (canvas wiring, start button, audio gating), and
@@ -38,16 +39,20 @@ type CartStatus = 'loading' | 'ready' | 'missing';
 export default function Pico8Game({
   game,
   onReady,
+  onEject,
 }: {
-  game: CartId;
+  /** The cart in the device, or null once it has been ejected. */
+  game: CartId | null;
   /** Fired when the cart is loaded and the poll loop is live — the switcher uses it to
    *  release its latch, since a 1.6MB runtime does not arrive instantly. */
   onReady?: () => void;
+  /** The handheld's Eject button. */
+  onEject?: () => void;
 }) {
-  // Exactly one of these is set: a board cart talks to /api/move, a talk cart to /api/talk,
-  // and each poll loop below runs only for its own kind.
-  const boardProtocol = isBoardCart(game) ? PROTOCOLS[game] : null;
-  const talkProtocol = isBoardCart(game) ? null : TALK_PROTOCOLS[game];
+  // At most one of these is set: a board cart talks to /api/move, a talk cart to /api/talk,
+  // and each poll loop below runs only for its own kind. With no cart, neither runs.
+  const boardProtocol = game !== null && isBoardCart(game) ? PROTOCOLS[game] : null;
+  const talkProtocol = game !== null && !isBoardCart(game) ? TALK_PROTOCOLS[game] : null;
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // The poll loop reads status every 100ms but must not be torn down and rebuilt each time
   // it changes, so it goes through a ref rather than the effect's dependency list.
@@ -78,7 +83,9 @@ export default function Pico8Game({
   }, []);
 
   useEffect(() => {
-    applyStatus('loading');
+    // No cart means no iframe to wait for, so it settles at once and the switcher's latch
+    // can't stick.
+    applyStatus(game === null ? 'empty' : 'loading');
     setTurns([]); // analysis from the previous cart would be misleading
     setTalks([]);
     setThinking(false);
@@ -88,7 +95,7 @@ export default function Pico8Game({
   // byte layouts are declared in lib/gpio.ts. Nothing below may hardcode an offset — the
   // effect re-runs when `game` changes, so it reads the whole layout off `protocol`.
   useEffect(() => {
-    if (!boardProtocol) return;
+    if (!boardProtocol || game === null) return;
     const protocol = boardProtocol;
     let busy = false;
     // `clearInterval` stops future ticks but cannot cancel one already suspended at an
@@ -302,7 +309,7 @@ export default function Pico8Game({
     };
   }, [game, talkProtocol]);
 
-  const src = `/games/${game}.html`;
+  const src = game === null ? '' : `/games/${game}.html`;
 
   // Two items of App's grid rather than one box of its own, so the cart switcher can sit
   // beside them on a wide screen.
@@ -316,23 +323,34 @@ export default function Pico8Game({
           </p>
         )}
         <div className={status === 'missing' ? styles.hidden : undefined}>
-          <Handheld cartName={CARTS[game].name} powered={status === 'ready'} thinking={thinking}>
+          <Handheld
+            cartName={game === null ? null : CARTS[game].name}
+            powered={status === 'ready'}
+            thinking={thinking}
+            // Live once a cart has loaded, like the switcher, which is latched while one loads
+            canEject={status === 'ready'}
+            onEject={onEject}
+          >
             <div className={styles.screen}>
-              <iframe
-                // Keyed so switching carts remounts the element. Reusing it with a new `src`
-                // leaves the old cart's pico8_gpio reachable during the swap.
-                key={game}
-                ref={iframeRef}
-                className={styles.frame}
-                // PICO-8's page is a little bigger than the iframe (its menu buttons hang off
-                // the game's right edge), so without this it gets its own scrollbars. Those
-                // would also narrow the page and shift the game out of the crop.
-                scrolling="no"
-                src={src}
-                title={game}
-                onLoad={() => applyStatus('ready')}
-                onError={() => applyStatus('missing')}
-              />
+              {game === null ? (
+                <p className={styles.insert}>insert a cart</p>
+              ) : (
+                <iframe
+                  // Keyed so switching carts remounts the element. Reusing it with a new `src`
+                  // leaves the old cart's pico8_gpio reachable during the swap.
+                  key={game}
+                  ref={iframeRef}
+                  className={styles.frame}
+                  // PICO-8's page is a little bigger than the iframe (its menu buttons hang off
+                  // the game's right edge), so without this it gets its own scrollbars. Those
+                  // would also narrow the page and shift the game out of the crop.
+                  scrolling="no"
+                  src={src}
+                  title={game}
+                  onLoad={() => applyStatus('ready')}
+                  onError={() => applyStatus('missing')}
+                />
+              )}
             </div>
           </Handheld>
         </div>
@@ -341,8 +359,10 @@ export default function Pico8Game({
         <div className={styles.panel}>
           {boardProtocol ? (
             <TurnPanel turns={turns} thinking={thinking} />
-          ) : (
+          ) : talkProtocol ? (
             <TalkPanel talks={talks} thinking={thinking} />
+          ) : (
+            <TurnPanel turns={[]} thinking={false} empty="Insert a cart to start a game." />
           )}
         </div>
       )}

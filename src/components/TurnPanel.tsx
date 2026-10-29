@@ -37,7 +37,16 @@ export type Turn = {
 type BadgeKind = 'win' | 'threat' | 'notice';
 type Badge = { text: string; kind: BadgeKind };
 
-export default function TurnPanel({ turns, thinking }: { turns: Turn[]; thinking: boolean }) {
+export default function TurnPanel({
+  turns,
+  thinking,
+  empty = "Waiting for the AI's first move…",
+}: {
+  turns: Turn[];
+  thinking: boolean;
+  /** What the panel says before the first turn. */
+  empty?: string;
+}) {
   return (
     <aside className={styles.panel}>
       <h2 className={styles.heading}>AI Turns</h2>
@@ -50,7 +59,7 @@ export default function TurnPanel({ turns, thinking }: { turns: Turn[]; thinking
       )}
 
       {turns.length === 0 && !thinking && (
-        <p className={styles.empty}>Waiting for the AI's first move…</p>
+        <p className={styles.empty}>{empty}</p>
       )}
 
       {turns

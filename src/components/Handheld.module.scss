@@ -237,6 +237,42 @@
   padding-bottom: 32px;
 }
 
+// First in the DOM so Tab reaches it before the cart's iframe, and `order` puts it back at
+// the bottom of the shell. Named in lowercase in the markup; Silkscreen draws it in capitals.
+.eject {
+  order: 1;
+  align-self: center;
+  min-height: 44px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--eject);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35);
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--eject-ink);
+  cursor: pointer;
+
+  &:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: none;
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  // Black, not the page's --accent: the accent blue is under 2:1 against the lavender, where
+  // black is 5:1. Both :focus and :focus-visible, for the reason CartCard gives.
+  &:focus,
+  &:focus-visible {
+    outline: 2px solid var(--print);
+    outline-offset: 3px;
+  }
+}
+
 .key {
   display: flex;
   align-items: center;

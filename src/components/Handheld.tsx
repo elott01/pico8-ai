@@ -1,9 +1,9 @@
 // The handheld the cart plays in: the lavender shell, the cart standing in its slot, the
-// bezel with its two status lights, the printed lettering, and the D-pad and O/X keys.
+// bezel with its two status lights, the printed lettering, the D-pad and O/X keys, and Eject.
 //
-// Drawn only. Pico8Game owns the cart and passes the screen in as `children`. The D-pad and
-// keys are hidden from assistive tech until they press the cart's buttons; until then they
-// would be controls that do nothing.
+// Pico8Game owns the cart and passes the screen in as `children`. The D-pad and keys are
+// hidden from assistive tech until they press the cart's buttons; until then they would be
+// controls that do nothing.
 
 import type { ReactNode } from 'react';
 import styles from './Handheld.module.scss';
@@ -12,6 +12,8 @@ export default function Handheld({
   cartName,
   powered,
   thinking,
+  canEject,
+  onEject,
   children,
 }: {
   /** The cart in the slot, or null when the slot is empty. */
@@ -20,11 +22,27 @@ export default function Handheld({
   powered: boolean;
   /** A model call is in flight. Blinks GEMINI. */
   thinking: boolean;
+  /** A loaded cart is in the slot, so Eject has something to do. */
+  canEject: boolean;
+  onEject?: () => void;
   /** The screen. */
   children: ReactNode;
 }) {
   return (
     <div className={styles.shell}>
+      {/* First in the DOM, drawn last (see .eject's order). The cart's iframe swallows Tab,
+          so a keyboard user can reach Eject only before the screen, never after it. */}
+      <button
+        type="button"
+        className={styles.eject}
+        // Required for WebKit's tab order; see CartCard.
+        tabIndex={0}
+        disabled={!canEject}
+        onClick={onEject}
+      >
+        Eject
+      </button>
+
       <span className={styles.slot} aria-hidden="true" />
       {/* The cart that's in, standing up out of the slot. The switcher's status line already
           says which cart is loaded, so this is drawn for sight only. */}

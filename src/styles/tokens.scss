@@ -91,6 +91,7 @@
   --print: var(--p8-black); // lettering on the shell, 5.0:1
   --bezel: #0b1024;
   --bezel-print: var(--p8-light-grey); // the status lights' labels
+  --screen-print: var(--p8-lavender); // "insert a cart" on the empty screen, 5.0:1 on black
   --btn: var(--p8-red);
   --btn-lo: #a8003a;
   --btn-ink: var(--p8-white);

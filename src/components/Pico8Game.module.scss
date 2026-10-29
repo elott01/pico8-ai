@@ -72,6 +72,16 @@
   }
 }
 
+// The empty screen after an eject.
+.insert {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-family: var(--font-pixel);
+  font-size: 16px; // a multiple of 8px; see .title in App.module.scss
+  color: var(--screen-print);
+}
+
 .hidden {
   display: none;
 }
