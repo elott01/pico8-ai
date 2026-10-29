@@ -20,6 +20,7 @@ npm run test:playwright                      # browser suite; boots Vite itself,
 npx playwright test --project=webkit         # the engine that catches the real bugs
 node scripts/export-cart.ts gemini           # re-export a cart headless; runs the PICO-8 app
 node scripts/cart-label.ts png carts/gemini.p8 label.png   # look at a cart's saved label
+node scripts/favicon.ts                      # redraw the favicon from gem-in-eye's head (sprite 76)
 ```
 
 `playwright/` is a separate suite from `npm test` — three engines, ~16s, needs
