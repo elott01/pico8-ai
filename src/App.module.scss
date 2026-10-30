@@ -1,4 +1,5 @@
 @use './styles/breakpoints' as bp;
+@use './styles/a11y';
 
 .page {
   padding: clamp(1rem, 3vw, 2rem) max(16px, 3%);
@@ -28,6 +29,13 @@
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+// 8px, plus each link's own padding. At 320px the open theme pill leaves the header no more
+// room than this: at 12px it ran a pixel past the header's edge.
+.nav {
+  display: flex;
+  gap: 8px;
 }
 
 .link {
@@ -85,14 +93,14 @@
   font-size: 13px;
 }
 
-// The header, then the carts, the device and the panel. One column, as wide as the device,
-// with the panel before the carts; from $medium the carts drop under a device-and-panel row;
-// from $wide they get a column of their own beside the device. The header spans every
-// column.
+// The header, then the carts, the device and the panel, then About. One column, as wide as
+// the device, with the panel before the carts; from $medium the carts drop under a
+// device-and-panel row; from $wide they get a column of their own beside the device. The
+// header and About span every column.
 .arcade {
   display: grid;
   grid-template-columns: minmax(0, var(--device-width));
-  grid-template-areas: 'header' 'device' 'panel' 'carts';
+  grid-template-areas: 'header' 'device' 'panel' 'carts' 'about';
   justify-content: center;
   gap: 28px;
   max-width: 1240px;
@@ -100,12 +108,12 @@
 
   @media (min-width: bp.$medium) {
     grid-template-columns: var(--device-width) minmax(280px, 340px);
-    grid-template-areas: 'header header' 'device panel' 'carts carts';
+    grid-template-areas: 'header header' 'device panel' 'carts carts' 'about about';
   }
 
   @media (min-width: bp.$wide) {
     grid-template-columns: auto var(--device-width) minmax(280px, 340px);
-    grid-template-areas: 'header header header' 'carts device panel';
+    grid-template-areas: 'header header header' 'carts device panel' 'about about about';
   }
 }
 
@@ -159,13 +167,5 @@
 // Visible to screen readers only — the game area swaps underneath the cart buttons, and
 // that change is otherwise silent.
 .srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
+  @include a11y.visually-hidden;
 }

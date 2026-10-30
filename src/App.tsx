@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import Pico8Game from './components/Pico8Game.tsx';
 import CartCard from './components/CartCard.tsx';
 import ThemeToggle from './components/ThemeToggle.tsx';
+import About from './components/About.tsx';
 import { CART_ORDER, CARTS } from './lib/carts.ts';
+import { SITE } from './lib/site.ts';
 import type { CartId } from './lib/gpio.ts';
 import styles from './App.module.scss';
 
@@ -47,16 +49,18 @@ export default function App() {
             <p className={styles.tagline}>PICO-8 carts with Google Gemini built in.</p>
           </div>
           <div className={styles.tools}>
-            <nav aria-label="Site">
+            <nav className={styles.nav} aria-label="Site">
+              {/* The keyboard's way to About too: it comes after the cart, which swallows Tab,
+                  and following this moves Tab's starting point there. tabIndex={0} on both
+                  links for the reason CartCard gives: WebKit leaves links out of the tab order
+                  by default, as it does buttons. */}
+              <a className={styles.link} href="#about" tabIndex={0}>
+                About
+              </a>
               {/* A new tab, against the usual advice, because leaving this one loses what the
                   page can't restore: a game in progress, the panel's turns, a dungeon run.
                   Coming back with Back can start the cart over. So it says so. */}
-              <a
-                className={styles.link}
-                href="https://github.com/elott01/pico8-ai"
-                target="_blank"
-                rel="noopener"
-              >
+              <a className={styles.link} href={SITE.repo} target="_blank" rel="noopener" tabIndex={0}>
                 Source
                 {/* Positioned out of flow, so browsers put a space before it in the name */}
                 <span className={styles.srOnly}>(opens in a new tab)</span>
@@ -105,6 +109,8 @@ export default function App() {
         </p>
 
         <Pico8Game game={game} onReady={() => setSwapping(false)} onEject={() => setGame(null)} />
+
+        <About />
       </div>
     </main>
   );

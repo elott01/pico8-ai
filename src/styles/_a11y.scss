@@ -1,0 +1,14 @@
+// Hidden from sight but read by screen readers: status lines, and words like "(opens in a
+// new tab)" that an icon already says to the eye. Out of flow, so browsers put a space
+// before it when they build a link's name.
+@mixin visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

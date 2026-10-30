@@ -1,0 +1,188 @@
+@use '../styles/breakpoints' as bp;
+@use '../styles/a11y';
+
+// An item of App's .arcade grid, which names the area: a full-width row under the arcade,
+// after a rule, so its edges line up with everything above it.
+.about {
+  grid-area: about;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+  margin-top: 24px;
+  padding-top: 48px;
+  border-top: 1px solid var(--rule);
+  text-align: left;
+  // The header's About link lands here; this keeps the rule off the window's very top edge
+  scroll-margin-top: 24px;
+}
+
+// The text at a reading width on the left, the chain on the right; one column, text first,
+// below $medium.
+.top {
+  display: grid;
+  gap: 48px;
+
+  @media (min-width: bp.$medium) {
+    grid-template-columns: minmax(0, 68ch) 384px;
+    justify-content: space-between;
+    align-items: start;
+  }
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+  min-width: 0;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 68ch;
+}
+
+// Silkscreen at a multiple of 8px only; see .title in App.module.scss.
+.heading {
+  font-family: var(--font-pixel);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.intro {
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.subheading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.body {
+  line-height: 1.6;
+}
+
+.chain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  width: 100%;
+  max-width: 384px;
+
+  li {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-md);
+  }
+
+  // A two-way arrow in each gap: the board goes down toward Gemini, the answer comes back up.
+  // A mask, so its colour is a token like everything else's.
+  li + li::before {
+    content: '';
+    position: absolute;
+    top: -26px;
+    left: 50%;
+    width: 16px;
+    height: 24px;
+    transform: translateX(-50%);
+    background: var(--ink-dim);
+    $arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 2v19M2 18l3 3 3-3M11 22V3M8 6l3-3 3 3'/%3E%3C/svg%3E");
+    -webkit-mask: $arrow center / contain no-repeat;
+    mask: $arrow center / contain no-repeat;
+  }
+
+  // Gemini, outlined in the brand colour
+  li:last-child {
+    border-color: var(--ai);
+  }
+}
+
+.stepName {
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.stepNote {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-dim);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 32px 48px;
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+}
+
+.bio {
+  max-width: 68ch;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--rule);
+  border-radius: 22px;
+  color: var(--ink);
+  text-decoration: none;
+
+  &:hover {
+    border-color: var(--ink-dim);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  svg {
+    flex: none;
+    color: var(--ink-dim);
+  }
+}
+
+.srOnly {
+  @include a11y.visually-hidden;
+}

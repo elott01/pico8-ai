@@ -8,7 +8,7 @@ const cards = '[aria-label="Choose a cart"] button';
 
 test('Source opens the repo in a new tab, and says so', async ({ page }) => {
   await page.goto('/');
-  const source = page.getByRole('link', { name: /^Source/ });
+  const source = page.getByRole('navigation', { name: 'Site' }).getByRole('link', { name: /^Source/ });
   await expect(source).toHaveAttribute('href', 'https://github.com/elott01/pico8-ai');
   // Leaving the page would lose a game in progress, so the repo opens beside it
   await expect(source).toHaveAttribute('target', '_blank');
