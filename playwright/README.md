@@ -25,25 +25,53 @@ npx playwright install chromium webkit
 | --- | --- |
 | `chromium` | the common case |
 | `webkit` | **the reason this suite exists** |
-| `mobile-safari` | real touch — `hasTouch`, mobile viewport, not just a narrow window |
+| `mobile-safari` | real touch — `hasTouch`, mobile viewport, not just a narrow window. The only project where PICO-8's own touch layout can switch on |
 
 WebKit is not redundant with Chromium. The cart switcher was keyboard-unreachable in Safari
 while passing every Chromium check, because WebKit leaves buttons out of the tab order unless
 macOS keyboard navigation is enabled. A single-engine suite stays green through that entire
 bug. Verified by mutation: deleting the `tabIndex={0}` from `CartCard` fails `webkit` and
-leaves `chromium` passing.
+leaves `chromium` passing. Links are left out the same way, and the header's Source link was
+once committed without it: `about.spec.ts` now fails in `webkit` if a header link loses its
+`tabIndex={0}`.
 
 ## What each file guards
 
-- **`keyboard.spec.ts`** — tab order reaches both cards, focus is visibly painted, Enter
+- **`keyboard.spec.ts`** — tab order reaches every cart, focus is visibly painted, Enter
   switches, the live region announces. Focus that moves invisibly is indistinguishable from a
   keyboard that does nothing, which is how the Safari bug was first misdiagnosed.
-- **`layout.spec.ts`** — no sideways scroll, equal card widths, WCAG 2.5.5 target sizes, and
-  the 7×6 board still fitting after a switch. Runs at every project's viewport, because these
-  only break at particular widths.
+- **`layout.spec.ts`** — no sideways scroll, every cartridge the same size (the empty slot
+  included), WCAG 2.5.5 target sizes, the 7×6 board still fitting after a switch, and Source
+  opening in a new tab. Runs at every project's viewport, because these only break at
+  particular widths. The size check runs at 1400px too, where the carts stand in a column:
+  in a row, stretching hides a mismatch.
+- **`screen.spec.ts`** — the game fills the handheld's 512px screen exactly, at 4×, before
+  and after the cart starts, at 1280 and 780px. The iframe is 540 × 539 and cropped to where
+  PICO-8's page draws the game, which is the export's layout, not ours: a new PICO-8 that
+  moved it would fail here. Also that the iframe keeps `scrolling="no"`. Headless browsers
+  draw no scrollbars, so this can't see them come back. It checks the attribute instead,
+  plus the reason for it, that PICO-8's page still overflows the iframe.
+- **`controls.spec.ts`** — the handheld's D-pad and keys set and clear bits in
+  `pico8_buttons[0]`, two held at once, focus staying in the cart, a click with no pointer
+  tapping, letting go on a cart switch, and the disabled state with no cart. On
+  `mobile-safari`, a tap starts the cart without PICO-8 switching to its touch layout.
+- **`eject.spec.ts`** — Eject empties the device, focus moves to the first cart, a cart goes
+  back in, and Tab reaches Eject before the cart's iframe, which swallows Tab.
+- **`theme.spec.ts`** — the theme control is one icon named for the current choice. It
+  opens sideways on a click, Enter or a tap, never on hover, moving the header's links along
+  without re-wrapping the header. A choice applies and survives a reload, Escape puts focus
+  back on the icon, and Auto clears the stored choice. A slow click on a link the pill had
+  pushed aside still lands.
+- **`about.spec.ts`** — the header's About and Source links are in the tab order, following
+  About lands Tab inside the section, every link off the site opens a new tab and says so,
+  and the chain lists the five steps a move takes, in order.
 - **`cart-switch.spec.ts`** — a turn in flight when you switch carts must never land in the
   new cart's panel. Stages a request by writing `ST_REQUEST` into `pico8_gpio` directly (the
   iframe is same-origin, which is how the page reads it at all), rather than driving the game.
+- **`talk.spec.ts`** — gem-in-eye's talk loop, with `/api/talk` stubbed and the cart's side
+  of the handshake played by writing GPIO directly. A purchase gets the first page and later
+  pages come from memory, a failed call answers with the fallback, and a reply that arrives
+  after the cart stopped waiting is dropped.
 - **`doors.spec.ts`**: both ways from Gem-in-Eye's dungeon back to the hub, which are
   separate code paths. One test walks the knight into the dungeon, home, and back in, and
   checks that the run (max depth, uptime) survives each `load()`. The other lets a dead weight

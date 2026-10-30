@@ -1,13 +1,17 @@
-# PICO-8 + Gemini
+# Ethan's Pico-AIght Arcade
 
 **[▶ Play it](https://pico8-ai.vercel.app)** &nbsp;·&nbsp; [![tests](https://github.com/elott01/pico8-ai/actions/workflows/test.yml/badge.svg)](https://github.com/elott01/pico8-ai/actions/workflows/test.yml)
 
-PICO-8 games embedded in a React app, with Gemini on the other side of each: the opponent
-in two board games, and the shopkeeper in a dungeon crawler. One Vercel deploy: a static
-Vite/React frontend plus two serverless functions (`api/move.ts` and `api/talk.ts`) that
-hold the API key.
+PICO-8 carts with Google Gemini built in.
 
-Three carts, switchable in the browser:
+[![The arcade: a lavender handheld running Gem-in-Eye, with the shelf of carts on its left and the AI panel on its right](docs/screenshot.png)](https://pico8-ai.vercel.app)
+
+PICO-8 games embedded in a React app and played in a handheld drawn around the cart, with
+Gemini on the other side of each: the opponent in two board games, and the shopkeeper in a
+dungeon crawler. One Vercel deploy: a static Vite/React frontend plus two serverless
+functions (`api/move.ts` and `api/talk.ts`) that hold the API key.
+
+Three carts, on a shelf beside the handheld:
 
 | cart | why it is here |
 | --- | --- |
@@ -181,10 +185,14 @@ api/_types.ts             the /api/move and /api/talk wire contracts, shared wit
 carts/*.p8                PICO-8 sources; exported into public/games/
 carts/gemini*.p8          Gem-in-Eye: the hub (shop, GPIO) loads the dungeon; one export
 public/games/*.{html,js}  exported carts; the iframe loads the .html
-src/components/           iframe embed, GPIO poll loops, cart switcher, move and talk panels
+public/labels/*.png       each cart's label for the shelf, checked against the cart by a test
+src/components/           the handheld, iframe embed, GPIO poll loops, cart shelf, move and
+                          talk panels, theme control, About
 src/lib/                  gpio.ts (byte protocol per cart), ai.ts + talk.ts (API clients),
-                          and gem-in-eye's memory in localStorage
-src/styles/               design tokens (PICO-8 palette, geometry) + global reset
+                          gem-in-eye's memory in localStorage, buttons.ts (the handheld's
+                          controls), site.ts (About's bio and links)
+src/styles/               design tokens (PICO-8 palette, geometry, the handheld's colours),
+                          breakpoints + global reset
 tests/                    node:test suites — fast, no browser, no network
 playwright/               browser suite — Chromium, WebKit, mobile Safari
 bench/                    prompt benchmarks against the real model + recorded results

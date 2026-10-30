@@ -23,7 +23,7 @@ node scripts/cart-label.ts png carts/gemini.p8 label.png   # look at a cart's sa
 node scripts/favicon.ts                      # redraw the favicon from gem-in-eye's head (sprite 76)
 ```
 
-`playwright/` is a separate suite from `npm test` — three engines, ~16s, needs
+`playwright/` is a separate suite from `npm test` — three engines, ~20s, needs
 `npx playwright install chromium webkit` once. **WebKit is not redundant with Chromium**:
 the cart switcher was keyboard-unreachable in Safari while passing every Chromium check.
 See `playwright/README.md`.
@@ -61,6 +61,10 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
   the web. Desktop PICO-8 is noticeably slower, so judge speed in an export, not the editor.
 - **`src/components/Pico8Game.tsx`** embeds the cart's *exported `.html`* in an iframe (not the
   `.js` — the export needs its own shell) and polls `contentWindow.pico8_gpio` every 100ms.
+  **`Handheld.tsx`** draws the device around it: the shell, the cart in its slot, the POWER
+  and GEMINI lights, the D-pad and keys, and Eject. `Pico8Game` passes the screen in as
+  `children` and keeps everything about the cart. **`App.tsx`** owns the page's grid (header,
+  carts, device, panel, About), rearranged at the widths in `src/styles/_breakpoints.scss`.
 - **`src/lib/gpio.ts`** is the byte-protocol source of truth, one `PROTOCOLS` entry per game
   cart and one `TALK_PROTOCOLS` entry for the shop cart (see `docs/gpio-protocol.md`);
   each cart's Lua half must match its entry, and `tests/gpio-protocol.test.ts` parses the Lua
@@ -214,21 +218,61 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   be a module — a deferred one runs after first paint, so a stored choice that disagrees
   with the OS flashes the wrong theme on every load. Changing one side alone silently
   reintroduces the flash.
-- **`tabIndex={0}` on a `<button>` is required, not redundant.** WebKit leaves buttons and
-  links out of the tab order unless macOS keyboard navigation is enabled, so on default
-  Safari every control in `CartCard.tsx` and `ThemeToggle.tsx` is unreachable by keyboard
-  without it — Tab cycles the iframe and body only. It looks like something a linter should
-  strip; deleting it silently makes the page mouse-only for a large share of visitors.
-  Verified against Playwright's WebKit, which reproduces the default.
+- **`tabIndex={0}` on a `<button>` or a link is required, not redundant.** WebKit leaves
+  buttons and links out of the tab order unless macOS keyboard navigation is enabled, so on
+  default Safari the carts, the theme control, Eject, the header's links and About's links
+  are unreachable by keyboard without it — Tab cycles the iframe and body only. It looks like
+  something a linter should strip; deleting it silently makes the page mouse-only for a
+  large share of visitors. Verified against Playwright's WebKit, which reproduces the
+  default. The handheld's D-pad and keys are the exception, `-1` on purpose (see below).
 - **The PICO-8 export swallows Tab.** Its keydown handler blocks keyCode 9 with the cursor
   keys ("block only cursors, M R P, tab"), so once focus is inside a running cart only a
   mouse click gets it back out. Catching Tab from the page was tried and reverted: a
   capture-phase listener on the iframe's document works, but it took every Tab and moved
   focus invisibly. If the page ever needs a way out, make it a visible control, not a key
   handler fighting the runtime. The shell can't be patched either; a re-export regenerates it.
+  - **So Tab reaches only what comes before the iframe in the DOM**, and the layout is built
+    around that. The carts come first in the DOM at every width, and grid areas place them
+    on screen. Eject is first in `Handheld`'s DOM, and CSS `order` draws it at the bottom.
+    About comes after the cart, so the header's About link is the keyboard's way there:
+    following `#about` moves Tab's starting point into it. A new control the keyboard needs
+    goes before the iframe in the DOM. `eject.spec.ts` and `about.spec.ts` check these paths.
+- **The cart's screen is a crop, and its numbers are PICO-8's.** The export draws the game at
+  a whole multiple of 128 only when its frame, 95% of the iframe, is at least 512px. So from
+  `$full-device` up the iframe is 540 × 539, 14px left of a 512px window that shows only the
+  game (`Pico8Game.module.scss`). Those numbers are the export's layout, and a new PICO-8
+  could move the game; `playwright/screen.spec.ts` fails if it does. The window is
+  `overflow: clip`, not `hidden`: focusing the iframe scrolls a hidden box, which slid the
+  crop sideways. **`scrolling="no"` on the iframe is required, not obsolete.** PICO-8's page
+  overflows the iframe, and its scrollbars would show inside the screen and narrow the crop.
+  Headless browsers draw no scrollbars, so no test can see them return; `screen.spec.ts`
+  checks the attribute instead. Below `$full-device` the iframe is plain and column-wide.
+- **Touches inside the cart's page never reach PICO-8.** At its first touch PICO-8 switches to
+  its own touch layout: it shrinks the game to two thirds of its window, draws a controller
+  over it, and zeroes `pico8_buttons` on every later touch, breaking the crop and the
+  handheld's controls. `keepTouchOut` in `Pico8Game.tsx` stops touch events in the capture
+  phase on each new iframe's window. A tap still clicks, so the play button still starts the
+  cart. `controls.spec.ts` checks this on the mobile project.
+- **The handheld's D-pad and keys write `pico8_buttons[0]`**, the export's hook for on-page
+  buttons, with the bits in `src/lib/buttons.ts`. They let go of everything on a cart change,
+  since input held across a `load()` is lost, and when the tab is hidden. Not on window blur,
+  which fires every time focus goes into the cart. A press leaves focus where it was, so the
+  cart's own keys keep working. They are out of the tab order (`tabIndex -1`) on purpose:
+  keyboard players have the real keys, and Tab can't get past the iframe to reach them.
 - **Colours belong in `src/styles/`, never in a `.tsx`.** Badges carry a semantic `kind`
   (`win`/`threat`/`notice`) that maps to a class; a hex code in a component would be
-  invisible to the light/dark switch.
+  invisible to the light/dark switch. The handheld's and the cartridges' colours are a group
+  of their own in `tokens.scss`, outside the theme mixins on purpose: the device is a
+  physical object and looks the same in both themes.
+- **Silkscreen is set only at multiples of 8px, and in px.** A font pixel is 1/8 em, so any
+  other size, a `rem` or a fluid `clamp()`, lands between pixels and blurs, and any
+  `letter-spacing` pushes letters off the grid. It is bundled from `@fontsource/silkscreen`
+  (OFL) in `main.tsx`.
+- **`src/lib/site.ts` is Ethan's to fill in by hand:** the bio and links About shows. An empty
+  field is left off the page, so leave one empty rather than inventing a placeholder.
+- **A hot reload of `Pico8Game.tsx` turns POWER off.** It resets the cart's status to
+  `loading` but keeps the iframe, so `onLoad` never fires again: POWER goes dark and both
+  poll loops skip every tick, so the AI stops answering. It's dev-only; reload the page.
 - Diagnostic signature: if the AI always plays the **first empty cell**, `GEMINI_API_KEY` is
   unset and `api/move.ts` took its no-key branch.
 - Module state does not survive `vercel dev`'s per-request reload, which is why rate-limit
