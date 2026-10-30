@@ -28,16 +28,18 @@
 
 @mixin light-tokens {
   --bg: var(--p8-white);
-  --surface: #ffffff;
-  --surface-raised: #fbfcfe;
+  // The panels and rules lean toward the page's cream, as the dark theme's lean toward its dark
+  // blue. Pure white panels and PICO-8's cool light grey looked cold on it.
+  --surface: #fff9f5; // the cream, paler
+  --surface-raised: var(--p8-white); // a step down from --surface
   --ink: var(--p8-dark-blue);
   --ink-dim: var(--p8-dark-grey);
-  --rule: var(--p8-light-grey);
+  --rule: #cdc3bc; // a warm grey as light as PICO-8's light grey
   --accent: #1076c4;
-  --win: var(--p8-dark-green);
+  --win: #007d4b; // PICO-8's dark green, darker: 5.0:1 on --surface, where PICO-8's is 4.4:1
   --threat: var(--p8-dark-red); // 5.6:1 on white; red was 3.9:1
   --notice: var(--p8-brown);
-  --cell-bg: #ffffff;
+  --cell-bg: #fff9f5;
 }
 
 :root {
