@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import styles from './ThemeToggle.module.scss';
 
 // Three states, not two: once you have overridden the OS, a two-way switch gives you no
@@ -27,23 +27,27 @@ function readStored(): ThemeChoice {
   }
 }
 
-// One icon, the current choice, that opens into all three. It opens on hover for a mouse,
-// and on click, tap, Enter or Space for everyone, since hover alone would shut out touch
-// and the keyboard. The three hang below the icon: sideways they would cover the header's
-// links or run off a phone's screen, and over the icon a click on it after a hover would
-// land on whichever choice sat there.
+// One icon, the current choice, that opens sideways into all three, always in the same
+// order, so the other two appear either side of it. It opens on click, tap, Enter or Space
+// and not on hover: opening slides the icons along, so a click just after a hover would
+// land on whichever one had slid under the pointer.
+//
+// The icon you click is a transparent button over the strip of three, which draws the
+// current choice even while closed. Closed, the strip is inert, so only that button is in
+// the tab order and the accessibility tree.
 export default function ThemeToggle() {
   const [choice, setChoice] = useState<ThemeChoice>(readStored);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const tray = useRef<HTMLDivElement>(null);
-  const trayId = useId();
-  const closeTimer = useRef<number | undefined>(undefined);
-  // Where focus goes once the open state has rendered: into the tray when it was opened from
-  // the keyboard or a tap, back to the icon when it closes from inside the tray.
-  const focusTray = useRef(false);
+  const strip = useRef<HTMLDivElement>(null);
+  const stripId = useId();
+  // Where focus goes once the open state has rendered: into the strip when it was opened,
+  // back to the icon when it closes from inside the strip.
+  const focusStrip = useRef(false);
   const focusIcon = useRef(false);
+  // A press outside that has not been released yet. See the click listener below.
+  const pressedElsewhere = useRef(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -63,54 +67,65 @@ export default function ThemeToggle() {
   }, [choice]);
 
   const focusCurrent = () =>
-    tray.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus();
+    strip.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus();
 
-  useEffect(() => {
-    if (open && focusTray.current) {
-      focusTray.current = false;
-      focusCurrent();
-    } else if (!open && focusIcon.current) {
+  // React 18 has no inert prop, so it is set on the element, before paint so the strip is
+  // never reachable while closed. Focus moves first when closing, since inert would drop it.
+  useLayoutEffect(() => {
+    if (!open && focusIcon.current) {
       focusIcon.current = false;
       trigger.current?.focus();
     }
+    if (strip.current) strip.current.inert = !open;
+    if (open && focusStrip.current) {
+      focusStrip.current = false;
+      focusCurrent();
+    }
   }, [open]);
 
-  // A tap or click anywhere else closes it; on a touch screen there's no pointer to leave.
+  // A click anywhere else closes it, on the click and not the press: closing slides the
+  // Source link back, and a link that moves between the press and the release never gets
+  // the click. For the same reason the blur that a press elsewhere causes is left alone.
   useEffect(() => {
     if (!open) return;
-    const elsewhere = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    const outside = (event: Event) => !root.current?.contains(event.target as Node);
+    const press = (event: PointerEvent) => {
+      pressedElsewhere.current = outside(event);
     };
-    document.addEventListener('pointerdown', elsewhere);
-    return () => document.removeEventListener('pointerdown', elsewhere);
+    const cancel = () => {
+      pressedElsewhere.current = false;
+    };
+    const click = (event: MouseEvent) => {
+      pressedElsewhere.current = false;
+      if (outside(event)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', press, true);
+    document.addEventListener('pointercancel', cancel, true);
+    document.addEventListener('click', click, true);
+    return () => {
+      pressedElsewhere.current = false;
+      document.removeEventListener('pointerdown', press, true);
+      document.removeEventListener('pointercancel', cancel, true);
+      document.removeEventListener('click', click, true);
+    };
   }, [open]);
 
-  useEffect(() => () => window.clearTimeout(closeTimer.current), []);
-
-  // The tray hides as it closes, so focus inside it would drop to the page; it goes back to
-  // the icon instead.
   const close = () => {
-    focusIcon.current = !!tray.current?.contains(document.activeElement);
+    focusIcon.current = !!strip.current?.contains(document.activeElement);
     setOpen(false);
   };
 
-  const current = CHOICES.find((c) => c.value === choice)!;
+  const at = CHOICES.findIndex((c) => c.value === choice);
+  const current = CHOICES[at];
 
   return (
     <div
       ref={root}
       className={`${styles.toggle} ${open ? styles.open : ''}`}
-      onPointerEnter={(event) => {
-        if (event.pointerType !== 'mouse') return;
-        window.clearTimeout(closeTimer.current);
-        setOpen(true);
-      }}
-      onPointerLeave={(event) => {
-        if (event.pointerType !== 'mouse') return;
-        // A moment's grace, so a diagonal move to the tray doesn't snap it shut
-        closeTimer.current = window.setTimeout(close, 300);
-      }}
+      // Which slot of the strip shows through while closed
+      style={{ '--at': at } as CSSProperties}
       onBlur={(event) => {
+        if (pressedElsewhere.current) return;
         if (!root.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
       }}
       onKeyDown={(event) => {
@@ -129,35 +144,34 @@ export default function ThemeToggle() {
         tabIndex={0}
         aria-label={`Colour theme: ${current.name}`}
         aria-expanded={open}
-        aria-controls={trayId}
+        aria-controls={stripId}
+        // Only the keyboard reaches it while open; see .trigger
         onClick={() => {
-          // A mouse click comes after a hover, which has already opened it
-          if (open) return focusCurrent();
-          focusTray.current = true;
-          setOpen(true);
+          focusStrip.current = !open;
+          setOpen(!open);
         }}
-      >
-        {current.icon}
-      </button>
+      />
 
-      <div ref={tray} id={trayId} className={styles.tray} role="group" aria-label="Colour theme">
-        {CHOICES.map(({ value, name, label, icon }) => (
-          <button
-            key={value}
-            type="button"
-            className={styles.choice}
-            tabIndex={0}
-            aria-label={label}
-            title={name}
-            aria-pressed={choice === value}
-            onClick={() => {
-              setChoice(value);
-              close();
-            }}
-          >
-            {icon}
-          </button>
-        ))}
+      <div className={styles.window}>
+        <div ref={strip} id={stripId} className={styles.strip} role="group" aria-label="Colour theme">
+          {CHOICES.map(({ value, name, label, icon }) => (
+            <button
+              key={value}
+              type="button"
+              className={styles.choice}
+              tabIndex={0}
+              aria-label={label}
+              title={name}
+              aria-pressed={choice === value}
+              onClick={() => {
+                setChoice(value);
+                close();
+              }}
+            >
+              {icon}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
