@@ -100,8 +100,10 @@ export default function About() {
       </div>
 
       <div className={styles.who}>
-        <h3 className={styles.subheading}>Who made it</h3>
-        <p className={styles.bio}>I’m Ethan.{SITE.bio && ` ${SITE.bio}`}</p>
+        <div className={styles.block}>
+          <h3 className={styles.subheading}>Who made it</h3>
+          <p className={styles.body}>I’m Ethan.{SITE.bio && ` ${SITE.bio}`}</p>
+        </div>
         <ul className={styles.links}>
           {links.map(({ href, text, icon, external }) => (
             <li key={href}>

@@ -1,5 +1,18 @@
-@use '../styles/breakpoints' as bp;
 @use '../styles/a11y';
+
+// Two equal columns where there's room for both at $column-min, else one: from $medium, since
+// below it About is only as wide as the device. The intro and the chain, the two columns under
+// them, and the "Who made it" card all split this way, so their right-hand columns line up.
+$column-min: 340px;
+$column-gap: 48px;
+
+// $inset is a box's padding and border on each side, so a split inside a card still lines up
+// with one outside it, and both drop to one column at the same width.
+@mixin split($inset: 0px) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, $column-min - $inset), 1fr));
+  column-gap: $column-gap;
+}
 
 // An item of App's .arcade grid, which names the area: a full-width row under the arcade,
 // after a rule, so its edges line up with everything above it.
@@ -16,17 +29,11 @@
   scroll-margin-top: 24px;
 }
 
-// The text at a reading width on the left, the chain on the right; one column, text first,
-// below $medium.
+// The text on the left, the chain on the right; one column, text first, below $medium.
 .top {
-  display: grid;
-  gap: 48px;
-
-  @media (min-width: bp.$medium) {
-    grid-template-columns: minmax(0, 68ch) 384px;
-    justify-content: space-between;
-    align-items: start;
-  }
+  @include split;
+  row-gap: 48px;
+  align-items: start;
 }
 
 .text {
@@ -79,6 +86,9 @@
   gap: 28px;
   width: 100%;
   max-width: 384px;
+  // Centred in its column, or under the text in one column, which puts it under the middle of
+  // the device too
+  justify-self: center;
 
   li {
     position: relative;
@@ -127,33 +137,32 @@
 }
 
 .columns {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
-  gap: 32px 48px;
+  @include split;
+  row-gap: 32px;
 }
 
+$who-padding: 24px;
+
 .who {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 24px;
+  @include split($who-padding + 1px);
+  row-gap: 24px;
+  // Less above and below, where nothing has to line up
+  padding: 20px $who-padding;
   background: var(--surface);
   border: 1px solid var(--rule);
   border-radius: var(--radius-lg);
 }
 
-.bio {
-  max-width: 68ch;
-  font-size: 16px;
-  line-height: 1.6;
-}
-
+// One row, centred in its column like the chain and level with the middle of the bio beside
+// it, wrapping only where the column is too narrow for all of them.
 .links {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
+  align-self: center;
   gap: 12px;
 }
 
