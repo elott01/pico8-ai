@@ -6,7 +6,28 @@
 .device {
   grid-area: device;
   min-width: 0;
-  padding-top: 40px;
+  padding-top: calc(40px * var(--device-scale));
+
+  // A transform shrinks only what's drawn, so the box keeps the full-size handheld's room;
+  // this gives the room back. Centred, for the one-column layout, whose column stays the
+  // full-size device's width so the header and the panel keep theirs.
+  @media #{bp.$compact} {
+    justify-self: center;
+    width: var(--device-column);
+    height: calc((40px + var(--device-height)) * var(--device-scale));
+  }
+}
+
+// On a short window the handheld draws at --device-scale. A transform rather than a
+// smaller handheld, because the iframe has to stay 540px to PICO-8, which otherwise draws a
+// blurry size in between (see .frame); and rather than CSS zoom, which keeps it 540px only
+// in some engines. Scaled from the top left of the device column, which it then fills.
+.handheld {
+  @media #{bp.$compact} {
+    width: var(--device-width);
+    transform: scale(var(--device-scale));
+    transform-origin: top left;
+  }
 }
 
 // The panel follows the row's height rather than setting it. Out of flow, it adds nothing
@@ -22,8 +43,8 @@
   }
 
   // Beside the device, its top lines up with the shell's, below the cart's 40px.
-  @media (min-width: bp.$medium) {
-    margin-top: 40px;
+  @media #{bp.$medium} {
+    margin-top: calc(40px * var(--device-scale));
 
     > * {
       position: absolute;

@@ -247,6 +247,16 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   overflows the iframe, and its scrollbars would show inside the screen and narrow the crop.
   Headless browsers draw no scrollbars, so no test can see them return; `screen.spec.ts`
   checks the attribute instead. Below `$full-device` the iframe is plain and column-wide.
+- **On a short window the handheld is a transform.** Wider than `$full-device` and shorter
+  than `$full-height`, it draws at 3/4 (`--device-scale`) and the rest of the page keeps its
+  size. PICO-8 has to go on measuring a 540px iframe, so a smaller `--stage-size` would bring
+  the blur back. CSS `zoom` keeps it 540px in Chromium and WebKit, but Firefox is unchecked.
+  Only 0.75 lands every 4px block on whole pixels at any pixel density. A transform leaves
+  the box full-size, so `.device` sets the scaled height from `--device-height`, which is the
+  shell's height copied by hand; `screen.spec.ts` fails if the two drift. The cartridges come
+  down with it through `zoom`, since they hold no iframe. Safari won't draw zoomed text under
+  9px, which is why their tagline is 12px before the zoom: any less and Gem-in-Eye's wraps to
+  a third line there alone, making that cartridge taller than the others.
 - **Touches inside the cart's page never reach PICO-8.** At its first touch PICO-8 switches to
   its own touch layout: it shrinks the game to two thirds of its window, draws a controller
   over it, and zeroes `pico8_buttons` on every later touch, breaking the crop and the

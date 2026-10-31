@@ -1,11 +1,21 @@
 // Layout breakpoints, for every module that changes at them. Sass variables rather than
 // tokens because a media query can't read a custom property.
 //
-// They come from the arcade grid in App.module.scss. $wide fits the carts column, the
-// device (--device-width), a panel at its 280px minimum and two 28px gaps inside the page's
-// 3% gutters. $medium fits the device and the panel alone. $full-device fits the device
-// alone at its full 624px, with room for a 15px page scrollbar: from there the handheld has
-// its full padding and the cropped 512px screen, and below it the phone's thin shell.
+// They come from the arcade grid in App.module.scss. $full-device fits the device alone at
+// its full 624px, with room for a 15px page scrollbar: from there the handheld has its full
+// padding and the cropped 512px screen, and below it the phone's thin shell.
+//
+// $full-height fits the page's padding, the header, and the full-size row of carts, device
+// and panel under it. A window wider than $full-device but shorter than that is $compact:
+// the handheld and the cartridges draw at 3/4 (--device-scale in tokens.scss), and
+// everything else keeps its size.
+//
+// $medium and $wide are whole queries rather than widths because each has two widths, one
+// per device size. $medium fits the device and the panel alone. $wide fits the carts
+// column, the device, a panel at its 280px minimum and two 28px gaps inside the page's 3%
+// gutters.
 $full-device: 680px;
-$medium: 1020px;
-$wide: 1300px;
+$full-height: 1134px;
+$compact: '(min-width: #{$full-device}) and (max-height: #{$full-height - 1px})';
+$medium: '(min-width: 1020px), (min-width: 850px) and (max-height: #{$full-height - 1px})';
+$wide: '(min-width: 1300px), (min-width: 1090px) and (max-height: #{$full-height - 1px})';

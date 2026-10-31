@@ -6,6 +6,8 @@
 // Re-theming repoints the semantic layer only; the handheld is a physical object and looks
 // the same in both themes.
 
+@use 'breakpoints' as bp;
+
 // The semantic layer is emitted three times — once as the default, once for the OS
 // preference, once for an explicit user choice — so it lives in mixins. This is the one
 // thing here that plain CSS genuinely cannot express without duplicating every value.
@@ -72,6 +74,14 @@
   // The handheld, and the grid column it sits in: the screen plus 2 × 20 bezel and 2 × 36
   // shell padding.
   --device-width: 624px;
+  // Its height at that width. Nothing sets it; it's what the shell's contents add up to.
+  // Only a scaled handheld needs it, to give back the room a transform doesn't (see .device
+  // in Pico8Game.module.scss). playwright/screen.spec.ts fails if the two drift apart.
+  --device-height: 936px;
+  // 0.75 on a window too short for the full-size arcade, set below. Only 0.75 keeps the
+  // screen sharp: PICO-8 still draws 512, and each 4px block lands on 3.
+  --device-scale: 1;
+  --device-column: calc(var(--device-width) * var(--device-scale));
 
   --radius-sm: 2px;
   --radius-md: 8px;
@@ -116,6 +126,10 @@
 
   // Dark is the default: the cart is a dark canvas, and a light page around it is glare.
   @include dark-tokens;
+
+  @media #{bp.$compact} {
+    --device-scale: 0.75;
+  }
 }
 
 // Follows the OS, but only while the user has expressed no preference of their own. The

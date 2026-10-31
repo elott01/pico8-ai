@@ -330,7 +330,7 @@ export default function Pico8Game({
             <code>public/games/</code> to play.
           </p>
         )}
-        <div className={status === 'missing' ? styles.hidden : undefined}>
+        <div className={status === 'missing' ? styles.hidden : styles.handheld}>
           <Handheld
             cartName={game === null ? null : CARTS[game].name}
             powered={status === 'ready'}

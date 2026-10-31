@@ -24,6 +24,56 @@ test('the page never scrolls sideways', async ({ page }) => {
   expect(overflows).toBe(false);
 });
 
+// The carts, the handheld and the panel inside a laptop's window at 100% zoom, header
+// included, and the three ending level beside each other. 1208 x 879 is the window the
+// owner zoomed out to 75% to fit them all in, before the handheld scaled itself. Below
+// 1134px tall the handheld and cartridges draw at 3/4; 2560 x 1440 has the full-size ones.
+// A shorter window than these, like 1280 x 720, doesn't fit even at 3/4.
+for (const [width, height] of [
+  [1208, 879],
+  [1440, 900],
+  [1920, 1080],
+  [2560, 1440],
+]) {
+  test(`the arcade fits a ${width} x ${height} window`, async ({ page, isMobile }) => {
+    test.skip(isMobile, 'a phone has its own layout, the panel and carts under the device');
+    await page.setViewportSize({ width, height });
+    await page.goto('/');
+    const columns = [
+      page.getByRole('region', { name: 'Carts' }),
+      page.getByRole('group', { name: 'Cart buttons' }).locator('..'), // the shell
+      page.locator('aside'),
+    ];
+    const bottoms = await Promise.all(
+      columns.map(async (column) => {
+        const box = (await column.boundingBox())!;
+        return box.y + box.height;
+      }),
+    );
+    for (const bottom of bottoms) {
+      expect(bottom).toBeLessThanOrEqual(height);
+      expect(Math.abs(bottom - bottoms[1]!)).toBeLessThan(1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  });
+}
+
+test('at 3/4 a cartridge keeps its full-size shape, in a shelf that stays wider', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'a phone has no 3/4 cartridges');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  expect((await page.getByRole('region', { name: 'Carts' }).boundingBox())!.width).toBe(198);
+  // 176 x 261, the full-size cartridge
+  for (const card of await page.locator(cards).all()) {
+    const box = (await card.boundingBox())!;
+    expect(Math.abs(box.width - 132)).toBeLessThan(1);
+    expect(Math.abs(box.height - 195.75)).toBeLessThan(1);
+  }
+});
+
 test('every cartridge is the same size, the empty slot included', async ({ page, isMobile }) => {
   // A cartridge whose tagline ran longer would otherwise be taller than the rest, and the
   // selected cart's dashed outline would stop matching the cartridge it stands in for. The

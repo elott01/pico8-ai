@@ -44,11 +44,16 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   included), WCAG 2.5.5 target sizes, the 7×6 board still fitting after a switch, and Source
   opening in a new tab. Runs at every project's viewport, because these only break at
   particular widths. The size check runs at 1400px too, where the carts stand in a column:
-  in a row, stretching hides a mismatch.
+  in a row, stretching hides a mismatch. Also that the shelf, shell and panel fit a laptop's
+  window and end level, from 1208 x 879 to 2560 x 1440, and that a 3/4 cartridge keeps its
+  full-size shape.
 - **`screen.spec.ts`** — the game fills the handheld's 512px screen exactly, at 4×, before
-  and after the cart starts, at 1280 and 780px. The iframe is 540 × 539 and cropped to where
-  PICO-8's page draws the game, which is the export's layout, not ours: a new PICO-8 that
-  moved it would fail here. Also that the iframe keeps `scrolling="no"`. Headless browsers
+  and after the cart starts, at 1280 and 780px, on a window tall enough for the full-size
+  handheld and on a short one, where it's drawn at 384px and PICO-8 must still draw 512 behind
+  the transform. The iframe is 540 × 539 and cropped to where PICO-8's page draws the game,
+  which is the export's layout, not ours: a new PICO-8 that moved it would fail here. Also
+  that `--device-height` is still the shell's real height, since the 3/4 handheld's box is
+  set from it, and that the iframe keeps `scrolling="no"`. Headless browsers
   draw no scrollbars, so this can't see them come back. It checks the attribute instead,
   plus the reason for it, that PICO-8's page still overflows the iframe.
 - **`controls.spec.ts`** — the handheld's D-pad and keys set and clear bits in

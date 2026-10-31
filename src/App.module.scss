@@ -96,7 +96,8 @@
 // The header, then the carts, the device and the panel, then About. One column, as wide as
 // the device, with the panel before the carts; from $medium the carts drop under a
 // device-and-panel row; from $wide they get a column of their own beside the device. The
-// header and About span every column.
+// header and About span every column. Beside the device, the panel takes whatever width is
+// left, which on a short window includes what the 3/4 device gives up.
 .arcade {
   display: grid;
   grid-template-columns: minmax(0, var(--device-width));
@@ -106,13 +107,13 @@
   max-width: 1240px;
   margin-inline: auto;
 
-  @media (min-width: bp.$medium) {
-    grid-template-columns: var(--device-width) minmax(280px, 340px);
+  @media #{bp.$medium} {
+    grid-template-columns: var(--device-column) minmax(280px, 1fr);
     grid-template-areas: 'header header' 'device panel' 'carts carts' 'about about';
   }
 
-  @media (min-width: bp.$wide) {
-    grid-template-columns: auto var(--device-width) minmax(280px, 340px);
+  @media #{bp.$wide} {
+    grid-template-columns: auto var(--device-column) minmax(280px, 1fr);
     grid-template-areas: 'header header header' 'carts device panel' 'about about about';
   }
 }
@@ -126,9 +127,12 @@
   gap: 12px;
   text-align: left;
 
-  // Beside the device, its top lines up with the shell's, below the cart in the slot.
-  @media (min-width: bp.$wide) {
-    margin-top: 40px;
+  // Beside the device, its top lines up with the shell's, below the cart in the slot, and
+  // its bottom with the shell's too. The minimum is what gives the 3/4 cartridges room at
+  // their sides; full-size ones are wider than it anyway.
+  @media #{bp.$wide} {
+    min-width: 198px;
+    margin-top: calc(40px * var(--device-scale));
   }
 }
 
@@ -156,10 +160,16 @@
   justify-content: safe center;
   overflow-x: auto;
 
-  // A column beside the device.
-  @media (min-width: bp.$wide) {
+  // A column beside the device, as tall as it, with the cartridges spread evenly down it.
+  // The padding matches the gap, so the space above and below them matches the space
+  // between.
+  @media #{bp.$wide} {
+    flex: 1;
     flex-direction: column;
     align-items: center;
+    justify-content: space-evenly;
+    gap: 16px;
+    padding: 16px;
     overflow-x: visible;
   }
 }
