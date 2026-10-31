@@ -63,6 +63,15 @@ export default function TalkPanel({ talks, thinking }: { talks: TalkTurn[]; thin
 function TalkCard({ talk, defaultOpen }: { talk: TalkTurn; defaultOpen: boolean }) {
   const { n, item, tier, listPrice, charged, verdict, speech, notice, fromModel, stats, agentNumber } = talk;
   const note = fromModel ? null : fallbackNote(talk);
+  const shown = [
+    `agent ${agentNumber}`,
+    `${stats.pruned} pruned`,
+    `${stats.rollbacks} rollbacks`,
+    `depth ${stats.maxDepth}`,
+    `${Math.floor(stats.uptimeSec / 60)} min`,
+    `purse ${stats.purse}`,
+    `stash ${stats.stashed}`,
+  ];
 
   return (
     <div className={styles.card}>
@@ -77,17 +86,17 @@ function TalkCard({ talk, defaultOpen }: { talk: TalkTurn; defaultOpen: boolean 
       </div>
 
       {fromModel && speech && <p className={styles.commentary}>“{speech}”</p>}
+      {/* Out here, not in the dropdown: the dropdown is what went in, and this came out. */}
+      {fromModel && notice && <p className={styles.note}>noticed: {notice}</p>}
       {note && <p className={`${styles.note} ${styles[note.kind]}`}>{note.text}</p>}
 
       <details open={defaultOpen} className={styles.details}>
         <summary className={styles.summary}>what he was shown</summary>
-        <div className={styles.reasoning}>
-          {fromModel && notice && <p className={styles.reasoningText}>noticed: {notice}</p>}
-          <p className={styles.reasoningText}>
-            agent {agentNumber} · {stats.pruned} pruned · {stats.rollbacks} rollbacks · depth {stats.maxDepth} ·{' '}
-            {Math.floor(stats.uptimeSec / 60)} min · purse {stats.purse} · stash {stats.stashed}
-          </p>
-        </div>
+        <p className={styles.shown}>
+          {shown.map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </p>
       </details>
     </div>
   );

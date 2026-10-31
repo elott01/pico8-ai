@@ -130,6 +130,21 @@
   overflow-x: auto; // long line rows scroll here rather than widening the page
 }
 
+// What gem-in-eye was shown. Spaced, not joined with dots, so a narrow panel wraps between
+// items with none left dangling, and no item breaks in two.
+.shown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+  margin-top: 0.5rem;
+  font-size: 11px;
+  line-height: 1.6;
+
+  > span {
+    white-space: nowrap;
+  }
+}
+
 .meta,
 .quiet {
   color: var(--ink-dim);

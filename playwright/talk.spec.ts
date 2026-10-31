@@ -95,6 +95,11 @@ test.describe('gem-in-eye talk loop', () => {
     await expect(page.locator('aside')).toContainText('8/10 tokens');
     await expect(page.locator('aside').getByRole('heading')).toHaveText('Gemini');
 
+    // What came out sits outside the dropdown of what went in
+    await expect(page.locator('aside')).toContainText('noticed: zero waste.');
+    await expect(page.locator('aside details')).toContainText('300 pruned');
+    await expect(page.locator('aside details')).not.toContainText('zero waste.');
+
     // Page 2: the cart asks again with occasion 3, and the page answers without a call.
     await onGpio(page, (g) => { g[16] = 3; g[0] = 1; });
     await expect.poll(() => status(page)).toBe(READY);
