@@ -204,22 +204,43 @@
   color: var(--print);
 }
 
-// Four 44px arms around a filled centre, in a 3 x 3 grid.
+// Four 44px arms in a 3 x 3 grid, over a cross of two bars. The bars overlap, where arms that
+// were the cross themselves only touched: at the scaled handheld's 3/4, the shell showed
+// through each touching edge as a hairline.
 .dpad {
   display: grid;
   grid-template-columns: repeat(3, 44px);
   grid-template-rows: repeat(3, 44px);
   grid-template-areas:
     '. up .'
-    'left centre right'
+    'left . right'
     '. down .';
-  color: var(--shell);
+  color: var(--btn-ink);
+
+  // order, so the second bar stays under the arms too, and they get the presses
+  &::before,
+  &::after {
+    content: '';
+    order: -1;
+    border-radius: 6px;
+    background: var(--recess);
+  }
+
+  &::before {
+    grid-column: 2;
+    grid-row: 1 / -1;
+  }
+
+  &::after {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
 
   > * {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--recess);
+    background: none;
     color: inherit;
   }
 
@@ -237,10 +258,6 @@
 .left {
   grid-area: left;
   border-radius: 6px 0 0 6px;
-}
-
-.centre {
-  grid-area: centre;
 }
 
 .right {

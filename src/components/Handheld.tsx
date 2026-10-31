@@ -148,7 +148,6 @@ export default function Handheld({
             <button {...control(BUTTON.left, styles.left, 'Left')}>
               <Chevron points="9,3 5,7 9,11" />
             </button>
-            <span className={styles.centre} />
             <button {...control(BUTTON.right, styles.right, 'Right')}>
               <Chevron points="5,3 9,7 5,11" />
             </button>
