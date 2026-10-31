@@ -58,6 +58,51 @@ for (const [width, height] of [
   });
 }
 
+// The arcade takes the first screen, so the window's bottom edge never cuts About in half, as
+// it did to the heading at 970 tall. Height to spare goes equally above and below, which puts
+// the top of the header as far from the top of the window as the shell is from the bottom.
+for (const [width, height] of [
+  [1568, 892],
+  [1430, 925],
+  [1728, 970],
+  [1920, 1080],
+  [2560, 1440],
+]) {
+  test(`the arcade has a ${width} x ${height} window to itself`, async ({ page, isMobile }) => {
+    test.skip(isMobile, 'a phone stacks everything, so the arcade is taller than the window');
+    await page.setViewportSize({ width, height });
+    await page.goto('/');
+    const header = (await page.locator('header').boundingBox())!;
+    const shell = (await page.getByRole('group', { name: 'Cart buttons' }).locator('..').boundingBox())!;
+    expect((await page.locator('#about').boundingBox())!.y).toBeGreaterThanOrEqual(height);
+    expect(Math.abs(header.y - (height - (shell.y + shell.height)))).toBeLessThan(2);
+  });
+}
+
+test('About’s edges line up with the arcade’s at every layout', async ({ page, isMobile }) => {
+  const expectLevel = async () => {
+    const header = (await page.locator('header').boundingBox())!;
+    const about = (await page.locator('#about').boundingBox())!;
+    expect(Math.abs(about.x - header.x)).toBeLessThan(1);
+    expect(Math.abs(about.width - header.width)).toBeLessThan(1);
+  };
+
+  await page.goto('/');
+  await expectLevel();
+  if (isMobile) return;
+  // Three columns, big and short; the carts under the device, tall and short; one column
+  for (const [width, height] of [
+    [1728, 970],
+    [1400, 900],
+    [1100, 1200],
+    [900, 800],
+    [780, 800],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await expectLevel();
+  }
+});
+
 test('the panel’s title matches the shelf’s, in font and position', async ({ page, isMobile }) => {
   test.skip(isMobile, 'on a phone the panel and the shelf are stacked, not side by side');
   await page.setViewportSize({ width: 1440, height: 900 });

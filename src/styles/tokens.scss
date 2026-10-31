@@ -82,6 +82,8 @@
   // screen sharp: PICO-8 still draws 512, and each 4px block lands on 3.
   --device-scale: 1;
   --device-column: calc(var(--device-width) * var(--device-scale));
+  // How wide the page gets. The arcade and About share it, so their edges line up.
+  --page-width: 1240px;
 
   --radius-sm: 2px;
   --radius-md: 8px;

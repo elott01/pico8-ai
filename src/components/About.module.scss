@@ -1,4 +1,5 @@
 @use '../styles/a11y';
+@use '../styles/breakpoints' as bp;
 
 // Two equal columns where there's room for both at $column-min, else one: from $medium, since
 // below it About is only as wide as the device. The intro and the chain, the two columns under
@@ -14,19 +15,23 @@ $column-gap: 48px;
   column-gap: $column-gap;
 }
 
-// An item of App's .arcade grid, which names the area: a full-width row under the arcade,
-// after a rule, so its edges line up with everything above it.
+// Under the arcade, after a rule, and as wide as it is, so its edges line up with everything
+// above it: the device's width in one column, the page's from $medium.
 .about {
-  grid-area: about;
   display: flex;
   flex-direction: column;
   gap: 48px;
-  margin-top: 24px;
+  max-width: var(--device-width);
+  margin: 52px auto 0;
   padding-top: 48px;
   border-top: 1px solid var(--rule);
   text-align: left;
   // The header's About link lands here; this keeps the rule off the window's very top edge
   scroll-margin-top: 24px;
+
+  @media #{bp.$medium} {
+    max-width: var(--page-width);
+  }
 }
 
 // The text on the left, the chain on the right; one column, text first, below $medium.

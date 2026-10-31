@@ -109,9 +109,9 @@ export default function App() {
         </p>
 
         <Pico8Game game={game} onReady={() => setSwapping(false)} onEject={() => setGame(null)} />
-
-        <About />
       </div>
+
+      <About />
     </main>
   );
 }

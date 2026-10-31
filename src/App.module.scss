@@ -2,8 +2,10 @@
 @use './styles/a11y';
 @use './styles/column';
 
+$page-block: clamp(1rem, 3vw, 2rem);
+
 .page {
-  padding: clamp(1rem, 3vw, 2rem) max(16px, 3%);
+  padding: $page-block max(16px, 3%);
   text-align: center;
 }
 
@@ -94,28 +96,34 @@
   font-size: 13px;
 }
 
-// The header, then the carts, the device and the panel, then About. One column, as wide as
-// the device, with the panel before the carts; from $medium the carts drop under a
-// device-and-panel row; from $wide they get a column of their own beside the device. The
-// header and About span every column. Beside the device, the panel takes whatever width is
-// left, which on a short window includes what the 3/4 device gives up.
+// The header, then the carts, the device and the panel. One column, as wide as the device,
+// with the panel before the carts; from $medium the carts drop under a device-and-panel row;
+// from $wide they get a column of their own beside the device. The header spans every
+// column. Beside the device, the panel takes whatever width is left, which on a short window
+// includes what the 3/4 device gives up.
+//
+// At least the window's height, less the page's padding, with any to spare split above and
+// below. So About, which follows it, always starts past the window's bottom edge, where
+// otherwise a window about 970px tall cuts its heading in half.
 .arcade {
   display: grid;
   grid-template-columns: minmax(0, var(--device-width));
-  grid-template-areas: 'header' 'device' 'panel' 'carts' 'about';
+  grid-template-areas: 'header' 'device' 'panel' 'carts';
   justify-content: center;
+  align-content: center;
   gap: 28px;
-  max-width: 1240px;
+  max-width: var(--page-width);
+  min-height: calc(100vh - 2 * #{$page-block});
   margin-inline: auto;
 
   @media #{bp.$medium} {
     grid-template-columns: var(--device-column) minmax(280px, 1fr);
-    grid-template-areas: 'header header' 'device panel' 'carts carts' 'about about';
+    grid-template-areas: 'header header' 'device panel' 'carts carts';
   }
 
   @media #{bp.$wide} {
     grid-template-columns: auto var(--device-column) minmax(280px, 1fr);
-    grid-template-areas: 'header header header' 'carts device panel' 'about about about';
+    grid-template-areas: 'header header header' 'carts device panel';
   }
 }
 
