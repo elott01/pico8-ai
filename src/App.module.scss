@@ -79,6 +79,10 @@ $page-block: clamp(1rem, 3vw, 2rem);
   @media (min-width: 720px) {
     font-size: 32px;
   }
+
+  @media #{bp.$big} {
+    font-size: 40px;
+  }
 }
 
 // A phone wraps the title, and the hyphen is a place it may break, which split the pun
@@ -93,7 +97,7 @@ $page-block: clamp(1rem, 3vw, 2rem);
 
 .tagline {
   color: var(--ink-dim);
-  font-size: 13px;
+  font-size: calc(13px + var(--text-step));
 }
 
 // The header, then the carts, the device and the panel. One column, as wide as the device,

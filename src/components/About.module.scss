@@ -65,13 +65,13 @@ $column-gap: 48px;
 }
 
 .intro {
-  font-size: 16px;
+  font-size: calc(16px + var(--text-step));
   line-height: 1.6;
 }
 
 .subheading {
   margin: 0;
-  font-size: 12px;
+  font-size: calc(12px + var(--text-step));
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -136,7 +136,7 @@ $column-gap: 48px;
 }
 
 .stepNote {
-  font-size: 12px;
+  font-size: calc(12px + var(--text-step));
   line-height: 1.4;
   color: var(--ink-dim);
 }

@@ -269,6 +269,10 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   which fires every time focus goes into the cart. A press leaves focus where it was, so the
   cart's own keys keep working. They are out of the tab order (`tabIndex -1`) on purpose:
   keyboard players have the real keys, and Tab can't get past the iframe to reach them.
+- **Body text sizes are `calc(Npx + var(--text-step))`.** On a `$big` window that adds 2px, and
+  `--page-width` grows with it, so a bare `font-size` in the page's text silently misses the
+  step. Silkscreen stays out of it, being sharp only at multiples of 8px, and so does anything
+  on the handheld or a cartridge: they're objects, and keep their scale.
 - **Colours belong in `src/styles/`, never in a `.tsx`.** Badges carry a semantic `kind`
   (`win`/`threat`/`notice`) that maps to a class; a hex code in a component would be
   invisible to the light/dark switch. The handheld's and the cartridges' colours are a group

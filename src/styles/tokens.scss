@@ -82,8 +82,11 @@
   // screen sharp: PICO-8 still draws 512, and each 4px block lands on 3.
   --device-scale: 1;
   --device-column: calc(var(--device-width) * var(--device-scale));
-  // How wide the page gets. The arcade and About share it, so their edges line up.
+  // How wide the page gets, and what every size of body text adds. Both grow on a big window,
+  // set below. Not Silkscreen, which is only crisp at multiples of 8px, nor anything printed
+  // on the handheld or a cartridge, which are objects and keep their scale.
   --page-width: 1240px;
+  --text-step: 0px;
 
   --radius-sm: 2px;
   --radius-md: 8px;
@@ -131,6 +134,11 @@
 
   @media #{bp.$compact} {
     --device-scale: 0.75;
+  }
+
+  @media #{bp.$big} {
+    --page-width: 1440px;
+    --text-step: 2px;
   }
 }
 

@@ -79,6 +79,23 @@ for (const [width, height] of [
   });
 }
 
+// A regular window has to stay as it was, so these pin both sides of $big, by width and by
+// height: the taller header would push the arcade off a wide, short window.
+for (const [width, height, page_, title, panel] of [
+  [1728, 970, 1440, '40px', '15px'],
+  [1568, 892, 1240, '32px', '13px'],
+  [1728, 870, 1240, '32px', '13px'],
+] as const) {
+  test(`a ${width} x ${height} window has a ${page_}px page`, async ({ page, isMobile }) => {
+    test.skip(isMobile, 'a phone is never this big');
+    await page.setViewportSize({ width, height });
+    await page.goto('/');
+    expect((await page.locator('header').boundingBox())!.width).toBe(page_);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCSS('font-size', title);
+    await expect(page.locator('aside')).toHaveCSS('font-size', panel);
+  });
+}
+
 test('About’s edges line up with the arcade’s at every layout', async ({ page, isMobile }) => {
   const expectLevel = async () => {
     const header = (await page.locator('header').boundingBox())!;

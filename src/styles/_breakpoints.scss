@@ -14,8 +14,13 @@
 // per device size. $medium fits the device and the panel alone. $wide fits the carts
 // column, the device, a panel at its 280px minimum and two 28px gaps inside the page's 3%
 // gutters.
+//
+// $big is a window with room to spare: the page goes wider and its text a step larger
+// (--page-width and --text-step in tokens.scss). Its height keeps the taller header from
+// pushing the bottom of the arcade off a wide, short window.
 $full-device: 680px;
 $full-height: 1134px;
 $compact: '(min-width: #{$full-device}) and (max-height: #{$full-height - 1px})';
 $medium: '(min-width: 1020px), (min-width: 850px) and (max-height: #{$full-height - 1px})';
 $wide: '(min-width: 1300px), (min-width: 1090px) and (max-height: #{$full-height - 1px})';
+$big: '(min-width: 1600px) and (min-height: 880px)';
