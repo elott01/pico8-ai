@@ -303,12 +303,17 @@
   }
 }
 
-.key {
+// .controls, to outweigh the padding in its button reset.
+.controls .key {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 56px;
   height: 56px;
+  // Lifts the letter 4px to the middle of the face. Silkscreen's capitals sit low in their
+  // line, and the shadow takes the bottom 4px off the face. The letter is 15px tall in 52, so
+  // it lands within a pixel of exact, whichever way the engine rounds.
+  padding-bottom: 8px;
   border-radius: 50%;
   background: var(--btn);
   box-shadow: inset 0 -4px 0 var(--btn-lo);
@@ -317,9 +322,11 @@
   line-height: 1;
   color: var(--btn-ink);
 
-  // Pressed in: down by the depth of its shadow.
+  // Pressed in: down by the depth of its shadow. With no shadow the whole circle is the face,
+  // so the letter's lift is only for the font.
   &.held {
     transform: translateY(4px);
     box-shadow: none;
+    padding-bottom: 4px;
   }
 }
