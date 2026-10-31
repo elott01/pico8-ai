@@ -45,8 +45,8 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   opening in a new tab. Runs at every project's viewport, because these only break at
   particular widths. The size check runs at 1400px too, where the carts stand in a column:
   in a row, stretching hides a mismatch. Also that the shelf, shell and panel fit a laptop's
-  window and end level, from 1208 x 879 to 2560 x 1440, and that a 3/4 cartridge keeps its
-  full-size shape.
+  window and end level, from 1208 x 879 to 2560 x 1440, that a 3/4 cartridge keeps its
+  full-size shape, and that the panel's title matches the shelf's in font and position.
 - **`screen.spec.ts`** — the game fills the handheld's 512px screen exactly, at 4×, before
   and after the cart starts, at 1280 and 780px, on a window tall enough for the full-size
   handheld and on a short one, where it's drawn at 384px and PICO-8 must still draw 512 behind

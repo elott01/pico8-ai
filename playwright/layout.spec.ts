@@ -2,7 +2,7 @@
 // and an emulated iPhone. The card widths and the wrapping behaviour are the parts that
 // only break at particular viewports, which is exactly what a single manual check misses.
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
 
 const cards = '[aria-label="Choose a cart"] button';
 
@@ -57,6 +57,25 @@ for (const [width, height] of [
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   });
 }
+
+test('the panel’s title matches the shelf’s, in font and position', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'on a phone the panel and the shelf are stacked, not side by side');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const shelf = page.getByRole('region', { name: 'Carts' }).getByRole('heading');
+  const panel = page.locator('aside').getByRole('heading');
+  const font = (title: Locator) =>
+    title.evaluate((el) => {
+      const { fontFamily, fontSize, fontWeight, lineHeight, color, textTransform } = getComputedStyle(el);
+      return { fontFamily, fontSize, fontWeight, lineHeight, color, textTransform };
+    });
+  expect(await font(panel)).toEqual(await font(shelf));
+
+  const top = async (part: Locator) => (await part.boundingBox())!.y;
+  const below = 'xpath=following-sibling::*';
+  expect(await top(panel)).toBeCloseTo(await top(shelf), 0);
+  expect(await top(panel.locator(below))).toBeCloseTo(await top(shelf.locator(below)), 0);
+});
 
 test('at 3/4 a cartridge keeps its full-size shape, in a shelf that stays wider', async ({
   page,

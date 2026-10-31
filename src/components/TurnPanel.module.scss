@@ -1,25 +1,25 @@
-// Sized by the grid area Pico8Game puts it in: the device's height beside it, a cap below.
+@use '../styles/column';
+
+// A title over a box, like the cart shelf on the device's other side. Sized by the grid area
+// Pico8Game puts it in: the device's height beside it, a cap below. The box takes what the
+// title leaves, and scrolls inside that.
 .panel {
-  overflow-y: auto;
-  text-align: left;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-md);
-  background: var(--surface);
+  @include column.titled;
   font-size: 13px;
   color: var(--ink);
 }
 
 .heading {
-  padding: 0.6rem 0.75rem;
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
-  border-bottom: 1px solid var(--rule);
-  position: sticky;
-  top: 0;
+  @include column.title;
+}
+
+.box {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg); // the shelf's, across the device
   background: var(--surface);
-  z-index: 1;
 }
 
 .empty {

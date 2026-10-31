@@ -38,23 +38,24 @@ const VERDICT_KIND: Record<Verdict, BadgeKind> = { impressed: 'win', neutral: 'n
 export default function TalkPanel({ talks, thinking }: { talks: TalkTurn[]; thinking: boolean }) {
   return (
     <aside className={styles.panel}>
-      <h2 className={styles.heading}>gem-in-eye</h2>
+      <h2 className={styles.heading}>Gemini</h2>
+      <div className={styles.box}>
+        {thinking && (
+          <div className={styles.thinking}>
+            <span className={styles.dot} aria-hidden="true" />
+            <span role="status">Gemini is thinking…</span>
+          </div>
+        )}
 
-      {thinking && (
-        <div className={styles.thinking}>
-          <span className={styles.dot} aria-hidden="true" />
-          <span role="status">Gemini is thinking…</span>
-        </div>
-      )}
+        {talks.length === 0 && !thinking && (
+          <p className={styles.empty}>Buy something in the shop to hear from gem-in-eye.</p>
+        )}
 
-      {talks.length === 0 && !thinking && (
-        <p className={styles.empty}>Buy something in the shop to hear from gem-in-eye.</p>
-      )}
-
-      {talks
-        .slice()
-        .reverse()
-        .map((t, i) => <TalkCard key={t.n} talk={t} defaultOpen={i === 0} />)}
+        {talks
+          .slice()
+          .reverse()
+          .map((t, i) => <TalkCard key={t.n} talk={t} defaultOpen={i === 0} />)}
+      </div>
     </aside>
   );
 }

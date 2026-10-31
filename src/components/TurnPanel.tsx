@@ -49,23 +49,24 @@ export default function TurnPanel({
 }) {
   return (
     <aside className={styles.panel}>
-      <h2 className={styles.heading}>AI Turns</h2>
+      <h2 className={styles.heading}>Gemini</h2>
+      <div className={styles.box}>
+        {thinking && (
+          <div className={styles.thinking}>
+            <span className={styles.dot} aria-hidden="true" />
+            <span role="status">Gemini is thinking…</span>
+          </div>
+        )}
 
-      {thinking && (
-        <div className={styles.thinking}>
-          <span className={styles.dot} aria-hidden="true" />
-          <span role="status">Gemini is thinking…</span>
-        </div>
-      )}
+        {turns.length === 0 && !thinking && (
+          <p className={styles.empty}>{empty}</p>
+        )}
 
-      {turns.length === 0 && !thinking && (
-        <p className={styles.empty}>{empty}</p>
-      )}
-
-      {turns
-        .slice()
-        .reverse()
-        .map((t, i) => <TurnCard key={t.n} turn={t} defaultOpen={i === 0} />)}
+        {turns
+          .slice()
+          .reverse()
+          .map((t, i) => <TurnCard key={t.n} turn={t} defaultOpen={i === 0} />)}
+      </div>
     </aside>
   );
 }

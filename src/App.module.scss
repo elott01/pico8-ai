@@ -1,5 +1,6 @@
 @use './styles/breakpoints' as bp;
 @use './styles/a11y';
+@use './styles/column';
 
 .page {
   padding: clamp(1rem, 3vw, 2rem) max(16px, 3%);
@@ -120,12 +121,8 @@
 
 // The cart shelf: a heading over a box of cartridges.
 .shelf {
+  @include column.titled;
   grid-area: carts;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  text-align: left;
 
   // Beside the device, its top lines up with the shell's, below the cart in the slot, and
   // its bottom with the shell's too. The minimum is what gives the 3/4 cartridges room at
@@ -136,13 +133,8 @@
   }
 }
 
-// Silkscreen at a multiple of 8px only; see .title.
 .shelfHeading {
-  font-family: var(--font-pixel);
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 1.25;
-  color: var(--ink-dim);
+  @include column.title;
 }
 
 .carts {

@@ -93,6 +93,7 @@ test.describe('gem-in-eye talk loop', () => {
     await expect(page.locator('aside')).toContainText('page one. page two.');
     await expect(page.locator('aside')).toContainText('impressed');
     await expect(page.locator('aside')).toContainText('8/10 tokens');
+    await expect(page.locator('aside').getByRole('heading')).toHaveText('Gemini');
 
     // Page 2: the cart asks again with occasion 3, and the page answers without a call.
     await onGpio(page, (g) => { g[16] = 3; g[0] = 1; });
