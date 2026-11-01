@@ -139,7 +139,7 @@ export default function Handheld({
       </div>
 
       <div className={styles.lettering}>
-        <span className={styles.model}>PICO-8 + GEMINI</span>
+        <span className={styles.model}>GEMBOY-8</span>
         <span>P · PAUSE MENU</span>
       </div>
 
