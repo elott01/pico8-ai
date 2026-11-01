@@ -1,5 +1,6 @@
 // The handheld the cart plays in: the lavender shell, the cart standing in its slot, the
-// bezel with its two status lights, the printed lettering, the D-pad and O/X keys, and Eject.
+// bezel with its two status lights, the printed lettering, the D-pad and O/X keys, and the
+// Eject, Fullscreen and CRT buttons.
 //
 // Pico8Game owns the cart and passes the screen in as `children`. The D-pad and keys report
 // what's held through `onButtons`, as the bitfield in lib/buttons.ts, and Pico8Game hands
@@ -17,6 +18,9 @@ export default function Handheld({
   thinking,
   canEject,
   onEject,
+  onFullscreen,
+  crt,
+  onCrt,
   onButtons,
   keyboardHeld = 0,
   children,
@@ -30,6 +34,11 @@ export default function Handheld({
   /** A loaded cart is in the slot, so Eject has something to do. */
   canEject: boolean;
   onEject?: () => void;
+  /** The Fullscreen button, which is live whenever POWER is lit. */
+  onFullscreen?: () => void;
+  /** The CRT filter is over the screen. */
+  crt: boolean;
+  onCrt: () => void;
   /** Every change to what's held on the D-pad and keys, as player 1's button bits. */
   onButtons?: (held: number) => void;
   /** The button bits the keyboard is holding in the cart, drawn pressed like a click. */
@@ -96,18 +105,38 @@ export default function Handheld({
 
   return (
     <div className={styles.shell}>
-      {/* First in the DOM, drawn last (see .eject's order). The cart's iframe swallows Tab,
-          so a keyboard user can reach Eject only before the screen, never after it. */}
-      <button
-        type="button"
-        className={styles.eject}
-        // Required for WebKit's tab order; see CartCard.
-        tabIndex={0}
-        disabled={!canEject}
-        onClick={onEject}
-      >
-        Eject
-      </button>
+      {/* First in the DOM, drawn last (see .actions' order). The cart's iframe swallows Tab,
+          so a keyboard user can reach these only before the screen, never after it. */}
+      <div className={styles.actions}>
+        <button
+          type="button"
+          className={styles.action}
+          // Required for WebKit's tab order; see CartCard.
+          tabIndex={0}
+          disabled={!canEject}
+          onClick={onEject}
+        >
+          Eject
+        </button>
+        <button
+          type="button"
+          className={`${styles.action} ${styles.fullscreen}`}
+          tabIndex={0}
+          disabled={!powered}
+          onClick={onFullscreen}
+        >
+          Fullscreen
+        </button>
+        <button
+          type="button"
+          className={styles.action}
+          tabIndex={0}
+          aria-pressed={crt}
+          onClick={onCrt}
+        >
+          CRT
+        </button>
+      </div>
 
       <span className={styles.slot} aria-hidden="true" />
       {/* The cart that's in, standing up out of the slot. The switcher's status line already

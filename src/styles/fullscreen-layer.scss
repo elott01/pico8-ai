@@ -1,0 +1,55 @@
+// What's drawn over the game in fullscreen, by FullscreenLayer.tsx, inside the cart's page. The
+// site's stylesheets stop at the iframe, so this is a sheet of its own, imported ?inline and
+// carried in with the rest. The tokens come too, so a colour still has one home, and that's safe
+// in PICO-8's page: they're all custom properties, and it reads none of them.
+
+@use 'tokens';
+@use 'crt';
+
+// Centred, because PICO-8 centres the game in fullscreen, so only its size has to be followed.
+// Square-cornered like the game, unlike the handheld's, whose screen rounds them.
+.fullscreen-crt {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  margin: auto;
+  pointer-events: none;
+  @include crt.crt-filter;
+}
+
+// Shaped like .action in Handheld.module.scss, which can't reach in here. In the corner of the
+// black beside the game. It fades while the mouse rests, and :hover keeps it there if the mouse
+// comes to rest on it. Above the filter, for a window so square there's no black to sit in.
+.fullscreen-exit {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 2;
+  min-height: 44px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--eject);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35);
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--eject-ink);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.3s;
+
+  &.shown,
+  &:hover {
+    opacity: 1;
+  }
+
+  &:active {
+    transform: translateY(2px);
+    box-shadow: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}

@@ -182,7 +182,7 @@
       cursor: default;
     }
 
-    // Black on the shell; see .eject.
+    // Black on the shell; see .action.
     &:focus-visible {
       outline: 2px solid var(--print);
       outline-offset: 3px;
@@ -369,11 +369,18 @@
   padding-bottom: 32px;
 }
 
-// First in the DOM so Tab reaches it before the cart's iframe, and `order` puts it back at
-// the bottom of the shell. Named in lowercase in the markup; Silkscreen draws it in capitals.
-.eject {
+// First in the DOM so Tab reaches them before the cart's iframe, and `order` puts them back at
+// the bottom of the shell.
+.actions {
   order: 1;
-  align-self: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+// Named in lowercase in the markup; Silkscreen draws them in capitals.
+.action {
   min-height: 44px;
   padding: 0 24px;
   border: 0;
@@ -396,12 +403,28 @@
     opacity: 0.5;
   }
 
+  // A toggle that is on stays pressed in, ringed in the POWER light's green.
+  &[aria-pressed='true'] {
+    transform: translateY(2px);
+    box-shadow: inset 0 0 0 2px var(--led-power);
+  }
+
   // Black, not the page's --accent: the accent blue is under 2:1 against the lavender, where
   // black is 5:1. Both :focus and :focus-visible, for the reason CartCard gives.
   &:focus,
   &:focus-visible {
     outline: 2px solid var(--print);
     outline-offset: 3px;
+  }
+}
+
+// Left off where touch is the input. Fullscreen covers the handheld's D-pad and keys, and
+// keepTouchOut in Pico8Game.tsx holds back PICO-8's own, so a phone that allows fullscreen
+// would be left with a game it can't press. Android's does; iPhone's doesn't, for anything
+// but video.
+.fullscreen {
+  @media (hover: none), (pointer: coarse) {
+    display: none;
   }
 }
 

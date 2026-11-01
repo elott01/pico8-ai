@@ -1,4 +1,5 @@
 @use '../styles/breakpoints' as bp;
+@use '../styles/crt';
 
 // Pico8Game renders two items of App's .arcade grid, which names the areas they go in.
 // The device's 40px of top padding is room for the cart standing up out of the handheld's
@@ -66,6 +67,21 @@
   overflow: clip;
   border-radius: var(--radius-sm);
   background: var(--p8-black);
+}
+
+// The CRT filter (its look is in src/styles/_crt.scss), laid over the game. It lets every
+// pointer event through to the cart, which is why it can sit on the canvas at all. Its corners
+// are the screen's own: a rounder overlay left the game's square corners poking out of it,
+// unfiltered. It is drawn at the screen's size, so under a transform it scales with it, and
+// where a game pixel is 4px the 2px lines stay on whole game pixels.
+.crt::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  @include crt.crt-filter;
 }
 
 .frame {

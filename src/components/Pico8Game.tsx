@@ -26,12 +26,33 @@ import type { Turn } from './TurnPanel.tsx';
 import TalkPanel from './TalkPanel.tsx';
 import type { TalkTurn } from './TalkPanel.tsx';
 import Handheld from './Handheld.tsx';
+import FullscreenLayer from './FullscreenLayer.tsx';
 import { BUTTON_KEYS } from '../lib/buttons.ts';
 import { CARTS } from '../lib/carts.ts';
 import styles from './Pico8Game.module.scss';
 
+declare global {
+  interface Window {
+    // The export's shell declares these inside the iframe.
+    p8_run_cart?: () => void;
+    p8_request_fullscreen?: () => void;
+  }
+}
+
 // 'empty' is no cart in the device at all: ejected.
 type CartStatus = 'loading' | 'ready' | 'missing' | 'empty';
+
+// The CRT toggle's choice, kept across visits. localStorage throws in some privacy modes, so
+// a blocked store costs the choice and nothing else.
+const CRT_KEY = 'pico-crt';
+
+function readCrt(): boolean {
+  try {
+    return localStorage.getItem(CRT_KEY) === 'on';
+  } catch {
+    return false;
+  }
+}
 
 // The cart is embedded as its exported .html in an iframe rather than by injecting the
 // .js: the export expects its own shell (canvas wiring, start button, audio gating), and
@@ -65,7 +86,19 @@ export default function Pico8Game({
   // only thing the UI can see. Without it the panel sits silent for the ~1.6s the model
   // takes, which reads as a dead page on the very turn the panel exists to evidence.
   const [thinking, setThinking] = useState(false);
+  const [crt, setCrt] = useState(readCrt);
+  const toggleCrt = useCallback(() => {
+    setCrt((on) => {
+      try {
+        localStorage.setItem(CRT_KEY, on ? 'off' : 'on');
+      } catch {
+        // see readCrt
+      }
+      return !on;
+    });
+  }, []);
   const [keyboardHeld, setKeyboardHeld] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
 
   // One setter for both, so the ref the poll loop reads cannot drift from the state the
   // UI renders.
@@ -100,6 +133,29 @@ export default function Pico8Game({
   const pressButtons = useCallback((held: number) => {
     const buttons = iframeRef.current?.contentWindow?.pico8_buttons;
     if (buttons) buttons[0] = held;
+  }, []);
+
+  // The handheld's Fullscreen button and FullscreenLayer's Exit. This is the export's own
+  // fullscreen, run inside its page, so PICO-8 knows about it and draws the game at a whole multiple of 128. It's
+  // a toggle, so one call serves both. Fullscreening the iframe from out here works too, but
+  // PICO-8 can't tell and draws 768 where 1024 fits. The iframe stays put either way, which is
+  // what keeps both poll loops below answering the cart. Focus goes to the iframe itself, or the
+  // cart gets no keys: p8_give_focus, which the export's own button uses, focuses a textarea
+  // that's display:none here, and does nothing. Pressed before the cart has started, this starts
+  // it as its play button would; if it's already running, p8_run_cart does nothing.
+  const toggleFullscreen = useCallback(() => {
+    const frame = iframeRef.current;
+    frame?.contentWindow?.p8_run_cart?.();
+    frame?.focus();
+    frame?.contentWindow?.p8_request_fullscreen?.();
+  }, []);
+
+  // Esc and the browser's own controls leave without coming through toggleFullscreen, so this
+  // follows the event rather than the button.
+  useEffect(() => {
+    const changed = () => setFullscreen(document.fullscreenElement !== null);
+    document.addEventListener('fullscreenchange', changed);
+    return () => document.removeEventListener('fullscreenchange', changed);
   }, []);
 
   // The page's half of the GPIO protocol; the cart's half is in carts/<game>.p8 and both
@@ -341,10 +397,13 @@ export default function Pico8Game({
             // Live once a cart has loaded, like the switcher, which is latched while one loads
             canEject={status === 'ready'}
             onEject={onEject}
+            onFullscreen={toggleFullscreen}
+            crt={crt}
+            onCrt={toggleCrt}
             onButtons={pressButtons}
             keyboardHeld={keyboardHeld}
           >
-            <div className={styles.screen}>
+            <div className={`${styles.screen} ${crt ? styles.crt : ''}`}>
               {game === null ? (
                 <p className={styles.insert}>insert a cart</p>
               ) : (
@@ -372,6 +431,9 @@ export default function Pico8Game({
           </Handheld>
         </div>
       </div>
+      {fullscreen && iframeRef.current && (
+        <FullscreenLayer frame={iframeRef.current} crt={crt} onExit={toggleFullscreen} />
+      )}
       {status !== 'missing' && (
         <div className={styles.panel}>
           {boardProtocol ? (

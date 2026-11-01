@@ -69,6 +69,14 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   a tap starts the cart without PICO-8 switching to its touch layout.
 - **`eject.spec.ts`** — Eject empties the device, focus moves to the first cart, a cart goes
   back in, and Tab reaches Eject before the cart's iframe, which swallows Tab.
+- **`fullscreen.spec.ts`** — the Fullscreen button draws the game at 8× and comes back to the
+  crop without restarting the run. Arrow keys move the cursor in fullscreen, checked on real
+  pixels, since a cart can look right there and take no keys. A turn played in fullscreen
+  reaches a stubbed `/api/move` and is in the panel on the way back, and a door's `load()`
+  stays fullscreen. The Exit button sits beside the game in Silkscreen, fades while the mouse
+  rests, and leaves on a real click, which is what a popover in the page failed. The CRT
+  filter carries over when it's chosen, covers the game exactly at the game's own pixel, and
+  follows it when the window changes. On `mobile-safari` the Fullscreen button is hidden.
 - **`theme.spec.ts`** — the theme control is one icon named for the current choice. It
   opens sideways when a mouse rests on it, without moving focus, and closes when the mouse
   leaves, staying open through a choice; a click, Enter or a tap opens it until a choice or a

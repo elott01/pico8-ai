@@ -62,7 +62,7 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
 - **`src/components/Pico8Game.tsx`** embeds the cart's *exported `.html`* in an iframe (not the
   `.js` — the export needs its own shell) and polls `contentWindow.pico8_gpio` every 100ms.
   **`Handheld.tsx`** draws the device around it: the shell, the cart in its slot, the POWER
-  and GEMINI lights, the D-pad and keys, and Eject. `Pico8Game` passes the screen in as
+  and GEMINI lights, the D-pad and keys, Eject and Fullscreen. `Pico8Game` passes the screen in as
   `children` and keeps everything about the cart. **`App.tsx`** owns the page's grid (header,
   carts, device, panel, About), rearranged at the widths in `src/styles/_breakpoints.scss`.
 - **`src/lib/gpio.ts`** is the byte-protocol source of truth, one `PROTOCOLS` entry per game
@@ -220,7 +220,7 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   reintroduces the flash.
 - **`tabIndex={0}` on a `<button>` or a link is required, not redundant.** WebKit leaves
   buttons and links out of the tab order unless macOS keyboard navigation is enabled, so on
-  default Safari the carts, the theme control, Eject, the header's links and About's links
+  default Safari the carts, the theme control, Eject, Fullscreen, the header's links and About's links
   are unreachable by keyboard without it — Tab cycles the iframe and body only. It looks like
   something a linter should strip; deleting it silently makes the page mouse-only for a
   large share of visitors. Verified against Playwright's WebKit, which reproduces the
@@ -233,7 +233,8 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   handler fighting the runtime. The shell can't be patched either; a re-export regenerates it.
   - **So Tab reaches only what comes before the iframe in the DOM**, and the layout is built
     around that. The carts come first in the DOM at every width, and grid areas place them
-    on screen. Eject is first in `Handheld`'s DOM, and CSS `order` draws it at the bottom.
+    on screen. Eject and Fullscreen are first in `Handheld`'s DOM, and CSS `order` draws them
+    at the bottom.
     About comes after the cart, so the header's About link is the keyboard's way there:
     following `#about` moves Tab's starting point into it. A new control the keyboard needs
     goes before the iframe in the DOM. `eject.spec.ts` and `about.spec.ts` check these paths.
@@ -282,6 +283,30 @@ Breaking any of these fails silently, so verify them when touching the relevant 
     a screenshot**, headless or headed: no taper, and a `perspective()` in the transform comes
     out twisted. Its layout is right, matching Chromium to the decimal, so measure 3D with
     `getBoundingClientRect` as `controls.spec.ts` does, and judge the look in Chromium or Safari.
+- **Fullscreen is the export's own, run from outside its page.** The handheld's button calls
+  `p8_request_fullscreen()` in the iframe, which fullscreens PICO-8's play area, so PICO-8
+  draws a whole multiple of 128. `iframe.requestFullscreen()` also works, but PICO-8 can't tell
+  and draws 768 where 1024 fits. Focus has to go to the iframe by hand: `p8_give_focus`, which
+  the export's own button uses, targets a `display:none` textarea here, leaving a cart that
+  looks right and takes no keys. The cart must stay in this page's iframe, because the poll
+  loops live here: moving it reloads the run, and opening `/games/<cart>.html` directly shows
+  a working game with no AI, every turn falling back to minimax. The panel is hidden
+  meanwhile, so fullscreen stays something the player chooses. The button is hidden on touch,
+  where it would cover the D-pad while `keepTouchOut` holds back PICO-8's own controls.
+  iPhone has no element fullscreen at all, so a phone version has to be an overlay in the
+  page; a `popover`, since the handheld's transform traps `position: fixed`.
+  - **A control in fullscreen has to be inside the cart's page.** While the iframe is
+    fullscreen it takes every click, so a `popover` in this page draws over it and can't be
+    pressed, in Chromium and WebKit alike. A phone overlay isn't real fullscreen, so this
+    doesn't reach it. `FullscreenLayer.tsx` is a portal into `p8_playarea` for this reason. The
+    site's CSS and fonts stop at the iframe, so it carries `src/styles/fullscreen-layer.scss`
+    and Silkscreen in with it, both `?inline`. The Exit button is out of the tab order, since
+    the cart swallows Tab and keyboard players have Esc.
+  - **The CRT filter's look lives only in `src/styles/_crt.scss`.** The handheld's is behind a
+    fullscreen iframe, so fullscreen draws its own, from the same mixin. It's measured in game
+    pixels through `--crt-px`, 4px by default, because fullscreen's are 8px at 1024 and fixed
+    2px lines would miss them. Fullscreen only carries the player's choice over: the CRT
+    button is on the handheld, out of reach until they leave.
 - **Body text sizes are `calc(Npx + var(--text-step))`.** On a `$big` window that adds 2px, and
   `--page-width` grows with it, so a bare `font-size` in the page's text silently misses the
   step. Silkscreen stays out of it, being sharp only at multiples of 8px, and so does anything
