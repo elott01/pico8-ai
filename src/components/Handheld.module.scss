@@ -204,10 +204,90 @@
   color: var(--print);
 }
 
+// One piece of plastic on a base that stays put, so it can rock. .cross is the plastic, and the
+// perspective here is what makes it tip in depth, with the held arm narrowing away from you.
+// Playwright's WebKit paints 3D flat in a screenshot, so a picture from it can't judge this.
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(3, 44px);
+  perspective: 300px;
+
+  // A press tips the plastic, and moves the lip by its own 4px at the tips, 66px from the centre,
+  // which is where the stretch and the skew come from. Each axis has its own variables so that
+  // two arms tip it to the corner between them.
+  &:has(.up.held) {
+    --tilt-x: 12deg;
+    --lip-stretch: 1.06;
+  }
+
+  &:has(.down.held) {
+    --tilt-x: -12deg;
+    --lip-stretch: 0.94;
+  }
+
+  &:has(.left.held) {
+    --tilt-y: -12deg;
+    --lip-skew: 3.47deg;
+  }
+
+  &:has(.right.held) {
+    --tilt-y: 12deg;
+    --lip-skew: -3.47deg;
+  }
+
+  // The base, a dark cross whose lip is how far the plastic stands out of the shell: the keys'
+  // 4px at rest, closed under an arm pressed in, and doubled on the far side as it rises. It
+  // tips with the plastic, or it would show around an arm narrowing away, which reads backwards.
+  // A pixel narrower, so its sides can't fringe the plastic's at the scaled 3/4.
+  &::before,
+  &::after {
+    content: '';
+    order: -1;
+    margin: 0 1px;
+    border-radius: 6px;
+    background: var(--bezel);
+    transform: translateY(4px);
+    transition: transform 60ms ease-out;
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
+  }
+
+  &:has(.held)::before,
+  &:has(.held)::after {
+    transform: translateY(var(--lip, 4px)) skewY(var(--lip-skew, 0deg)) scaleY(var(--lip-stretch, 1))
+      rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+  }
+
+  // The top arm has no lip to open, since the cross hides its lower edge, so as it rises its
+  // shadow shows above it, the top of the plate turning into view.
+  &:has(.down.held)::after {
+    --lip: -4px;
+    --lip-stretch: 1;
+  }
+
+  &::before {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  &::after {
+    grid-column: 2;
+    grid-row: 1 / -1;
+  }
+}
+
 // Four 44px arms in a 3 x 3 grid, over a cross of two bars. The bars overlap, where arms that
 // were the cross themselves only touched: at the scaled handheld's 3/4, the shell showed
 // through each touching edge as a hairline.
-.dpad {
+.cross {
+  // Above the base, which has a transform and comes after this in the DOM. `order` keeps it
+  // underneath in Chromium, but not in WebKit, where it covered the arms and took their presses.
+  position: relative;
+  z-index: 1;
+  grid-area: 1 / 1 / -1 / -1;
   display: grid;
   grid-template-columns: repeat(3, 44px);
   grid-template-rows: repeat(3, 44px);
@@ -216,8 +296,13 @@
     'left . right'
     '. down .';
   color: var(--btn-ink);
+  transition: transform 60ms ease-out;
 
-  // order, so the second bar stays under the arms too, and they get the presses
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+
+  // order, so the second bar stays under the arms too, and they get the presses.
   &::before,
   &::after {
     content: '';
@@ -227,13 +312,13 @@
   }
 
   &::before {
-    grid-column: 2;
-    grid-row: 1 / -1;
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   &::after {
-    grid-column: 1 / -1;
-    grid-row: 2;
+    grid-column: 2;
+    grid-row: 1 / -1;
   }
 
   > * {
@@ -244,9 +329,9 @@
     color: inherit;
   }
 
-  // A held arm sinks into the darker bezel colour.
-  > .held {
-    background: var(--bezel);
+  // Held, it rocks on its centre: the arm goes away and the far side comes up.
+  &:has(> .held) {
+    transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
   }
 }
 

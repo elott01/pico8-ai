@@ -274,6 +274,14 @@ Breaking any of these fails silently, so verify them when touching the relevant 
     `pico8_buttons`: the runtime already has the key, and `pressButtons` overwrites that whole
     int on every press. Keys pressed with focus outside the cart don't move anything, which
     is right, because the cart didn't get them either.
+  - **The D-pad rocks as one piece.** `.cross` is the plastic and tips on its centre, and
+    `.dpad` draws the dark base behind it. The lip is how far the plastic stands out of the
+    shell, so it closes under a held arm and opens on the far side. A base left still does the
+    reverse, showing around the arm as it narrows, which reads as the wrong way round. The
+    tilt rules use `:has()` on the arms and fail silently without them. **Playwright's WebKit paints 3D flat in
+    a screenshot**, headless or headed: no taper, and a `perspective()` in the transform comes
+    out twisted. Its layout is right, matching Chromium to the decimal, so measure 3D with
+    `getBoundingClientRect` as `controls.spec.ts` does, and judge the look in Chromium or Safari.
 - **Body text sizes are `calc(Npx + var(--text-step))`.** On a `$big` window that adds 2px, and
   `--page-width` grows with it, so a bare `font-size` in the page's text silently misses the
   step. Silkscreen stays out of it, being sharp only at multiples of 8px, and so does anything

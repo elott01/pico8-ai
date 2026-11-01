@@ -146,18 +146,20 @@ export default function Handheld({
       <div className={styles.controls} role="group" aria-label="Cart buttons">
         <div className={styles.control}>
           <div className={styles.dpad}>
-            <button {...control(BUTTON.up, styles.up, 'Up')}>
-              <Chevron points="3,9 7,5 11,9" />
-            </button>
-            <button {...control(BUTTON.left, styles.left, 'Left')}>
-              <Chevron points="9,3 5,7 9,11" />
-            </button>
-            <button {...control(BUTTON.right, styles.right, 'Right')}>
-              <Chevron points="5,3 9,7 5,11" />
-            </button>
-            <button {...control(BUTTON.down, styles.down, 'Down')}>
-              <Chevron points="3,5 7,9 11,5" />
-            </button>
+            <div className={styles.cross}>
+              <button {...control(BUTTON.up, styles.up, 'Up')}>
+                <Chevron points="3,9 7,5 11,9" />
+              </button>
+              <button {...control(BUTTON.left, styles.left, 'Left')}>
+                <Chevron points="9,3 5,7 9,11" />
+              </button>
+              <button {...control(BUTTON.right, styles.right, 'Right')}>
+                <Chevron points="5,3 9,7 5,11" />
+              </button>
+              <button {...control(BUTTON.down, styles.down, 'Down')}>
+                <Chevron points="3,5 7,9 11,5" />
+              </button>
+            </div>
           </div>
           <span className={styles.caption}>OR ARROW KEYS</span>
         </div>

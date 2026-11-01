@@ -31,6 +31,39 @@ async function loaded(page: Page) {
 const finger = (page: Page, name: string, type: 'pointerdown' | 'pointerup', pointerId: number) =>
   control(page, name).dispatchEvent(type, { pointerId, button: 0, pointerType: 'touch', isPrimary: pointerId === 1 });
 
+/** Which way the cross is tipped: [1 toward Up, -1 toward Down; 1 toward Right, -1 toward Left]. */
+const tipped = (page: Page) =>
+  page
+    .getByRole('group', { name: 'Cart buttons' })
+    .locator('[class*="cross"]')
+    .evaluate((el) => {
+      const { m13, m23 } = new DOMMatrix(getComputedStyle(el).transform);
+      const sign = (n: number) => (n > 0.01 ? 1 : n < -0.01 ? -1 : 0);
+      return [sign(m23), sign(-m13)];
+    });
+
+/**
+ * How far the D-pad's dark base shows below the plastic at a point on the cross, measured from
+ * its centre, so the thickness of the lip there. Negative shows above it. ::before is the bar
+ * across, ::after the upright.
+ */
+const lipAt = (page: Page, bar: '::before' | '::after', x: number, y: number) =>
+  page
+    .getByRole('group', { name: 'Cart buttons' })
+    .locator('[class*="dpad"]')
+    .evaluate(
+      (dpad, { bar, x, y }) => {
+        const drawnY = (transform: string) => new DOMMatrix(transform).transformPoint({ x, y }).y;
+        const cross = dpad.querySelector('[class*="cross"]')!;
+        return drawnY(getComputedStyle(dpad, bar).transform) - drawnY(getComputedStyle(cross).transform);
+      },
+      { bar, x, y },
+    );
+
+/** How wide a control is drawn, once any transforms are applied. */
+const drawnWidth = (page: Page, name: string) =>
+  control(page, name).evaluate((el) => el.getBoundingClientRect().width);
+
 test.describe('the D-pad and keys', () => {
   // Mouse-driven; the touch project has its own test below
   test.skip(({ isMobile }) => !!isMobile, 'covered by the touch test');
@@ -86,6 +119,62 @@ test.describe('the D-pad and keys', () => {
     await expect(control(page, 'Up')).not.toHaveClass(/held/);
     await expect(control(page, 'Left')).toBeEnabled();
     expect(await held(page)).toBe(0);
+  });
+
+  // The rules match the arms as direct children of the cross, and fail with no error otherwise.
+  test('a held arm tips the whole cross, and two tip it to the corner between them', async ({ page }) => {
+    await loaded(page);
+    const arms = [
+      ['Up', [1, 0]],
+      ['Down', [-1, 0]],
+      ['Left', [0, -1]],
+      ['Right', [0, 1]],
+    ] as const;
+    for (const [name, way] of arms) {
+      await finger(page, name, 'pointerdown', 1);
+      await expect.poll(() => tipped(page), `${name} down`).toEqual(way);
+      await finger(page, name, 'pointerup', 1);
+      await expect.poll(() => tipped(page), `${name} up`).toEqual([0, 0]);
+    }
+
+    await finger(page, 'Up', 'pointerdown', 1);
+    await finger(page, 'Left', 'pointerdown', 2);
+    await expect.poll(() => tipped(page)).toEqual([1, -1]);
+  });
+
+  // The lip is how far the plastic stands out of the shell. A press the other way round, with
+  // the shadow opening on the arm going in, is what a base left standing still gave.
+  test('the lip closes on the side pressed in, and opens on the side that rises', async ({ page }) => {
+    await loaded(page);
+    await expect.poll(() => lipAt(page, '::after', 0, 66)).toBeCloseTo(4, 0);
+
+    const press = async (name: string, read: () => Promise<number>, check: (lip: number) => boolean) => {
+      await finger(page, name, 'pointerdown', 1);
+      await expect.poll(async () => check(await read()), name).toBe(true);
+      await finger(page, name, 'pointerup', 1);
+      await expect.poll(() => tipped(page)).toEqual([0, 0]);
+    };
+    const bottomTip = () => lipAt(page, '::after', 0, 66);
+    const topTip = () => lipAt(page, '::after', 0, -66);
+    const leftTip = () => lipAt(page, '::before', -66, 22);
+    const rightTip = () => lipAt(page, '::before', 66, 22);
+
+    await press('Down', bottomTip, (lip) => lip < 1);
+    await press('Down', topTip, (lip) => lip < -3);
+    await press('Up', bottomTip, (lip) => lip > 7);
+    await press('Left', leftTip, (lip) => lip < 1);
+    await press('Left', rightTip, (lip) => lip > 7);
+    await press('Right', rightTip, (lip) => lip < 1);
+    await press('Right', leftTip, (lip) => lip > 7);
+  });
+
+  // From layout, not a picture: WebKit's screenshots paint 3D flat, though its layout is right.
+  test('the cross tips in depth: the held arm narrows away, the far one widens toward you', async ({ page }) => {
+    await loaded(page);
+    await finger(page, 'Up', 'pointerdown', 1);
+    await expect
+      .poll(async () => (await drawnWidth(page, 'Down')) - (await drawnWidth(page, 'Up')))
+      .toBeGreaterThan(1);
   });
 
   test('with the slot empty, the controls are disabled', async ({ page }) => {
