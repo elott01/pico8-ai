@@ -120,7 +120,7 @@ export default function Handheld({
         </button>
         <button
           type="button"
-          className={`${styles.action} ${styles.fullscreen}`}
+          className={styles.action}
           tabIndex={0}
           disabled={!powered}
           onClick={onFullscreen}

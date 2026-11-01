@@ -76,7 +76,14 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   stays fullscreen. The Exit button sits beside the game in Silkscreen, fades while the mouse
   rests, and leaves on a real click, which is what a popover in the page failed. The CRT
   filter carries over when it's chosen, covers the game exactly at the game's own pixel, and
-  follows it when the window changes. On `mobile-safari` the Fullscreen button is hidden.
+  follows it when the window changes.
+- **`overlay.spec.ts`** — the phone's fullscreen, on `mobile-safari` only. Fullscreen stretches
+  the same iframe over the page, in both orientations, with PICO-8's controller and without its
+  icons, and from a scrolled page, which is where it first went wrong. A real touch reaches the
+  controller, Exit puts everything back and touches stop reaching PICO-8 again, and a turn and a
+  door both work inside it. The page behind can't scroll and isn't drawn, every touch in the cart
+  is cancelled, and Exit returns to the same scroll position. The CRT filter sits on the game and follows it round a turn of the
+  phone. This engine has no Safari bars, so none of it stands in for a real iPhone.
 - **`theme.spec.ts`** — the theme control is one icon named for the current choice. It
   opens sideways when a mouse rests on it, without moving focus, and closes when the mouse
   leaves, staying open through a choice; a click, Enter or a tap opens it until a choice or a

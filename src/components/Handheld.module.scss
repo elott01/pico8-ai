@@ -418,16 +418,6 @@
   }
 }
 
-// Left off where touch is the input. Fullscreen covers the handheld's D-pad and keys, and
-// keepTouchOut in Pico8Game.tsx holds back PICO-8's own, so a phone that allows fullscreen
-// would be left with a game it can't press. Android's does; iPhone's doesn't, for anything
-// but video.
-.fullscreen {
-  @media (hover: none), (pointer: coarse) {
-    display: none;
-  }
-}
-
 // .controls, to outweigh the padding in its button reset.
 .controls .key {
   display: flex;

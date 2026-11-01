@@ -6,13 +6,11 @@
 @use 'tokens';
 @use 'crt';
 
-// Centred, because PICO-8 centres the game in fullscreen, so only its size has to be followed.
-// Square-cornered like the game, unlike the handheld's, whose screen rounds them.
+// Placed over the game by FullscreenLayer.tsx, which follows it. Square-cornered like the game,
+// unlike the handheld's, whose screen rounds them.
 .fullscreen-crt {
   position: fixed;
-  inset: 0;
   z-index: 1;
-  margin: auto;
   pointer-events: none;
   @include crt.crt-filter;
 }

@@ -84,6 +84,57 @@
   @include crt.crt-filter;
 }
 
+// The phone's fullscreen, over the whole page. PICO-8 lays out its game and controller inside
+// whatever window it's given, so this only has to give it all of one. A popover to the browser,
+// so its default box comes off, and it needs position: fixed from here, because .screen's
+// outranks the browser's: without it the overlay stays at the top of a page that's been scrolled
+// to reach the button. Safari's own bars stay: this is the page, not real fullscreen.
+.overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  aspect-ratio: auto;
+  visibility: visible; // the only thing drawn, under .cart-overlay in global.scss
+
+  .frame {
+    position: static;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+// Clear of PICO-8's controller, whose numbers these are. Its left panel starts half the short
+// side up from the bottom, so a portrait phone puts this just above it, or under the game if a
+// short phone leaves no room there. Landscape has the corner to itself, where PICO-8 drew its X.
+.overlayExit {
+  position: absolute;
+  top: max(calc(100dvh - 50vw - 48px), 100vw);
+  left: 8px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--eject);
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--eject-ink);
+  -webkit-tap-highlight-color: transparent;
+
+  @media (orientation: landscape) {
+    top: 8px;
+    right: 8px;
+    left: auto;
+  }
+}
+
 .frame {
   display: block;
   border: 0;

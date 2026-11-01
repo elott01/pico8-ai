@@ -36,8 +36,13 @@ declare global {
     // The export's shell declares these inside the iframe.
     p8_run_cart?: () => void;
     p8_request_fullscreen?: () => void;
+    p8_touch_detected?: boolean;
+    p8_allow_mobile_menu?: boolean;
   }
 }
+
+// Where the D-pad and keys are pressed by a finger, and fullscreen has to bring its own.
+const TOUCH_INPUT = '(hover: none), (pointer: coarse)';
 
 // 'empty' is no cart in the device at all: ejected.
 type CartStatus = 'loading' | 'ready' | 'missing' | 'empty';
@@ -76,6 +81,9 @@ export default function Pico8Game({
   const boardProtocol = game !== null && isBoardCart(game) ? PROTOCOLS[game] : null;
   const talkProtocol = game !== null && !isBoardCart(game) ? TALK_PROTOCOLS[game] : null;
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const screenRef = useRef<HTMLDivElement>(null);
+  // What keepTouchOut reads on each touch, so it goes through a ref. See it, and the overlay.
+  const letTouchInRef = useRef(false);
   // The poll loop reads status every 100ms but must not be torn down and rebuilt each time
   // it changes, so it goes through a ref rather than the effect's dependency list.
   const statusRef = useRef<CartStatus>('loading');
@@ -99,6 +107,7 @@ export default function Pico8Game({
   }, []);
   const [keyboardHeld, setKeyboardHeld] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
+  const [overlay, setOverlay] = useState(false);
 
   // One setter for both, so the ref the poll loop reads cannot drift from the state the
   // UI renders.
@@ -143,12 +152,50 @@ export default function Pico8Game({
   // cart gets no keys: p8_give_focus, which the export's own button uses, focuses a textarea
   // that's display:none here, and does nothing. Pressed before the cart has started, this starts
   // it as its play button would; if it's already running, p8_run_cart does nothing.
+  //
+  // A finger gets the overlay below instead. iPhone has no fullscreen for anything but video, and
+  // real fullscreen would cover the handheld's controls on the touch screens that do have it.
   const toggleFullscreen = useCallback(() => {
     const frame = iframeRef.current;
     frame?.contentWindow?.p8_run_cart?.();
+    if (window.matchMedia(TOUCH_INPUT).matches) {
+      setOverlay((on) => !on);
+      return;
+    }
     frame?.focus();
     frame?.contentWindow?.p8_request_fullscreen?.();
   }, []);
+
+  // The phone's fullscreen: the iframe stretched over the page, with PICO-8's own controller. The
+  // same iframe, because the poll loops live here, and a popover because the top layer is the way
+  // out from under the handheld's transform, which traps a plain position: fixed. Everything
+  // about the cart's page is the export's own switches, which keepTouchOut otherwise holds off.
+  // p8_touch_detected comes after p8_run_cart for a reason: set any sooner, the export's boot
+  // takes the touch path, which rearranges its page and adds a #playing hash.
+  useEffect(() => {
+    const frame = iframeRef.current;
+    const win = frame?.contentWindow;
+    const screen = screenRef.current;
+    if (!overlay || !win || !screen) return;
+    screen.popover = 'manual';
+    screen.showPopover();
+    letTouchInRef.current = true;
+    win.p8_allow_mobile_menu = false; // its fullscreen and close icons do nothing here
+    win.p8_touch_detected = true;
+    const release = holdPageStill(win);
+    return () => {
+      release();
+      letTouchInRef.current = false;
+      win.p8_touch_detected = false;
+      // A finger still down never gets to let go, once touches stop reaching PICO-8
+      if (win.pico8_buttons) win.pico8_buttons[0] = 0;
+      // Set for the touch layout, and nothing puts it back
+      const canvas = frame.contentDocument?.getElementById('canvas');
+      if (canvas) canvas.style.pointerEvents = '';
+      screen.hidePopover();
+      screen.removeAttribute('popover');
+    };
+  }, [overlay]);
 
   // Esc and the browser's own controls leave without coming through toggleFullscreen, so this
   // follows the event rather than the button.
@@ -403,7 +450,10 @@ export default function Pico8Game({
             onButtons={pressButtons}
             keyboardHeld={keyboardHeld}
           >
-            <div className={`${styles.screen} ${crt ? styles.crt : ''}`}>
+            <div
+              ref={screenRef}
+              className={`${styles.screen} ${overlay ? styles.overlay : crt ? styles.crt : ''}`}
+            >
               {game === null ? (
                 <p className={styles.insert}>insert a cart</p>
               ) : (
@@ -420,19 +470,30 @@ export default function Pico8Game({
                   src={src}
                   title={game}
                   onLoad={() => {
-                    keepTouchOut(iframeRef.current);
+                    keepTouchOut(iframeRef.current, letTouchInRef);
                     watchKeys(iframeRef.current, setKeyboardHeld);
                     applyStatus('ready');
                   }}
                   onError={() => applyStatus('missing')}
                 />
               )}
+              {/* In this page, because the overlay isn't real fullscreen and this one can be
+                  clicked. Beside the iframe rather than in it, where PICO-8 cancels touches. */}
+              {overlay && (
+                <button type="button" className={styles.overlayExit} onClick={toggleFullscreen}>
+                  Exit
+                </button>
+              )}
             </div>
           </Handheld>
         </div>
       </div>
-      {fullscreen && iframeRef.current && (
-        <FullscreenLayer frame={iframeRef.current} crt={crt} onExit={toggleFullscreen} />
+      {(fullscreen || overlay) && iframeRef.current && (
+        <FullscreenLayer
+          frame={iframeRef.current}
+          crt={crt}
+          onExit={fullscreen ? toggleFullscreen : undefined}
+        />
       )}
       {status !== 'missing' && (
         <div className={styles.panel}>
@@ -454,12 +515,19 @@ export default function Pico8Game({
 // touch as a press of that controller, zeroing pico8_buttons. The handheld's D-pad and keys
 // are this page's touch controls, so touches inside the cart's page stop at its window,
 // in the capture phase, before any of PICO-8's listeners see them. A tap still clicks,
-// because a click is an event of its own, so the play button still starts the cart.
-function keepTouchOut(frame: HTMLIFrameElement | null) {
+// because a click is an event of its own, so the play button still starts the cart. The
+// overlay covers the handheld and wants PICO-8's controller, so it lets them through.
+function keepTouchOut(frame: HTMLIFrameElement | null, letIn: { current: boolean }) {
   const win = frame?.contentWindow;
   if (!win) return;
   for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
-    win.addEventListener(type, (event) => event.stopImmediatePropagation(), { capture: true });
+    win.addEventListener(
+      type,
+      (event) => {
+        if (!letIn.current) event.stopImmediatePropagation();
+      },
+      { capture: true },
+    );
   }
 }
 
@@ -494,6 +562,32 @@ function watchKeys(frame: HTMLIFrameElement | null, onChange: (held: number) => 
     down.clear();
     report();
   });
+}
+
+// Nothing behind the overlay may move, because any of it showing through is the page. PICO-8
+// only cancels a touch on its controller, so a drag anywhere else ran out of the iframe and
+// scrolled the page behind, and Safari's bars with it, which opened gaps down to About.
+//
+// So every touch in the cart's page is cancelled, which also ends zooming and the long-press
+// callout, and PICO-8 still sees them: cancelling isn't stopping. `passive: false` is what makes
+// it count, because Safari ignores a cancel from a window's touch listener otherwise. This page
+// keeps its touchstart, or Exit couldn't be tapped. The .cart-overlay class is the backstop, for
+// whatever gets past that: the page can't scroll, and isn't drawn, with black behind it.
+function holdPageStill(win: Window) {
+  const scrollY = window.scrollY;
+  const cancel = (event: Event) => event.preventDefault();
+  const options = { passive: false };
+  const inCart = ['touchstart', 'touchmove', 'gesturestart'];
+  const inPage = ['touchmove', 'gesturestart'];
+  for (const type of inCart) win.addEventListener(type, cancel, options);
+  for (const type of inPage) document.addEventListener(type, cancel, options);
+  document.documentElement.classList.add('cart-overlay');
+  return () => {
+    for (const type of inCart) win.removeEventListener(type, cancel);
+    for (const type of inPage) document.removeEventListener(type, cancel);
+    document.documentElement.classList.remove('cart-overlay');
+    window.scrollTo(0, scrollY);
+  };
 }
 
 function filled(board: Board) {

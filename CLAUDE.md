@@ -258,12 +258,13 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   down with it through `zoom`, since they hold no iframe. Safari won't draw zoomed text under
   9px, which is why their tagline is 12px before the zoom: any less and Gem-in-Eye's wraps to
   a third line there alone, making that cartridge taller than the others.
-- **Touches inside the cart's page never reach PICO-8.** At its first touch PICO-8 switches to
-  its own touch layout: it shrinks the game to two thirds of its window, draws a controller
-  over it, and zeroes `pico8_buttons` on every later touch, breaking the crop and the
-  handheld's controls. `keepTouchOut` in `Pico8Game.tsx` stops touch events in the capture
-  phase on each new iframe's window. A tap still clicks, so the play button still starts the
-  cart. `controls.spec.ts` checks this on the mobile project.
+- **Touches inside the cart's page don't reach PICO-8, outside the phone's overlay.** At its
+  first touch PICO-8 switches to its own touch layout: it shrinks the game to two thirds of its
+  window, draws a controller over it, and zeroes `pico8_buttons` on every later touch, breaking
+  the crop and the handheld's controls. `keepTouchOut` in `Pico8Game.tsx` stops touch events in
+  the capture phase on each new iframe's window, unless the overlay has let them in. A tap
+  still clicks, so the play button still starts the cart. `controls.spec.ts` checks this on the
+  mobile project.
 - **The handheld's D-pad and keys write `pico8_buttons[0]`**, the export's hook for on-page
   buttons, with the bits in `src/lib/buttons.ts`. They let go of everything on a cart change,
   since input held across a `load()` is lost, and when the tab is hidden. Not on window blur,
@@ -291,14 +292,32 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   looks right and takes no keys. The cart must stay in this page's iframe, because the poll
   loops live here: moving it reloads the run, and opening `/games/<cart>.html` directly shows
   a working game with no AI, every turn falling back to minimax. The panel is hidden
-  meanwhile, so fullscreen stays something the player chooses. The button is hidden on touch,
-  where it would cover the D-pad while `keepTouchOut` holds back PICO-8's own controls.
-  iPhone has no element fullscreen at all, so a phone version has to be an overlay in the
-  page; a `popover`, since the handheld's transform traps `position: fixed`.
-  - **A control in fullscreen has to be inside the cart's page.** While the iframe is
+  meanwhile, so fullscreen stays something the player chooses.
+  - **A finger gets an overlay, not fullscreen.** iPhone has no element fullscreen, and real
+    fullscreen elsewhere would cover the D-pad. So on `(hover: none), (pointer: coarse)` the
+    button makes `.screen` a popover over the page, and flips the export's private switches:
+    `p8_touch_detected` turns on PICO-8's controller and `p8_allow_mobile_menu` off its icons,
+    whose fullscreen and X do nothing here. It's a popover because the top layer is the way out
+    from under the handheld's transform, and it needs `position: fixed` in `.overlay`, since
+    `.screen`'s `position: relative` outranks the browser's: without that it sits at the top of
+    the page, off screen, because the button is always reached by scrolling.
+    `p8_touch_detected` has to come after `p8_run_cart`, or the export's boot takes its touch
+    path, which rearranges its page and adds a `#playing` hash. Leaving clears `pico8_buttons`,
+    because a finger still down never gets to let go. Safari's bars stay. **`overlay.spec.ts`
+    runs in an engine with none, so anything about them needs a real iPhone.** PICO-8 only
+    cancels a touch on its controller, so a drag anywhere else ran out of the iframe and
+    scrolled the page, showing About through the gaps on a real phone. `holdPageStill` cancels
+    every touch in the cart's page, with `passive: false` because Safari ignores the cancel
+    otherwise, and `.cart-overlay` in `global.scss` is the backstop: the page can't scroll and
+    isn't drawn, with black behind it. It has to stay in the DOM, since the poll loops live in it.
+    WebKit's emulation can't drag; Chromium's can, with `Input.synthesizeScrollGesture`. WebKit stops the
+    frames of an iframe out of sight, so PICO-8's layout and the game wait while it's scrolled
+    away, and an overlay left off screen looks like a controller that never appeared.
+  - **A control in real fullscreen has to be inside the cart's page.** While the iframe is
     fullscreen it takes every click, so a `popover` in this page draws over it and can't be
-    pressed, in Chromium and WebKit alike. A phone overlay isn't real fullscreen, so this
-    doesn't reach it. `FullscreenLayer.tsx` is a portal into `p8_playarea` for this reason. The
+    pressed, in Chromium and WebKit alike. The overlay isn't real fullscreen, so its Exit stays
+    in the page, beside the iframe, where PICO-8 can't cancel the touch.
+    `FullscreenLayer.tsx` is a portal into `p8_playarea` for this reason. The
     site's CSS and fonts stop at the iframe, so it carries `src/styles/fullscreen-layer.scss`
     and Silkscreen in with it, both `?inline`. The Exit button is out of the tab order, since
     the cart swallows Tab and keyboard players have Esc.
@@ -306,7 +325,9 @@ Breaking any of these fails silently, so verify them when touching the relevant 
     fullscreen iframe, so fullscreen draws its own, from the same mixin. It's measured in game
     pixels through `--crt-px`, 4px by default, because fullscreen's are 8px at 1024 and fixed
     2px lines would miss them. Fullscreen only carries the player's choice over: the CRT
-    button is on the handheld, out of reach until they leave.
+    button is on the handheld, out of reach until they leave. The overlay's filter comes through
+    `FullscreenLayer` too, because `.crt::after` would cover PICO-8's controller as well. It
+    follows the canvas frame by frame, since a phone puts the game near the top, not centred.
 - **Body text sizes are `calc(Npx + var(--text-step))`.** On a `$big` window that adds 2px, and
   `--page-width` grows with it, so a bare `font-size` in the page's text silently misses the
   step. Silkscreen stays out of it, being sharp only at multiples of 8px, and so does anything

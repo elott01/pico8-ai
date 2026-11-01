@@ -64,7 +64,7 @@ async function expectKeyMovesCursor(page: Page, key: string) {
 }
 
 test.describe('on a desktop', () => {
-  test.skip(({ isMobile }) => !!isMobile, 'touch hides the button; see below');
+  test.skip(({ isMobile }) => !!isMobile, 'a finger gets the overlay; see overlay.spec.ts');
   test.use({ viewport: { width: 1728, height: 1086 } });
 
   test('the game fills the window at a whole multiple of 128, then returns to the crop', async ({ page }) => {
@@ -310,11 +310,4 @@ test.describe('on a desktop', () => {
     await page.getByRole('button', { name: 'Eject' }).click();
     await expect(button(page)).toBeDisabled();
   });
-});
-
-test('touch leaves it off, since nothing could press the game there', async ({ page, isMobile }) => {
-  test.skip(!isMobile, 'the touch project only');
-  await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Eject' })).toBeEnabled();
-  await expect(button(page)).toBeHidden();
 });
