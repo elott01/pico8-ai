@@ -60,7 +60,13 @@ export default function App() {
               {/* A new tab, against the usual advice, because leaving this one loses what the
                   page can't restore: a game in progress, the panel's turns, a dungeon run.
                   Coming back with Back can start the cart over. So it says so. */}
-              <a className={styles.link} href={SITE.repo} target="_blank" rel="noopener" tabIndex={0}>
+              <a
+                className={`${styles.link} ${styles.source}`}
+                href={SITE.repo}
+                target="_blank"
+                rel="noopener"
+                tabIndex={0}
+              >
                 Source
                 {/* Positioned out of flow, so browsers put a space before it in the name */}
                 <span className={styles.srOnly}>(opens in a new tab)</span>

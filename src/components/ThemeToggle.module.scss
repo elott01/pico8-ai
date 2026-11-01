@@ -1,7 +1,10 @@
-// A pill one icon wide that opens sideways to three. The pill is in flow, so as it widens it
-// pushes the Source link along rather than covering it. The header has room for that at
-// every width, so opening never re-wraps it: from $medium the title and the tools share a
-// line with space to spare, and below that the tools have a line of their own.
+@use '../styles/breakpoints' as bp;
+
+// A pill one icon wide that opens sideways to three and moves nothing else in the header,
+// since a mouse opens it just by resting there. From $medium the title and the tools share a
+// line, so it grows left from the header's edge, over the Source link, which App.module.scss
+// fades out. Below that the tools have a line of their own and it grows right, into the room
+// after them.
 $slot: 44px;
 $slide: 200ms ease;
 
@@ -13,10 +16,17 @@ $slide: 200ms ease;
   border: 1px solid var(--rule);
   border-radius: 23px;
   background: var(--surface);
-  transition: width $slide;
+  transition:
+    width $slide,
+    margin-left $slide;
 
   &.open {
     width: 3 * $slot + 2px;
+
+    // Takes back what the width adds, so the header's flow never sees the pill change
+    @media #{bp.$medium} {
+      margin-left: -2 * $slot;
+    }
   }
 }
 
@@ -99,6 +109,14 @@ $slide: 200ms ease;
 .open .choice[aria-pressed='true'] {
   background: var(--surface-raised);
   color: var(--ai);
+}
+
+// The one under the mouse takes the fill too, because that is the one a click picks, and
+// opening leaves the mouse on whichever icon slid there. Real hovers only: a tap's would stick.
+@media (hover: hover) {
+  .open .choice:hover {
+    background: var(--surface-raised);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

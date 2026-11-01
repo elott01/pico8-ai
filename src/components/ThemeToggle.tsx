@@ -16,6 +16,14 @@ const CHOICES: { value: ThemeChoice; name: string; label: string; icon: ReactNod
   { value: 'dark', name: 'Dark', label: 'Dark theme', icon: <Moon /> },
 ];
 
+// How long the mouse rests on the icon before it opens, so crossing it on the way somewhere
+// else leaves the links alone, and how long the mouse can stray before it closes.
+const HOVER_OPEN_MS = 100;
+const HOVER_CLOSE_MS = 150;
+// How long after a hover opens it a click on a choice is ignored. Longer than $slide in the
+// stylesheet, with a beat to see where the icons ended up.
+const CLICK_GUARD_MS = 300;
+
 // localStorage throws outright in some privacy modes, so every access is guarded: a
 // blocked store should cost you persistence, not the page.
 function readStored(): ThemeChoice {
@@ -28,9 +36,13 @@ function readStored(): ThemeChoice {
 }
 
 // One icon, the current choice, that opens sideways into all three, always in the same
-// order, so the other two appear either side of it. It opens on click, tap, Enter or Space
-// and not on hover: opening slides the icons along, so a click just after a hover would
-// land on whichever one had slid under the pointer.
+// order, so the other two appear either side of it. A mouse opens it by resting on it and
+// closes it by leaving, so it stays open through a choice, showing the highlight move, and
+// focus stays where it was, since that may be the cart. A click, tap, Enter or Space opens it
+// too, moving focus in, and then a choice closes it.
+//
+// Opening slides the icons along, so a click just after a hover would land on whichever one
+// had slid under the pointer. That is what CLICK_GUARD_MS is for.
 //
 // The icon you click is a transparent button over the strip of three, which draws the
 // current choice even while closed. Closed, the strip is inert, so only that button is in
@@ -46,8 +58,10 @@ export default function ThemeToggle() {
   // back to the icon when it closes from inside the strip.
   const focusStrip = useRef(false);
   const focusIcon = useRef(false);
-  // A press outside that has not been released yet. See the click listener below.
-  const pressedElsewhere = useRef(false);
+  // Opened by the mouse rather than a click or key, so the mouse leaving closes it.
+  const openedByHover = useRef(false);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout>>();
+  const ignoreClicksUntil = useRef(0);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -72,6 +86,7 @@ export default function ThemeToggle() {
   // React 18 has no inert prop, so it is set on the element, before paint so the strip is
   // never reachable while closed. Focus moves first when closing, since inert would drop it.
   useLayoutEffect(() => {
+    if (!open) openedByHover.current = false;
     if (!open && focusIcon.current) {
       focusIcon.current = false;
       trigger.current?.focus();
@@ -83,39 +98,32 @@ export default function ThemeToggle() {
     }
   }, [open]);
 
-  // A click anywhere else closes it, on the click and not the press: closing slides the
-  // Source link back, and a link that moves between the press and the release never gets
-  // the click. For the same reason the blur that a press elsewhere causes is left alone.
-  useEffect(() => {
-    if (!open) return;
-    const outside = (event: Event) => !root.current?.contains(event.target as Node);
-    const press = (event: PointerEvent) => {
-      pressedElsewhere.current = outside(event);
-    };
-    const cancel = () => {
-      pressedElsewhere.current = false;
-    };
-    const click = (event: MouseEvent) => {
-      pressedElsewhere.current = false;
-      if (outside(event)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', press, true);
-    document.addEventListener('pointercancel', cancel, true);
-    document.addEventListener('click', click, true);
-    return () => {
-      pressedElsewhere.current = false;
-      document.removeEventListener('pointerdown', press, true);
-      document.removeEventListener('pointercancel', cancel, true);
-      document.removeEventListener('click', click, true);
-    };
-  }, [open]);
-
   const close = () => {
     focusIcon.current = !!strip.current?.contains(document.activeElement);
     setOpen(false);
   };
 
-  const at = CHOICES.findIndex((c) => c.value === choice);
+  // These listen on the document because a hover leaves focus outside. Focus landing elsewhere
+  // has to close it too, as it may have landed on the link under the pill.
+  useEffect(() => {
+    if (!open) return;
+    const elsewhere = (event: Event) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    document.addEventListener('click', elsewhere, true);
+    document.addEventListener('focusin', elsewhere, true);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('click', elsewhere, true);
+      document.removeEventListener('focusin', elsewhere, true);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [open]);
+
+  const at =CHOICES.findIndex((c) => c.value === choice);
   const current = CHOICES[at];
 
   return (
@@ -124,15 +132,24 @@ export default function ThemeToggle() {
       className={`${styles.toggle} ${open ? styles.open : ''}`}
       // Which slot of the strip shows through while closed
       style={{ '--at': at } as CSSProperties}
-      onBlur={(event) => {
-        if (pressedElsewhere.current) return;
-        if (!root.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
+      // Mouse only: a tap sends these too, and would open it just before its click closed it
+      onPointerEnter={(event) => {
+        if (event.pointerType !== 'mouse') return;
+        clearTimeout(hoverTimer.current);
+        if (open) return;
+        hoverTimer.current = setTimeout(() => {
+          openedByHover.current = true;
+          ignoreClicksUntil.current = performance.now() + CLICK_GUARD_MS;
+          setOpen(true);
+        }, HOVER_OPEN_MS);
       }}
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape' || !open) return;
-        event.stopPropagation();
-        focusIcon.current = true;
-        setOpen(false);
+      onPointerLeave={(event) => {
+        if (event.pointerType !== 'mouse') return;
+        clearTimeout(hoverTimer.current);
+        if (openedByHover.current) hoverTimer.current = setTimeout(close, HOVER_CLOSE_MS);
+      }}
+      onBlur={(event) => {
+        if (!root.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
       }}
     >
       <button
@@ -147,6 +164,7 @@ export default function ThemeToggle() {
         aria-controls={stripId}
         // Only the keyboard reaches it while open; see .trigger
         onClick={() => {
+          clearTimeout(hoverTimer.current);
           focusStrip.current = !open;
           setOpen(!open);
         }}
@@ -164,8 +182,9 @@ export default function ThemeToggle() {
               title={name}
               aria-pressed={choice === value}
               onClick={() => {
+                if (performance.now() < ignoreClicksUntil.current) return;
                 setChoice(value);
-                close();
+                if (!openedByHover.current) close();
               }}
             >
               {icon}

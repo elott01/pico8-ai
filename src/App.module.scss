@@ -69,6 +69,19 @@ $tight-top: 4px;
   }
 }
 
+// From $medium the open theme pill lies over this link and stops just short of its first
+// letter, further short on a $big window, so the link fades with the pill's slide rather than
+// leaving a sliver of itself showing.
+.source {
+  transition: opacity 200ms ease;
+
+  @media #{bp.$medium} {
+    .tools:has([aria-expanded='true']) & {
+      opacity: 0;
+    }
+  }
+}
+
 // Silkscreen's lowercase letters are capitals too, so the title always reads in caps and
 // only .ai's colour sets "AI" apart from "ght". The text keeps its real case for screen
 // readers and copy-paste.

@@ -68,10 +68,13 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
 - **`eject.spec.ts`** — Eject empties the device, focus moves to the first cart, a cart goes
   back in, and Tab reaches Eject before the cart's iframe, which swallows Tab.
 - **`theme.spec.ts`** — the theme control is one icon named for the current choice. It
-  opens sideways on a click, Enter or a tap, never on hover, moving the header's links along
-  without re-wrapping the header. A choice applies and survives a reload, Escape puts focus
-  back on the icon, and Auto clears the stored choice. A slow click on a link the pill had
-  pushed aside still lands.
+  opens sideways when a mouse rests on it, without moving focus, and closes when the mouse
+  leaves, staying open through a choice; a click, Enter or a tap opens it until a choice or a
+  dismissal. Either way nothing else in the header moves: on a wide window it lies over the
+  Source link, which fades, and on a narrow one it leaves the links showing. The choice under
+  the mouse is filled, and a click as it opens picks nothing. A choice applies and survives a
+  reload, Escape closes it however it opened and puts focus back on the icon if it was inside,
+  and Auto clears the stored choice. A slow click elsewhere still lands.
 - **`about.spec.ts`** — the header's About and Source links are in the tab order, following
   About lands Tab inside the section, every link off the site opens a new tab and says so,
   and the chain lists the five steps a move takes, in order.
