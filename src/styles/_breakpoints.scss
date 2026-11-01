@@ -18,9 +18,16 @@
 // $big is a window with room to spare: the page goes wider and its text a step larger
 // (--page-width and --text-step in tokens.scss). Its height keeps the taller header from
 // pushing the bottom of the arcade off a wide, short window.
+//
+// $tight has the three columns and less height than the page's padding, the header and the
+// 3/4 row add up to, 890px. The page spends what it can of the padding above the title
+// (.page in App.module.scss). The arcade is centred in the window either side of it, so the
+// number moving a little would only move About, which is past the window's edge.
 $full-device: 680px;
 $full-height: 1134px;
+$tight-height: 890px;
 $compact: '(min-width: #{$full-device}) and (max-height: #{$full-height - 1px})';
 $medium: '(min-width: 1020px), (min-width: 850px) and (max-height: #{$full-height - 1px})';
 $wide: '(min-width: 1300px), (min-width: 1090px) and (max-height: #{$full-height - 1px})';
+$tight: '(min-width: 1090px) and (max-height: #{$tight-height - 1px})';
 $big: '(min-width: 1600px) and (min-height: 880px)';

@@ -3,10 +3,18 @@
 @use './styles/column';
 
 $page-block: clamp(1rem, 3vw, 2rem);
+// The least there is above the title on a $tight window. The title's line height leaves
+// about 10px more over its letters.
+$tight-top: 4px;
 
 .page {
   padding: $page-block max(16px, 3%);
   text-align: center;
+
+  // Only the top: the padding at the bottom is under About, not the arcade.
+  @media #{bp.$tight} {
+    padding-top: $tight-top;
+  }
 }
 
 // The title on the left, the links and the theme control on the right; on a phone the
@@ -128,6 +136,12 @@ $page-block: clamp(1rem, 3vw, 2rem);
   @media #{bp.$wide} {
     grid-template-columns: auto var(--device-column) minmax(280px, 1fr);
     grid-template-areas: 'header header header' 'carts device panel';
+  }
+
+  // Still centred in the window, so the space above the title and below the shell shrink
+  // together until the title reaches $tight-top. That's what fits the shell down to 830px.
+  @media #{bp.$tight} {
+    min-height: calc(100vh - 2 * #{$tight-top});
   }
 }
 
