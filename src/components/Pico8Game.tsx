@@ -26,6 +26,7 @@ import type { Turn } from './TurnPanel.tsx';
 import TalkPanel from './TalkPanel.tsx';
 import type { TalkTurn } from './TalkPanel.tsx';
 import Handheld from './Handheld.tsx';
+import { BUTTON_KEYS } from '../lib/buttons.ts';
 import { CARTS } from '../lib/carts.ts';
 import styles from './Pico8Game.module.scss';
 
@@ -64,6 +65,7 @@ export default function Pico8Game({
   // only thing the UI can see. Without it the panel sits silent for the ~1.6s the model
   // takes, which reads as a dead page on the very turn the panel exists to evidence.
   const [thinking, setThinking] = useState(false);
+  const [keyboardHeld, setKeyboardHeld] = useState(0);
 
   // One setter for both, so the ref the poll loop reads cannot drift from the state the
   // UI renders.
@@ -89,6 +91,7 @@ export default function Pico8Game({
     setTurns([]); // analysis from the previous cart would be misleading
     setTalks([]);
     setThinking(false);
+    setKeyboardHeld(0); // watchKeys' blur doesn't cover this: WebKit sends none from a removed iframe
   }, [game, applyStatus]);
 
   // The handheld's D-pad and keys. pico8_buttons is the export's own hook for on-page
@@ -339,6 +342,7 @@ export default function Pico8Game({
             canEject={status === 'ready'}
             onEject={onEject}
             onButtons={pressButtons}
+            keyboardHeld={keyboardHeld}
           >
             <div className={styles.screen}>
               {game === null ? (
@@ -358,6 +362,7 @@ export default function Pico8Game({
                   title={game}
                   onLoad={() => {
                     keepTouchOut(iframeRef.current);
+                    watchKeys(iframeRef.current, setKeyboardHeld);
                     applyStatus('ready');
                   }}
                   onError={() => applyStatus('missing')}
@@ -394,6 +399,39 @@ function keepTouchOut(frame: HTMLIFrameElement | null) {
   for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
     win.addEventListener(type, (event) => event.stopImmediatePropagation(), { capture: true });
   }
+}
+
+// Which of the handheld's buttons the keyboard is holding, so they can move with it. Keys go to
+// whichever window has focus, so this listens in the cart's, and a button moves only when the
+// cart got its key. It's only a watcher: the runtime has the key already, so nothing here goes
+// near pico8_buttons. Two keys can press one button, so it stays down until both are up. A blur
+// lets go of everything, as the runtime does, because a key released elsewhere sends its keyup
+// elsewhere. Keys under Cmd don't count, because macOS sends no keyup for them at all.
+function watchKeys(frame: HTMLIFrameElement | null, onChange: (held: number) => void) {
+  const win = frame?.contentWindow;
+  if (!win) return;
+  const down = new Set<number>();
+  const report = () => onChange([...down].reduce((held, key) => held | BUTTON_KEYS[key]!, 0));
+  win.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.keyCode in BUTTON_KEYS && !event.metaKey) down.add(event.keyCode);
+      report();
+    },
+    { capture: true },
+  );
+  win.addEventListener(
+    'keyup',
+    (event) => {
+      down.delete(event.keyCode);
+      report();
+    },
+    { capture: true },
+  );
+  win.addEventListener('blur', () => {
+    down.clear();
+    report();
+  });
 }
 
 function filled(board: Board) {

@@ -1,6 +1,6 @@
 // The handheld's D-pad and O/X keys. They press the cart's buttons through pico8_buttons[0],
 // the export's hook for on-page controls, and on a touch screen they are the controls: PICO-8's
-// own touch layout is kept from switching on.
+// own touch layout is kept from switching on. They also move with the keyboard.
 
 import { test, expect, type Page } from '@playwright/test';
 
@@ -92,6 +92,109 @@ test.describe('the D-pad and keys', () => {
     await loaded(page);
     await page.getByRole('button', { name: 'Eject' }).click();
     for (const [name] of CONTROLS) await expect(control(page, name)).toBeDisabled();
+  });
+});
+
+// The keyboard goes straight to the cart, so here the controls only draw it. Which keys press
+// which button was measured on running carts: every key below lands, and none of player 2's do.
+test.describe('the keyboard', () => {
+  test.skip(({ isMobile }) => !!isMobile, 'no keyboard');
+
+  const KEYS = [
+    ['ArrowUp', 'Up'],
+    ['ArrowDown', 'Down'],
+    ['ArrowLeft', 'Left'],
+    ['ArrowRight', 'Right'],
+    ['z', 'O button'],
+    ['c', 'O button'],
+    ['n', 'O button'],
+    ['x', 'X button'],
+    ['v', 'X button'],
+    ['m', 'X button'],
+  ] as const;
+
+  /** Load the page with focus in the cart, where the keys go. */
+  async function focused(page: Page) {
+    await loaded(page);
+    await page.locator('iframe').focus();
+  }
+
+  test('a held key draws its control pressed, and leaves the cart its own input', async ({ page }) => {
+    await focused(page);
+    for (const [key, name] of KEYS) {
+      await page.keyboard.down(key);
+      await expect(control(page, name), `${key} down`).toHaveClass(/held/);
+      expect(await held(page), `${key} down`).toBe(0);
+      await page.keyboard.up(key);
+      await expect(control(page, name), `${key} up`).not.toHaveClass(/held/);
+    }
+  });
+
+  test("player 2's keys draw nothing", async ({ page }) => {
+    await focused(page);
+    await page.keyboard.down('s');
+    await page.keyboard.down('q');
+    await page.waitForTimeout(100);
+    for (const [name] of CONTROLS) await expect(control(page, name)).not.toHaveClass(/held/);
+  });
+
+  test('two keys on one control hold it until both are up', async ({ page }) => {
+    await focused(page);
+    await page.keyboard.down('z');
+    await page.keyboard.down('c');
+    await page.keyboard.up('z');
+    await page.waitForTimeout(100);
+    await expect(control(page, 'O button')).toHaveClass(/held/);
+    await page.keyboard.up('c');
+    await expect(control(page, 'O button')).not.toHaveClass(/held/);
+  });
+
+  test('a key and a click on one control hold it until both are up', async ({ page }) => {
+    await focused(page);
+    await page.keyboard.down('ArrowRight');
+    await control(page, 'Right').hover();
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+    await expect(control(page, 'Right')).toHaveClass(/held/);
+    await page.keyboard.up('ArrowRight');
+    await expect(control(page, 'Right')).not.toHaveClass(/held/);
+  });
+
+  test('a key pressed outside the cart draws nothing, since the cart never got it', async ({ page }) => {
+    await loaded(page);
+    await page.getByRole('button', { name: 'Eject' }).focus();
+    await page.keyboard.down('ArrowLeft');
+    await page.waitForTimeout(100);
+    await expect(control(page, 'Left')).not.toHaveClass(/held/);
+  });
+
+  test('focus leaving the cart lets go, since the release would go elsewhere', async ({ page }) => {
+    await focused(page);
+    await page.keyboard.down('ArrowUp');
+    await expect(control(page, 'Up')).toHaveClass(/held/);
+    await page.getByRole('button', { name: 'Eject' }).focus();
+    await expect(control(page, 'Up')).not.toHaveClass(/held/);
+  });
+
+  // A click with focus staying in the cart, as a tap can on a tablet with a keyboard. A mouse
+  // click would blur the cart first, and the test above would be all this checks.
+  test('changing carts lets go of a held key', async ({ page }) => {
+    await focused(page);
+    await page.keyboard.down('ArrowUp');
+    await expect(control(page, 'Up')).toHaveClass(/held/);
+
+    await page.getByRole('button', { name: /Connect Four/ }).dispatchEvent('click');
+    await expect(page.locator('iframe')).toHaveAttribute('src', /connect_four/);
+    await expect(control(page, 'Up')).not.toHaveClass(/held/);
+  });
+
+  test('a key held under Cmd draws nothing, since macOS never sends its release', async ({ page }) => {
+    await focused(page);
+    await page.keyboard.down('Meta');
+    await page.keyboard.down('z');
+    await page.waitForTimeout(100);
+    await expect(control(page, 'O button')).not.toHaveClass(/held/);
   });
 });
 

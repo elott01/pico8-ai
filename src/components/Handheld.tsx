@@ -3,7 +3,8 @@
 //
 // Pico8Game owns the cart and passes the screen in as `children`. The D-pad and keys report
 // what's held through `onButtons`, as the bitfield in lib/buttons.ts, and Pico8Game hands
-// that to the cart.
+// that to the cart. What the keyboard is holding comes back the other way, through
+// `keyboardHeld`, only to be drawn: the cart gets those keys for itself.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent, PointerEvent, ReactNode } from 'react';
@@ -17,6 +18,7 @@ export default function Handheld({
   canEject,
   onEject,
   onButtons,
+  keyboardHeld = 0,
   children,
 }: {
   /** The cart in the slot, or null when the slot is empty. */
@@ -30,6 +32,8 @@ export default function Handheld({
   onEject?: () => void;
   /** Every change to what's held on the D-pad and keys, as player 1's button bits. */
   onButtons?: (held: number) => void;
+  /** The button bits the keyboard is holding in the cart, drawn pressed like a click. */
+  keyboardHeld?: number;
   /** The screen. */
   children: ReactNode;
 }) {
@@ -59,7 +63,7 @@ export default function Handheld({
 
   const control = (bit: number, className: string, label: string) => ({
     type: 'button' as const,
-    className: `${className} ${held & bit ? styles.held : ''}`,
+    className: `${className} ${(held | keyboardHeld) & bit ? styles.held : ''}`,
     'aria-label': label,
     // Out of the tab order: keyboard players have the keys the captions name, and Tab could
     // never reach these anyway, since they come after the cart's iframe, which swallows it.

@@ -269,6 +269,11 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   which fires every time focus goes into the cart. A press leaves focus where it was, so the
   cart's own keys keep working. They are out of the tab order (`tabIndex -1`) on purpose:
   keyboard players have the real keys, and Tab can't get past the iframe to reach them.
+  - **They move with the keyboard too, but it only draws.** `watchKeys` in `Pico8Game.tsx`
+    listens in the iframe's window and passes `keyboardHeld` to the handheld. It stays out of
+    `pico8_buttons`: the runtime already has the key, and `pressButtons` overwrites that whole
+    int on every press. Keys pressed with focus outside the cart don't move anything, which
+    is right, because the cart didn't get them either.
 - **Body text sizes are `calc(Npx + var(--text-step))`.** On a `$big` window that adds 2px, and
   `--page-width` grows with it, so a bare `font-size` in the page's text silently misses the
   step. Silkscreen stays out of it, being sharp only at multiples of 8px, and so does anything

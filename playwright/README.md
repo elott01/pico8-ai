@@ -61,8 +61,10 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   plus the reason for it, that PICO-8's page still overflows the iframe.
 - **`controls.spec.ts`** — the handheld's D-pad and keys set and clear bits in
   `pico8_buttons[0]`, two held at once, focus staying in the cart, a click with no pointer
-  tapping, letting go on a cart switch, and the disabled state with no cart. On
-  `mobile-safari`, a tap starts the cart without PICO-8 switching to its touch layout.
+  tapping, letting go on a cart switch, and the disabled state with no cart. Keys held in the
+  cart draw their control pressed without touching `pico8_buttons`, and let go when focus
+  leaves or the cart changes. On `mobile-safari`, a tap starts the cart without PICO-8
+  switching to its touch layout.
 - **`eject.spec.ts`** — Eject empties the device, focus moves to the first cart, a cart goes
   back in, and Tab reaches Eject before the cart's iframe, which swallows Tab.
 - **`theme.spec.ts`** — the theme control is one icon named for the current choice. It
