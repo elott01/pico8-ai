@@ -56,8 +56,8 @@
 }
 
 // The window the game shows through, inside the handheld's bezel. Square, and --stage-size
-// across on the wide layouts. Nothing is laid over the game: anything covering the canvas
-// would have to intercept pointer events, and would eat clicks meant for the cart.
+// across on the wide layouts. Nothing that takes pointer events is laid over the game, or it
+// would eat clicks meant for the cart: the CRT filter below lets every one through.
 .screen {
   position: relative;
   width: 100%;
@@ -157,6 +157,18 @@
     left: -14px;
     width: 540px;
     height: 539px;
+  }
+}
+
+// Below that the iframe is plain, and PICO-8 draws the game at 95% of it, pinned to the top: all
+// the slack, 5% of the height, lands under the game, and the game sits high in its window. Moving
+// the page down by half of it centres the game. A transform rather than `top`, since a percentage
+// of the height needs the screen's height to be definite, and the bottom edge may run past the
+// window, where there's only page background (painted black, by paintPageBlack). Not in the
+// phone's overlay, which hands PICO-8 the whole window to lay itself out in.
+@media (max-width: #{bp.$full-device - 1px}) {
+  .screen:not(.overlay) > .frame {
+    transform: translateY(2.5%);
   }
 }
 

@@ -1,6 +1,6 @@
 // The handheld the cart plays in: the lavender shell, the cart standing in its slot, the
-// bezel with its two status lights, the printed lettering, the D-pad and O/X keys, and the
-// Eject, Fullscreen and CRT buttons.
+// bezel with its two status lights and the black glass the screen sits in, the printed
+// lettering, the D-pad and O/X keys, and the Eject, Fullscreen and CRT buttons.
 //
 // Pico8Game owns the cart and passes the screen in as `children`. The D-pad and keys report
 // what's held through `onButtons`, as the bitfield in lib/buttons.ts, and Pico8Game hands
@@ -164,7 +164,7 @@ export default function Handheld({
             <span className={`${styles.led} ${thinking ? styles.gemini : ''}`} />
           </span>
         </div>
-        {children}
+        <div className={styles.glass}>{children}</div>
       </div>
 
       <div className={styles.lettering}>

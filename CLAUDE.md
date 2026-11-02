@@ -248,6 +248,17 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   overflows the iframe, and its scrollbars would show inside the screen and narrow the crop.
   Headless browsers draw no scrollbars, so no test can see them return; `screen.spec.ts`
   checks the attribute instead. Below `$full-device` the iframe is plain and column-wide.
+  - **Below `$full-device` the game is not centred by PICO-8, so the page does it.** It draws
+    the game at 95% of the iframe, pinned to the top, so all the slack lands underneath, and its
+    page is #222 grey. `Pico8Game.module.scss` moves the iframe down 2.5%, with a `transform`
+    because a percentage `top` needs a definite height, and `paintPageBlack` paints the page
+    black on load, so the grey doesn't read as a second bezel. Neither applies in the phone's
+    overlay, which gives PICO-8 the whole window. `screen.spec.ts` pins both at 620 and 480.
+  - **The screen sits in black glass inside the bezel** (`.glass` in `Handheld`), so the game
+    has room and its HUD doesn't touch the navy. The glass's width comes out of the bezel's:
+    the bezel and glass at the sides and bottom still make the 20px `--device-width` counts, and
+    the 34px above the screen is 8 + the lights + 8 + 10. Make either one bigger and
+    `--device-width` and `--device-height` are wrong, and the screen specs fail.
 - **On a short window the handheld is a transform.** Wider than `$full-device` and shorter
   than `$full-height`, it draws at 3/4 (`--device-scale`) and the rest of the page keeps its
   size. PICO-8 has to go on measuring a 540px iframe, so a smaller `--stage-size` would bring

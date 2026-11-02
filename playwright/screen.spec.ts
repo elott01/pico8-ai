@@ -87,6 +87,31 @@ for (const width of [1280, 780]) {
   }
 }
 
+// Below the full-size handheld the iframe is plain and PICO-8 draws the game at 95% of it, pinned
+// to the top. The page moves the iframe to centre it, and paints PICO-8's grey page black, so the
+// game sits in the black glass with no second bezel. The sizes are blurry here; only the margins
+// and the colour are pinned.
+for (const width of [620, 480]) {
+  test.describe(`the screen at ${width} wide`, () => {
+    test.use({ viewport: { width, height: 900 } });
+
+    test('the game is centred, on black', async ({ page }) => {
+      await page.goto('/');
+      await start(page);
+      const { view, game } = await measure(page, 'canvas');
+      const left = game.x - view.x;
+      const right = view.x + view.width - (game.x + game.width);
+      const top = game.y - view.y;
+      const bottom = view.y + view.height - (game.y + game.height);
+      expect(Math.abs(left - right)).toBeLessThan(2);
+      expect(Math.abs(top - bottom)).toBeLessThan(2);
+      expect(top).toBeGreaterThan(5); // it was 0
+      const page8 = await page.locator('iframe').evaluate((f: HTMLIFrameElement) => getComputedStyle(f.contentDocument!.body).backgroundColor);
+      expect(page8).toBe('rgb(0, 0, 0)');
+    });
+  });
+}
+
 // The 3/4 handheld is a transform, which leaves its box full-size, so .device sets the
 // scaled height itself from --device-height. That token is the full-size shell's height,
 // copied by hand: if the shell's contents change and it doesn't follow, the 3/4 handheld

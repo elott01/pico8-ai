@@ -470,6 +470,7 @@ export default function Pico8Game({
                   src={src}
                   title={game}
                   onLoad={() => {
+                    paintPageBlack(iframeRef.current);
                     keepTouchOut(iframeRef.current, letTouchInRef);
                     watchKeys(iframeRef.current, setKeyboardHeld);
                     applyStatus('ready');
@@ -529,6 +530,14 @@ function keepTouchOut(frame: HTMLIFrameElement | null, letIn: { current: boolean
       { capture: true },
     );
   }
+}
+
+// PICO-8's page has a #222 background, which shows round the game wherever the iframe is bigger
+// than it (see .frame), as a grey bezel inside the handheld's black glass. The page is ours to
+// reach, being same-origin, and the cart's own screen is black.
+function paintPageBlack(frame: HTMLIFrameElement | null) {
+  const body = frame?.contentDocument?.body;
+  if (body) body.style.background = '#000';
 }
 
 // Which of the handheld's buttons the keyboard is holding, so they can move with it. Keys go to
