@@ -65,8 +65,13 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   cart draw their control pressed without touching `pico8_buttons`, and let go when focus
   leaves or the cart changes. A held arm tips the whole D-pad, and two tip it to a corner. Its
   lip closes on the side pressed in and opens on the far side. The depth is measured from
-  layout, since WebKit's screenshots paint 3D flat. On `mobile-safari`,
-  a tap starts the cart without PICO-8 switching to its touch layout.
+  layout, since WebKit's screenshots paint 3D flat. The lettering reads `CLICK SCREEN` while
+  keys don't reach the cart, and blinks for each cart key pressed on the page. A cart switch
+  changes it once, with no flicker while the next cart loads, and an eject leaves it alone.
+  Those hold the press like a person and the next cart's page like a slow server, since an
+  instant click and a fast load hide the flicker. Eject, Fullscreen and CRT leave the keyboard
+  in the cart. On `mobile-safari`, the hint never shows, and a tap starts the cart without
+  PICO-8 switching to its touch layout.
 - **`eject.spec.ts`** — Eject empties the device, focus moves to the first cart, a cart goes
   back in, and Tab reaches Eject before the cart's iframe, which swallows Tab.
 - **`fullscreen.spec.ts`** — the Fullscreen button draws the game at 8× and comes back to the

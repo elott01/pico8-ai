@@ -45,6 +45,10 @@ declare global {
 // Where the D-pad and keys are pressed by a finger, and fullscreen has to bring its own.
 const TOUCH_INPUT = '(hover: none), (pointer: coarse)';
 
+// P, PICO-8's pause key, which the handheld's lettering names. Enter opens the pause menu too,
+// but on the page it presses whatever button has focus, so it isn't a key meant for the cart.
+const PAUSE_KEY = 80;
+
 // 'empty' is no cart in the device at all: ejected.
 type CartStatus = 'loading' | 'ready' | 'missing' | 'empty';
 
@@ -109,6 +113,10 @@ export default function Pico8Game({
   // CrtScreen covers the game once there is one, and .crt only ever covers PICO-8's poster.
   const [crtOverGame, setCrtOverGame] = useState(false);
   const [keyboardHeld, setKeyboardHeld] = useState(0);
+  // Whether the cart's window has focus, which is whether the keyboard reaches it, and how many
+  // keys meant for it have gone to the page instead. The handheld's lettering shows both.
+  const [keyboardInCart, setKeyboardInCart] = useState(false);
+  const [missedKeys, setMissedKeys] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const [overlay, setOverlay] = useState(false);
 
@@ -137,7 +145,26 @@ export default function Pico8Game({
     setTalks([]);
     setThinking(false);
     setKeyboardHeld(0); // watchKeys' blur doesn't cover this: WebKit sends none from a removed iframe
+    // Nor watchFocus's. The hint shows while the next cart loads, so it can't wait for that
+    // cart's own check: a switch that left focus in the old one would show the P line till then.
+    setKeyboardInCart(false);
   }, [game, applyStatus]);
+
+  // A key the cart would have taken, pressed while the page has the keyboard: the moment a
+  // player finds the cart isn't listening, so the lettering blinks its hint. The key itself is
+  // left alone. Arrow keys still scroll the page, since someone reading About may mean them, and
+  // moving focus into the cart unasked would be focus moving invisibly. Repeats from a held key
+  // count once, and anything under a modifier is a shortcut, not a game key. It listens whenever
+  // the hint shows, which is while a cart is in, loading or not.
+  useEffect(() => {
+    if (game === null || keyboardInCart) return;
+    const missed = (event: KeyboardEvent) => {
+      if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.keyCode in BUTTON_KEYS || event.keyCode === PAUSE_KEY) setMissedKeys((n) => n + 1);
+    };
+    window.addEventListener('keydown', missed);
+    return () => window.removeEventListener('keydown', missed);
+  }, [game, keyboardInCart]);
 
   // The handheld's D-pad and keys. pico8_buttons is the export's own hook for on-page
   // controls, read every frame beside the keyboard. Before the cart's page has loaded there is
@@ -452,6 +479,8 @@ export default function Pico8Game({
             onCrt={toggleCrt}
             onButtons={pressButtons}
             keyboardHeld={keyboardHeld}
+            keyboardInCart={keyboardInCart}
+            missedKeys={missedKeys}
           >
             <div
               ref={screenRef}
@@ -476,6 +505,7 @@ export default function Pico8Game({
                     paintPageBlack(iframeRef.current);
                     keepTouchOut(iframeRef.current, letTouchInRef);
                     watchKeys(iframeRef.current, setKeyboardHeld);
+                    watchFocus(iframeRef.current, setKeyboardInCart);
                     applyStatus('ready');
                   }}
                   onError={() => applyStatus('missing')}
@@ -573,6 +603,19 @@ function watchKeys(frame: HTMLIFrameElement | null, onChange: (held: number) => 
     down.clear();
     report();
   });
+}
+
+// Whether the cart has the keyboard. Keys go to the window with focus, so that's the cart's
+// window having it: a click on its screen, or Tab reaching the iframe, gives it focus, and a
+// click anywhere else on the page takes it away. Leaving the browser takes it too, and gives
+// it back on return, which is right, and nothing on the page shows meanwhile. It starts from
+// where focus is, not from the last cart's answer: WebKit sends no blur from a removed iframe.
+function watchFocus(frame: HTMLIFrameElement | null, onChange: (focused: boolean) => void) {
+  const win = frame?.contentWindow;
+  if (!win) return;
+  onChange(document.activeElement === frame && document.hasFocus());
+  win.addEventListener('focus', () => onChange(true));
+  win.addEventListener('blur', () => onChange(false));
 }
 
 // Nothing behind the overlay may move, because any of it showing through is the page. PICO-8

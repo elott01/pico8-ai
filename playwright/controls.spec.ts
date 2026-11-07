@@ -287,6 +287,172 @@ test.describe('the keyboard', () => {
   });
 });
 
+// The lettering's P line says CLICK SCREEN while keys don't reach the cart, and blinks when one
+// meant for it lands on the page. Both lines are always in the DOM, stacked so the row keeps its
+// size, so these check what's visible rather than what's there.
+test.describe("the keyboard's way in", () => {
+  test.skip(({ isMobile }) => !!isMobile, 'no keyboard');
+
+  const hint = (page: Page) => page.getByText('CLICK SCREEN', { exact: true });
+  const pause = (page: Page) => page.getByText('P · PAUSE MENU', { exact: true });
+
+  /** Connect Four's page held back, as a server slower than the local one would. */
+  const slowConnectFour = (page: Page, ms: number) =>
+    page.route('**/games/connect_four.html', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+      await route.continue();
+    });
+
+  /** A person's click: held a moment, long enough for a focus change to be seen. */
+  async function pressLikeAPerson(page: Page, name: string | RegExp) {
+    await page.getByRole('button', { name }).hover();
+    await page.mouse.down();
+    await page.waitForTimeout(150);
+    await page.mouse.up();
+  }
+
+  /** Every line the lettering shows from now on, in order, caught at each change to the page. */
+  async function recordLettering(page: Page) {
+    await page.evaluate(() => {
+      const seen: string[] = [];
+      (window as unknown as { lettering: string[] }).lettering = seen;
+      const read = () => {
+        const pause = [...document.querySelectorAll('span')].find((s) => s.textContent === 'P · PAUSE MENU');
+        const now = pause && getComputedStyle(pause).visibility === 'visible' ? 'P · PAUSE MENU' : 'CLICK SCREEN';
+        if (seen.at(-1) !== now) seen.push(now);
+      };
+      new MutationObserver(read).observe(document.body, { subtree: true, childList: true, attributes: true });
+      read();
+    });
+    return () => page.evaluate(() => (window as unknown as { lettering: string[] }).lettering);
+  }
+
+  test('the lettering says to click the screen until the cart has the keyboard', async ({ page }) => {
+    await loaded(page);
+    await expect(hint(page)).toBeVisible();
+    await expect(pause(page)).toBeHidden();
+
+    await page.locator('iframe').click();
+    await expect(pause(page)).toBeVisible();
+    await expect(hint(page)).toBeHidden();
+
+    // The page's left gutter: a click on nothing in particular still takes the keyboard
+    await page.mouse.click(4, 300);
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('BODY');
+    await expect(hint(page)).toBeVisible();
+  });
+
+  // Held down and let go off the button, so it's never clicked: Eject and Fullscreen would hand
+  // focus on themselves, and this is about the press.
+  test("the handheld's buttons leave the keyboard in the cart", async ({ page }) => {
+    await loaded(page);
+    await page.locator('iframe').click();
+    await expect(pause(page)).toBeVisible();
+
+    for (const name of ['Eject', 'Fullscreen', 'CRT']) {
+      await page.getByRole('button', { name, exact: true }).hover();
+      await page.mouse.down();
+      expect(await page.evaluate(() => document.activeElement?.tagName), name).toBe('IFRAME');
+      await expect(pause(page), name).toBeVisible();
+      await page.mouse.move(4, 300);
+      await page.mouse.up();
+    }
+  });
+
+  test('the CRT button, clicked, still leaves the keyboard in the cart', async ({ page }) => {
+    await loaded(page);
+    await page.locator('iframe').click();
+    await expect(pause(page)).toBeVisible();
+
+    const crt = page.getByRole('button', { name: 'CRT', exact: true });
+    const before = await crt.getAttribute('aria-pressed');
+    await crt.click();
+    await expect(crt).not.toHaveAttribute('aria-pressed', before!);
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('IFRAME');
+    await expect(pause(page)).toBeVisible();
+  });
+
+  // The card takes focus as it's pressed, and the next cart takes a moment to load. The hint
+  // once followed POWER, so it showed for the press, went while the cart loaded, and came back.
+  test('switching carts changes the lettering once, with no flicker while the next loads', async ({ page }) => {
+    await slowConnectFour(page, 500);
+    await loaded(page);
+    await page.locator('iframe').click();
+    await expect(pause(page)).toBeVisible();
+    const seen = await recordLettering(page);
+
+    await pressLikeAPerson(page, /Connect Four/);
+    await expect(page.locator('iframe')).toHaveAttribute('src', /connect_four/);
+    await expect(control(page, 'Left')).toBeEnabled();
+    expect(await seen()).toEqual(['P · PAUSE MENU', 'CLICK SCREEN']);
+  });
+
+  test('ejecting leaves the lettering alone, and the next cart changes it once', async ({ page }) => {
+    await slowConnectFour(page, 500);
+    await loaded(page);
+    await page.locator('iframe').click();
+    await expect(pause(page)).toBeVisible();
+    const seen = await recordLettering(page);
+
+    await pressLikeAPerson(page, 'Eject');
+    await expect(page.locator('iframe')).toHaveCount(0);
+    expect(await seen()).toEqual(['P · PAUSE MENU']);
+
+    await pressLikeAPerson(page, /Connect Four/);
+    await expect(control(page, 'Left')).toBeEnabled();
+    expect(await seen()).toEqual(['P · PAUSE MENU', 'CLICK SCREEN']);
+  });
+
+  test("a cart's key pressed on the page blinks the hint, and each one blinks it again", async ({ page }) => {
+    await loaded(page);
+    // Neither a key the cart ignores nor a shortcut
+    await page.keyboard.press('a');
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(100);
+    await expect(hint(page)).not.toHaveClass(/missed/);
+
+    await page.keyboard.press('ArrowLeft');
+    await expect(hint(page)).toHaveClass(/missed/);
+
+    // A fresh element is a restarted animation
+    await hint(page).evaluate((el) => (el.dataset.seen = '1'));
+    await page.keyboard.press('p');
+    await expect(hint(page)).not.toHaveAttribute('data-seen');
+    await expect(hint(page)).toHaveClass(/missed/);
+  });
+
+  test('keys that reach the cart blink nothing', async ({ page }) => {
+    await loaded(page);
+    await page.locator('iframe').focus();
+    await expect(pause(page)).toBeVisible();
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForTimeout(100);
+    await expect(hint(page)).not.toHaveClass(/missed/);
+  });
+
+  // The cart keeps focus through a click that doesn't move it, and WebKit sends no blur from
+  // the iframe that's taken away, so the hint has to come back with the switch, not the load.
+  test('changing carts puts the hint back while the next one loads', async ({ page }) => {
+    await slowConnectFour(page, 1000);
+    await loaded(page);
+    await page.locator('iframe').focus();
+    await expect(pause(page)).toBeVisible();
+
+    await page.getByRole('button', { name: /Connect Four/ }).dispatchEvent('click');
+    await expect(hint(page)).toBeVisible();
+    await expect(control(page, 'Left')).toBeDisabled();
+    await expect(control(page, 'Left')).toBeEnabled();
+    await expect(hint(page)).toBeVisible();
+  });
+});
+
+test('on a touch screen the lettering never asks for a click', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'needs a touch-enabled context');
+  await loaded(page);
+  await expect(page.getByText('P · PAUSE MENU', { exact: true })).toBeVisible();
+  await expect(page.getByText('CLICK SCREEN', { exact: true })).toBeHidden();
+});
+
 test('a tap on the cart starts it without PICO-8 switching to its touch layout', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'needs a touch-enabled context');
   await loaded(page);

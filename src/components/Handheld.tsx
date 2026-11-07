@@ -5,7 +5,8 @@
 // Pico8Game owns the cart and passes the screen in as `children`. The D-pad and keys report
 // what's held through `onButtons`, as the bitfield in lib/buttons.ts, and Pico8Game hands
 // that to the cart. What the keyboard is holding comes back the other way, through
-// `keyboardHeld`, only to be drawn: the cart gets those keys for itself.
+// `keyboardHeld`, only to be drawn: the cart gets those keys for itself. Whether the keyboard
+// reaches the cart at all comes back as `keyboardInCart`, and the lettering says so.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent, PointerEvent, ReactNode } from 'react';
@@ -23,6 +24,8 @@ export default function Handheld({
   onCrt,
   onButtons,
   keyboardHeld = 0,
+  keyboardInCart = true,
+  missedKeys = 0,
   children,
 }: {
   /** The cart in the slot, or null when the slot is empty. */
@@ -43,6 +46,12 @@ export default function Handheld({
   onButtons?: (held: number) => void;
   /** The button bits the keyboard is holding in the cart, drawn pressed like a click. */
   keyboardHeld?: number;
+  /** The cart's window has focus, so keys reach it. While it hasn't and a cart is in, loading
+   *  or not, the lettering says to click the screen. Not only once POWER is lit: a switch would
+   *  then show the hint, drop it while the next cart loads, and show it again. */
+  keyboardInCart?: boolean;
+  /** Keys meant for the cart that reached the page instead. Each new one blinks that hint. */
+  missedKeys?: number;
   /** The screen. */
   children: ReactNode;
 }) {
@@ -99,8 +108,7 @@ export default function Handheld({
       update(heldRef.current | bit);
       setTimeout(() => update(heldRef.current & ~bit), 100);
     },
-    // Keeps focus where it was, usually in the cart, so its keys still work after a press here.
-    onMouseDown: (e: MouseEvent<HTMLButtonElement>) => e.preventDefault(),
+    onMouseDown: keepFocus,
   });
 
   return (
@@ -115,6 +123,7 @@ export default function Handheld({
           tabIndex={0}
           disabled={!canEject}
           onClick={onEject}
+          onMouseDown={keepFocus}
         >
           Eject
         </button>
@@ -124,6 +133,7 @@ export default function Handheld({
           tabIndex={0}
           disabled={!powered}
           onClick={onFullscreen}
+          onMouseDown={keepFocus}
         >
           Fullscreen
         </button>
@@ -133,6 +143,7 @@ export default function Handheld({
           tabIndex={0}
           aria-pressed={crt}
           onClick={onCrt}
+          onMouseDown={keepFocus}
         >
           CRT
         </button>
@@ -169,7 +180,15 @@ export default function Handheld({
 
       <div className={styles.lettering}>
         <span className={styles.model}>GEMBOY-8</span>
-        <span>P · PAUSE MENU</span>
+        {/* P reaches the cart only while it has the keyboard, so otherwise this line says how to
+            give it back. Both stay in the DOM in one cell, so the swap can't resize the row. */}
+        <span className={`${styles.keysLine} ${cartName !== null && !keyboardInCart ? styles.away : ''}`}>
+          <span className={styles.pause}>P · PAUSE MENU</span>
+          {/* Keyed so each missed key remounts it, which restarts the blink */}
+          <span key={missedKeys} className={`${styles.reconnect} ${missedKeys ? styles.missed : ''}`}>
+            CLICK SCREEN
+          </span>
+        </span>
       </div>
 
       <div className={styles.controls} role="group" aria-label="Cart buttons">
@@ -205,6 +224,14 @@ export default function Handheld({
       </div>
     </div>
   );
+}
+
+// Every button on the handheld leaves focus where it was when the mouse presses it, usually in
+// the cart, so its keys still work afterwards. Any that took focus would also flash the
+// lettering's CLICK SCREEN for as long as it was held: Eject and Fullscreen did, before emptying
+// the slot or handing focus back. Enter and Space still press one that Tab has focused.
+function keepFocus(e: MouseEvent<HTMLButtonElement>) {
+  e.preventDefault();
 }
 
 function Chevron({ points }: { points: string }) {

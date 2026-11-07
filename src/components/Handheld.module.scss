@@ -172,6 +172,53 @@
   font-weight: 700;
 }
 
+// P · PAUSE MENU and CLICK SCREEN, stacked in one cell so the row is always as wide as the
+// longer. A swap that changed its width could wrap the row and make the shell taller than
+// --device-height says.
+.keysLine {
+  display: grid;
+  justify-items: end;
+
+  > * {
+    grid-area: 1 / 1;
+  }
+}
+
+.reconnect {
+  visibility: hidden;
+}
+
+.away {
+  .pause {
+    visibility: hidden;
+  }
+
+  .reconnect {
+    visibility: visible;
+  }
+
+  // No keyboard to point to under a finger: TOUCH_INPUT in Pico8Game.tsx
+  @media (hover: none), (pointer: coarse) {
+    .pause {
+      visibility: visible;
+    }
+
+    .reconnect {
+      visibility: hidden;
+    }
+  }
+}
+
+// A key meant for the cart reached the page: three blinks, at GEMINI's dim. Under reduced
+// motion the hint just stays lit.
+.missed {
+  animation: blink 0.4s steps(1, end) 3;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
 .controls {
   display: flex;
   flex-wrap: wrap;

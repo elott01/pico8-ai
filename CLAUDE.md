@@ -287,6 +287,16 @@ Breaking any of these fails silently, so verify them when touching the relevant 
     `pico8_buttons`: the runtime already has the key, and `pressButtons` overwrites that whole
     int on every press. Keys pressed with focus outside the cart don't move anything, which
     is right, because the cart didn't get them either.
+  - **The lettering says when keys can't reach the cart.** While the cart's window lacks focus
+    (`watchFocus` in `Pico8Game.tsx`), `P · PAUSE MENU` reads `CLICK SCREEN`, and a cart key
+    pressed on the page blinks it. Both lines share one grid cell, so the swap can't wrap the
+    row and make `--device-height` wrong. The hint follows a cart being in the slot, not POWER:
+    tied to POWER, a cart switch showed it, dropped it while the next cart loaded, and showed it
+    again. Every handheld button keeps focus on a mouse press (`keepFocus` in `Handheld.tsx`).
+    One that doesn't hands the keyboard to the page, and flashes the hint for as long as it's
+    held. The key itself is never redirected into the cart, which would be focus moving
+    invisibly. Playwright's clicks are instant and the local server is fast, so the flicker
+    specs hold the press 150ms and the next cart's page 500ms.
   - **The D-pad rocks as one piece.** `.cross` is the plastic and tips on its centre, and
     `.dpad` draws the dark base behind it. The lip is how far the plastic stands out of the
     shell, so it closes under a held arm and opens on the far side. A base left still does the
