@@ -115,6 +115,38 @@ test.describe('the CRT filter', () => {
     await expect.poll(async () => (await picture(page)).print).not.toBe(before.print);
   });
 
+  // Tic-tac-toe stands still until a key is pressed, so any change in the picture is the tube's.
+  const gameStill = (page: Page) =>
+    page.locator('iframe').evaluate((frame: HTMLIFrameElement) =>
+      (frame.contentDocument!.getElementById('canvas') as HTMLCanvasElement).toDataURL(),
+    );
+
+  test('the tube moves while the game stands still', async ({ page }) => {
+    await choose(page, 'on');
+    await page.goto('/');
+    await start(page);
+    await expect.poll(async () => (await picture(page)).brightest).toBeGreaterThan(LIT);
+    const game = await gameStill(page);
+    const before = await picture(page);
+    await expect.poll(async () => (await picture(page)).print).not.toBe(before.print);
+    expect(await gameStill(page)).toBe(game);
+  });
+
+  test('and holds still for prefers-reduced-motion', async ({ page }) => {
+    // The cart's page has to see it too, since that's where the shader asks
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await choose(page, 'on');
+    await page.goto('/');
+    await start(page);
+    await expect.poll(async () => (await picture(page)).brightest).toBeGreaterThan(LIT);
+    const game = await gameStill(page);
+    const before = await picture(page);
+    // Long enough for the flicker to have changed many times over, and the sway to have moved
+    await page.waitForTimeout(700);
+    expect((await picture(page)).print).toBe(before.print);
+    expect(await gameStill(page)).toBe(game);
+  });
+
   test('with no WebGL, the CSS filter covers the game instead, and only once', async ({ page }) => {
     // In every frame, so the cart's page too, where the shader's canvas is
     await page.addInitScript(() => {
@@ -183,9 +215,10 @@ test.describe('the CRT filter', () => {
   });
 
   // The look itself, on made-up pictures through the module alone, which the dev server serves as
-  // it does the page. Each pair of numbers was measured against the shipped shader and a version
-  // that should fail: one blurred across (a spot of 0.36, the first shader's), one whose lines
-  // were loosened until they all but closed (reaching 0.5 and 0.6). At 1024, 8 to a game pixel.
+  // it does the page, drawn still. Each pair of numbers was measured against the shipped shader and
+  // a version that should fail: one blurred across (a spot of 0.36, the first shader's), one whose
+  // lines were loosened until they all but closed (reaching 0.5 and 0.6). At 1024, 8 to a game
+  // pixel, where each row is two scanlines.
   test('pixels stay pixels, and every row is a scanline', async ({ page }) => {
     await page.goto('/');
     // A URL on the dev server, typed as the module it serves
@@ -198,15 +231,20 @@ test.describe('the CRT filter', () => {
         game.width = game.height = 128;
         paint(game.getContext('2d')!);
         const tube = document.createElement('canvas');
-        createCrt(tube)!(game, size);
+        createCrt(tube)!(game, size, null);
         const gl = tube.getContext('webgl')!;
         const data = new Uint8Array(size * size * 4);
         // Before this task ends, so the buffer still holds what was drawn
         gl.readPixels(0, 0, size, size, gl.RGBA, gl.UNSIGNED_BYTE, data);
-        return (x: number, y: number) => data[(y * size + x) * 4] + data[(y * size + x) * 4 + 1] + data[(y * size + x) * 4 + 2];
+        return {
+          light: (x: number, y: number) => data[(y * size + x) * 4] + data[(y * size + x) * 4 + 1] + data[(y * size + x) * 4 + 2],
+          green: (x: number, y: number) => data[(y * size + x) * 4 + 1],
+        };
       };
 
-      // White and black columns a pixel wide, the gap between the strokes of PICO-8's font
+      // White and black columns a pixel wide, the gap between the strokes of PICO-8's font. In green
+      // only, over each column's whole width: red and blue land either side on purpose, and that
+      // fringe isn't blur.
       const columns = draw((ctx) => {
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, 128, 128);
@@ -215,12 +253,10 @@ test.describe('the CRT filter', () => {
       });
       let white = 0;
       let black = 0;
-      for (let row = 32; row < 96; row++) {
-        const y = Math.floor((row + 0.5) * across);
-        for (let column = 32; column < 96; column++) {
-          const value = columns(Math.floor((column + 0.5) * across), y);
-          if (column % 2 === 0) white += value;
-          else black += value;
+      for (let y = 32 * across; y < 96 * across; y++) {
+        for (let x = 32 * across; x < 96 * across; x++) {
+          if (Math.floor(x / across) % 2 === 0) white += columns.green(x, y);
+          else black += columns.green(x, y);
         }
       }
 
@@ -231,7 +267,7 @@ test.describe('the CRT filter', () => {
       });
       const rows = Array.from({ length: size }, (_, y) => {
         let sum = 0;
-        for (let x = 0; x < size; x++) sum += field(x, y);
+        for (let x = 0; x < size; x++) sum += field.light(x, y);
         return sum;
       });
       let line = 0;
@@ -244,8 +280,8 @@ test.describe('the CRT filter', () => {
       return { blackColumns: black / white, gaps: gap / line };
     }, '/src/lib/crt.ts');
 
-    // 0.19 shipped, 0.39 blurred
-    expect(look.blackColumns).toBeLessThan(0.28);
+    // 0.39 shipped, 0.59 blurred
+    expect(look.blackColumns).toBeLessThan(0.48);
     // 0.70 shipped, 0.99 loosened
     expect(look.gaps).toBeLessThan(0.85);
   });

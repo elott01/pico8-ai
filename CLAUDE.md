@@ -336,8 +336,11 @@ Breaking any of these fails silently, so verify them when touching the relevant 
     `CrtScreen.tsx` portals its canvas into `p8_playarea` at every size, so the handheld,
     fullscreen and the overlay share one filter and one context, and it covers the game, not
     PICO-8's controller. It follows the canvas frame by frame, since a phone puts the game near
-    the top, and redraws PICO-8's 128px canvas: sharp across, a scanline per row, RGB stripes,
-    and a glow from mipmaps. `src/styles/_crt.scss` is the old CSS overlay, kept for what the
+    the top, and redraws PICO-8's 128px canvas: sharp across with red and blue fringes, fine
+    scanlines (as many to a row as fit about 4 device pixels apart), RGB stripes, a glow from
+    mipmaps, and a sway, a hum bar and a flicker. Those three move only while the system allows
+    motion: under `prefers-reduced-motion` the tube is drawn still, read from the cart's own
+    window every frame. `src/styles/_crt.scss` is the old CSS overlay, kept for what the
     shader can't draw: PICO-8's poster before a cart starts (`.crt::after`, off once `CrtScreen`
     reports the game) and no WebGL or a lost context (`.crt-screen`'s own background, behind
     the transparent canvas). Its lines are in game pixels through `--crt-px`. **A broken shader

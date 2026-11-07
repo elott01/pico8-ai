@@ -55,6 +55,8 @@ function Tube({
     const tube = tubeRef.current;
     if (!win || !tube) return;
     const draw = createCrt(tube);
+    // Read every frame, so a change in the system's setting takes effect at once.
+    const still = win.matchMedia('(prefers-reduced-motion: reduce)');
     let over = false;
     let id: number;
     const follow = () => {
@@ -68,7 +70,8 @@ function Tube({
         // Device pixels, for dots that land on them. The iframe is laid out full-size even where
         // the handheld is drawn smaller, and a transform is invisible from in here.
         const drawnAt = frame.getBoundingClientRect().width / frame.offsetWidth;
-        draw?.(game, Math.round(width * drawnAt * win.devicePixelRatio));
+        const size = Math.round(width * drawnAt * win.devicePixelRatio);
+        draw?.(game, size, still.matches ? null : win.performance.now() / 1000);
       }
       id = win.requestAnimationFrame(follow);
     };

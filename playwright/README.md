@@ -87,10 +87,11 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   bars, so none of it stands in for a real iPhone.
 - **`crt.spec.ts`** — the CRT filter's shader. The screen's CSS filter covers PICO-8's poster,
   and the shader takes the game when it starts, at the screen's device pixels through the
-  handheld's transform. It draws the game as it plays and comes back from a lost context. With
+  handheld's transform. It draws the game as it plays and comes back from a lost context. The
+  tube moves while the game stands still, and holds still under `prefers-reduced-motion`. With
   no WebGL the CSS filter covers the game instead, once. The CRT button and a cart switch take
   it away and bring it back. The look is checked on made-up pictures: 1-pixel columns stay
-  apart and every row is a scanline, against limits measured on versions that should fail. It
+  apart and every row has scanlines, against limits measured on versions that should fail. It
   reads the shader's drawing buffer, because a broken shader leaves the CSS fallback showing,
   and a screenshot would pass that.
 - **`theme.spec.ts`** — the theme control is one icon named for the current choice. It
