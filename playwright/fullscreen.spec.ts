@@ -6,6 +6,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import { BUTTON } from '../src/lib/buttons.ts';
+import { LARGEST_PICTURE } from '../src/lib/crt.ts';
 
 const COMMENTARY = 'SEEN-FROM-FULLSCREEN';
 
@@ -180,13 +181,21 @@ test.describe('on a desktop', () => {
           // on a short window, which fullscreen leaves behind
           drawn: tube?.width ?? 0,
           devicePixels: (frame.getBoundingClientRect().width / frame.offsetWidth) * devicePixelRatio,
+          // Set once frames fell behind a big picture, which then stops at LARGEST_PICTURE
+          slow: tube?.dataset.pace === 'slow',
         };
       });
 
     const expectOverGame = async (page: Page, width: number) => {
       await expect.poll(async () => (await boxes(page)).filter?.width).toBe(width);
       await expect
-        .poll(async () => { const { drawn, devicePixels } = await boxes(page); return drawn === width * devicePixels; })
+        .poll(async () => {
+          // The whole size, or, on a machine whose frames fell behind it, the cap and no more.
+          // Which one a test machine gets depends on its GPU; never the cap without the reason.
+          const { drawn, devicePixels, slow } = await boxes(page);
+          const whole = width * devicePixels;
+          return drawn === whole || (slow && whole > LARGEST_PICTURE && drawn === LARGEST_PICTURE);
+        })
         .toBe(true);
       const { filter, game } = await boxes(page);
       expect(game!.width).toBe(width);
@@ -206,6 +215,8 @@ test.describe('on a desktop', () => {
       await expectOverGame(page, 1024);
       await expect(filter(page)).toHaveCSS('--crt-px', '8px');
       await expect(filter(page)).toHaveCSS('pointer-events', 'none');
+      // Enlarged smoothly, where PICO-8's page would have every canvas pixelated
+      await expect(filter(page)).toHaveCSS('image-rendering', 'auto');
       await expectKeyMovesCursor(page, 'ArrowRight');
       await expect(exit(page)).toBeVisible();
       await exit(page).click();

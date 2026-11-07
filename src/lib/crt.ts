@@ -21,6 +21,59 @@
 /** PICO-8's screen is this many pixels across, whatever size it's drawn. */
 export const GAME_PIXELS = 128;
 
+/**
+ * The largest picture the shader draws once frames have fallen behind (see watchPace): a bigger
+ * game is then drawn at this and enlarged by the browser. Past it the work can outgrow a machine
+ * with no GPU, where the browser draws WebGL in software: fullscreen at 2048 held the game itself
+ * to 43.5 frames a second, and 23.5 at 2816, where 1024 kept it at 60. Anywhere that keeps up
+ * draws the whole size, for the finer lines. It's the full-size handheld's on a 2x screen, so a
+ * capped fullscreen has the handheld's two scanlines to a row, only bigger.
+ */
+export const LARGEST_PICTURE = 1024;
+
+// watchPace's numbers. A frame gap longer than SLOW_MS is under about 28 frames a second: the game
+// still keeps up at 30, running two of its updates a frame, so a display held at 30 to save power
+// keeps the whole picture. Intervals are judged by their median, so a few stray long frames don't
+// count, and only once the picture has settled, past fullscreen's own animation and the new canvas.
+const SLOW_MS = 36;
+const SETTLE_MS = 1000;
+const PAUSE_MS = 250; // a gap this long is a pause, not a pace: a hidden tab, or a cart's load()
+const SAMPLES = 30;
+
+/**
+ * Finds out, by watching, whether this machine draws a picture bigger than LARGEST_PICTURE too
+ * slowly for the game to keep up. Call it every frame with the time, and with whether the picture
+ * is bigger than that this frame; once it says yes it goes on saying so, since a capped picture
+ * would then look fast enough to uncap, and the two would take turns.
+ */
+export function watchPace(): (now: number, big: boolean) => boolean {
+  let slow = false;
+  let grew = 0;
+  let last: number | null = null;
+  const gaps: number[] = [];
+  return (now, big) => {
+    if (slow) return true;
+    if (!big) {
+      last = null;
+      gaps.length = 0;
+      return false;
+    }
+    if (last === null) grew = now;
+    const gap = last === null ? 0 : now - last;
+    last = now;
+    if (now - grew < SETTLE_MS) return false;
+    if (gap > PAUSE_MS) {
+      gaps.length = 0;
+      return false;
+    }
+    gaps.push(gap);
+    if (gaps.length > SAMPLES) gaps.shift();
+    if (gaps.length < SAMPLES) return false;
+    slow = [...gaps].sort((a, b) => a - b)[SAMPLES >> 1] > SLOW_MS;
+    return slow;
+  };
+}
+
 // Four to a game pixel, so the mipmaps the glow reads are as fine as the picture across and down
 // alike, and a power of two, which they need in WebGL 1.
 const BEAM_SIZE = 512;

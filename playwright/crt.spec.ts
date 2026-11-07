@@ -9,6 +9,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import { BUTTON } from '../src/lib/buttons.ts';
+import { LARGEST_PICTURE } from '../src/lib/crt.ts';
 
 const choose = (page: Page, choice: 'on' | 'off') =>
   page.addInitScript((choice) => localStorage.setItem('pico-crt', choice), choice);
@@ -145,6 +146,43 @@ test.describe('the CRT filter', () => {
     await page.waitForTimeout(700);
     expect((await picture(page)).print).toBe(before.print);
     expect(await gameStill(page)).toBe(game);
+  });
+
+  // A machine that can't keep up with a big picture, as one with no GPU couldn't with fullscreen at
+  // 2048. Made slow on purpose here, by holding up the cart's page for 50ms every frame, since
+  // whether a test machine is slow already depends on its GPU.
+  test.describe('a big picture the frames can\'t keep up with', () => {
+    test.use({ deviceScaleFactor: 2 });
+    test.skip(({ isMobile }) => !!isMobile, 'real fullscreen is the desktop\'s');
+
+    test('is drawn at the cap, and enlarged', async ({ page }) => {
+      await choose(page, 'on');
+      await page.goto('/');
+      const fullscreen = page.getByRole('button', { name: 'Fullscreen' });
+      await expect(fullscreen).toBeEnabled();
+      await start(page);
+      await page.locator('iframe').evaluate((frame: HTMLIFrameElement) => {
+        const win = frame.contentWindow!;
+        const hold = () => {
+          const until = performance.now() + 50;
+          while (performance.now() < until) {
+            // the frame's 50ms
+          }
+          win.requestAnimationFrame(hold);
+        };
+        win.requestAnimationFrame(hold);
+      });
+      await fullscreen.click();
+
+      const tube = page.frameLocator('iframe').locator('.crt-screen');
+      // 1024 across at 2x, and slow: settled, then 30 frames of 50ms and more
+      await expect(tube).toHaveAttribute('data-pace', 'slow', { timeout: 15_000 });
+      await expect.poll(() => tube.evaluate((el: HTMLCanvasElement) => el.width)).toBe(LARGEST_PICTURE);
+      const { box, game } = await filter(page);
+      expect(box!.width).toBe(game.width);
+      expect(game.width * 2).toBeGreaterThan(LARGEST_PICTURE);
+      await expect(tube).toHaveCSS('image-rendering', 'auto');
+    });
   });
 
   test('with no WebGL, the CSS filter covers the game instead, and only once', async ({ page }) => {

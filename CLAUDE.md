@@ -340,7 +340,12 @@ Breaking any of these fails silently, so verify them when touching the relevant 
     scanlines (as many to a row as fit about 4 device pixels apart), RGB stripes, a glow from
     mipmaps, and a sway, a hum bar and a flicker. Those three move only while the system allows
     motion: under `prefers-reduced-motion` the tube is drawn still, read from the cart's own
-    window every frame. `src/styles/_crt.scss` is the old CSS overlay, kept for what the
+    window every frame. A picture bigger than `LARGEST_PICTURE` (1024) is drawn whole for as long
+    as frames keep up, and capped at 1024, enlarged smoothly, once `watchPace` finds them under
+    about 28 a second: on a machine with no GPU a 2048 fullscreen held the game itself to 43.5fps.
+    The cap is one-way for that tube, or it would uncap and slow down again, and `data-pace="slow"`
+    on `.crt-screen` says when it has happened. Specs can't count on a test machine's speed, so
+    they accept either size in fullscreen and force the slow case on purpose. `src/styles/_crt.scss` is the old CSS overlay, kept for what the
     shader can't draw: PICO-8's poster before a cart starts (`.crt::after`, off once `CrtScreen`
     reports the game) and no WebGL or a lost context (`.crt-screen`'s own background, behind
     the transparent canvas). Its lines are in game pixels through `--crt-px`. **A broken shader

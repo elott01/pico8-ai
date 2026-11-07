@@ -76,7 +76,8 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   stays fullscreen. The Exit button sits beside the game in Silkscreen, fades while the mouse
   rests, and leaves on a real click, which is what a popover in the page failed. The CRT
   filter carries over when it's chosen, covers the game exactly, drawn at the screen's own
-  pixels, follows it when the window changes, and comes back to the handheld with it.
+  pixels (or at 1024, on a machine whose frames fell behind), follows it when the window
+  changes, and comes back to the handheld with it.
 - **`overlay.spec.ts`** — the phone's fullscreen, on `mobile-safari` only. Fullscreen stretches
   the same iframe over the page, in both orientations, with PICO-8's controller and without its
   icons, and from a scrolled page, which is where it first went wrong. A real touch reaches the
@@ -88,7 +89,9 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
 - **`crt.spec.ts`** — the CRT filter's shader. The screen's CSS filter covers PICO-8's poster,
   and the shader takes the game when it starts, at the screen's device pixels through the
   handheld's transform. It draws the game as it plays and comes back from a lost context. The
-  tube moves while the game stands still, and holds still under `prefers-reduced-motion`. With
+  tube moves while the game stands still, and holds still under `prefers-reduced-motion`. A big
+  fullscreen picture whose frames fall behind is drawn at 1024 and enlarged, with the cart's page
+  held up 50ms a frame to make them, since a test machine's GPU decides whether they would. With
   no WebGL the CSS filter covers the game instead, once. The CRT button and a cart switch take
   it away and bring it back. The look is checked on made-up pictures: 1-pixel columns stay
   apart and every row has scanlines, against limits measured on versions that should fail. It

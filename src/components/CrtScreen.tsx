@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { GAME_PIXELS, createCrt } from '../lib/crt.ts';
+import { GAME_PIXELS, LARGEST_PICTURE, createCrt, watchPace } from '../lib/crt.ts';
 import layerCss from '../styles/crt-screen.scss?inline';
 
 export default function CrtScreen({
@@ -57,6 +57,7 @@ function Tube({
     const draw = createCrt(tube);
     // Read every frame, so a change in the system's setting takes effect at once.
     const still = win.matchMedia('(prefers-reduced-motion: reduce)');
+    const tooSlow = watchPace();
     let over = false;
     let id: number;
     const follow = () => {
@@ -71,7 +72,12 @@ function Tube({
         // the handheld is drawn smaller, and a transform is invisible from in here.
         const drawnAt = frame.getBoundingClientRect().width / frame.offsetWidth;
         const size = Math.round(width * drawnAt * win.devicePixelRatio);
-        draw?.(game, size, still.matches ? null : win.performance.now() / 1000);
+        const now = win.performance.now();
+        // Too slow for a big picture, it's drawn at LARGEST_PICTURE and the browser enlarges it,
+        // for the rest of this tube's life. The attribute says so, for devtools and the specs.
+        const slow = tooSlow(now, size > LARGEST_PICTURE);
+        if (slow) tube.dataset.pace = 'slow';
+        draw?.(game, slow ? Math.min(size, LARGEST_PICTURE) : size, still.matches ? null : now / 1000);
       }
       id = win.requestAnimationFrame(follow);
     };
