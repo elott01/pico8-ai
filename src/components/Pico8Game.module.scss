@@ -69,11 +69,12 @@
   background: var(--p8-black);
 }
 
-// The CRT filter (its look is in src/styles/_crt.scss), laid over the game. It lets every
-// pointer event through to the cart, which is why it can sit on the canvas at all. Its corners
-// are the screen's own: a rounder overlay left the game's square corners poking out of it,
-// unfiltered. It is drawn at the screen's size, so under a transform it scales with it, and
-// where a game pixel is 4px the 2px lines stay on whole game pixels.
+// The CRT filter (its look is in src/styles/_crt.scss) over PICO-8's poster, which isn't on the
+// canvas CrtScreen.tsx reads. CrtScreen takes over when the cart starts. It lets every pointer
+// event through to the cart, which is why it can sit on the screen at all. Its corners are the
+// screen's own: a rounder overlay left the poster's square corners poking out of it, unfiltered.
+// It is drawn at the screen's size, so under a transform it scales with it, and where a game
+// pixel is 4px the 2px lines stay on whole game pixels.
 .crt::after {
   content: '';
   position: absolute;

@@ -32,7 +32,7 @@ const look = (page: Page) =>
     const screen = frame.parentElement!.getBoundingClientRect();
     const canvas = doc.getElementById('canvas')!;
     const box = canvas.getBoundingClientRect();
-    const filter = doc.querySelector('.fullscreen-crt')?.getBoundingClientRect();
+    const filter = doc.querySelector('.crt-screen')?.getBoundingClientRect();
     return {
       screen: { x: screen.x, y: screen.y, width: screen.width, height: screen.height },
       game: { x: box.x, y: box.y, width: box.width },
@@ -359,8 +359,11 @@ test.describe('the CRT filter', () => {
     await choose(page, 'on');
     await loaded(page);
     await start(page);
+    // On the handheld too, where it's the same filter, so the screen's own stays off
+    await expect.poll(async () => (await look(page)).filter?.width).toBeGreaterThan(0);
     const before = await look(page);
-    expect(before.handheldFilter).not.toBe('none');
+    expect(before.filter).toEqual(before.game);
+    expect(before.handheldFilter).toBe('none');
     await enter(page);
 
     await expect
@@ -374,8 +377,10 @@ test.describe('the CRT filter', () => {
     expect(over.handheldFilter).toBe('none');
 
     await exit(page).tap();
-    await expect.poll(async () => (await look(page)).filter).toBeUndefined();
-    expect((await look(page)).handheldFilter).not.toBe('none');
+    await expect.poll(async () => (await look(page)).filter?.width).toBe(before.game.width);
+    const after = await look(page);
+    expect(after.filter).toEqual(after.game);
+    expect(after.handheldFilter).toBe('none');
   });
 
   test('it follows the game when the phone turns', async ({ page }) => {

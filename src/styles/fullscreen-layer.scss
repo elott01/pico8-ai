@@ -4,16 +4,6 @@
 // in PICO-8's page: they're all custom properties, and it reads none of them.
 
 @use 'tokens';
-@use 'crt';
-
-// Placed over the game by FullscreenLayer.tsx, which follows it. Square-cornered like the game,
-// unlike the handheld's, whose screen rounds them.
-.fullscreen-crt {
-  position: fixed;
-  z-index: 1;
-  pointer-events: none;
-  @include crt.crt-filter;
-}
 
 // Shaped like .action in Handheld.module.scss, which can't reach in here. In the corner of the
 // black beside the game. It fades while the mouse rests, and :hover keeps it there if the mouse

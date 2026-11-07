@@ -332,13 +332,21 @@ Breaking any of these fails silently, so verify them when touching the relevant 
     site's CSS and fonts stop at the iframe, so it carries `src/styles/fullscreen-layer.scss`
     and Silkscreen in with it, both `?inline`. The Exit button is out of the tab order, since
     the cart swallows Tab and keyboard players have Esc.
-  - **The CRT filter's look lives only in `src/styles/_crt.scss`.** The handheld's is behind a
-    fullscreen iframe, so fullscreen draws its own, from the same mixin. It's measured in game
-    pixels through `--crt-px`, 4px by default, because fullscreen's are 8px at 1024 and fixed
-    2px lines would miss them. Fullscreen only carries the player's choice over: the CRT
-    button is on the handheld, out of reach until they leave. The overlay's filter comes through
-    `FullscreenLayer` too, because `.crt::after` would cover PICO-8's controller as well. It
-    follows the canvas frame by frame, since a phone puts the game near the top, not centred.
+  - **The CRT filter is a WebGL shader, `src/lib/crt.ts`, drawn inside the cart's page.**
+    `CrtScreen.tsx` portals its canvas into `p8_playarea` at every size, so the handheld,
+    fullscreen and the overlay share one filter and one context, and it covers the game, not
+    PICO-8's controller. It follows the canvas frame by frame, since a phone puts the game near
+    the top, and redraws PICO-8's 128px canvas: sharp across, a scanline per row, RGB stripes,
+    and a glow from mipmaps. `src/styles/_crt.scss` is the old CSS overlay, kept for what the
+    shader can't draw: PICO-8's poster before a cart starts (`.crt::after`, off once `CrtScreen`
+    reports the game) and no WebGL or a lost context (`.crt-screen`'s own background, behind
+    the transparent canvas). Its lines are in game pixels through `--crt-px`. **A broken shader
+    is silent**, because the fallback still looks like a CRT filter, so test it by reading its
+    buffer, not a screenshot (`crt.spec.ts`). Never lose the context in an effect's cleanup: a
+    canvas keeps one context for life, and StrictMode's second mount got the dead one back. The
+    row reads force mip level 0, or the GPU picks a blurred level at each row's edge and smears
+    every line sideways, in WebKit and not headless Chromium's software GL. Fullscreen only
+    carries the player's choice over: the CRT button is on the handheld.
 - **Body text sizes are `calc(Npx + var(--text-step))`.** On a `$big` window that adds 2px, and
   `--page-width` grows with it, so a bare `font-size` in the page's text silently misses the
   step. Silkscreen stays out of it, being sharp only at multiples of 8px, and so does anything

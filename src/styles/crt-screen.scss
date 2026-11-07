@@ -1,0 +1,13 @@
+// The canvas CrtScreen.tsx draws the filter on, inside the cart's page. The site's stylesheets stop
+// at the iframe, so this is a sheet of its own, imported ?inline and carried in with it.
+
+@use 'crt';
+
+// Placed over the game by CrtScreen.tsx, which follows it. The shader's picture is opaque and hides
+// this background, so it shows only when there's no picture: no WebGL, or a context that's been lost.
+.crt-screen {
+  position: fixed;
+  z-index: 1;
+  pointer-events: none;
+  @include crt.crt-filter;
+}

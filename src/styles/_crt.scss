@@ -1,10 +1,11 @@
-// The CRT filter's look: scanlines, a faint phosphor mask and a vignette. Two places draw it,
-// the handheld's screen and fullscreen, where it has to live inside the cart's page, so its
-// values are here and nowhere else.
+// The CRT filter for what the shader in src/lib/crt.ts can't draw: scanlines, a faint phosphor
+// mask and a vignette, laid over the top. Two places use it, the handheld's screen, for PICO-8's
+// poster before a cart starts, and .crt-screen, for a browser with no WebGL. Its values are here
+// and nowhere else.
 //
 // Everything is measured in game pixels, --crt-px, so the lines stay on whole game pixels at any
 // size. The handheld's is the default, 4px, and its transform scales the filter with the screen.
-// Fullscreen sets its own from the size PICO-8 draws the game: 8px at 1024.
+// .crt-screen sets its own from the size PICO-8 draws the game: 8px at 1024.
 @mixin crt-filter {
   $px: var(--crt-px, 4px);
 

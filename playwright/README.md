@@ -75,15 +75,24 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   reaches a stubbed `/api/move` and is in the panel on the way back, and a door's `load()`
   stays fullscreen. The Exit button sits beside the game in Silkscreen, fades while the mouse
   rests, and leaves on a real click, which is what a popover in the page failed. The CRT
-  filter carries over when it's chosen, covers the game exactly at the game's own pixel, and
-  follows it when the window changes.
+  filter carries over when it's chosen, covers the game exactly, drawn at the screen's own
+  pixels, follows it when the window changes, and comes back to the handheld with it.
 - **`overlay.spec.ts`** — the phone's fullscreen, on `mobile-safari` only. Fullscreen stretches
   the same iframe over the page, in both orientations, with PICO-8's controller and without its
   icons, and from a scrolled page, which is where it first went wrong. A real touch reaches the
   controller, Exit puts everything back and touches stop reaching PICO-8 again, and a turn and a
   door both work inside it. The page behind can't scroll and isn't drawn, every touch in the cart
-  is cancelled, and Exit returns to the same scroll position. The CRT filter sits on the game and follows it round a turn of the
-  phone. This engine has no Safari bars, so none of it stands in for a real iPhone.
+  is cancelled, and Exit returns to the same scroll position. The CRT filter is the handheld's
+  own, sits on the game and follows it round a turn of the phone. This engine has no Safari
+  bars, so none of it stands in for a real iPhone.
+- **`crt.spec.ts`** — the CRT filter's shader. The screen's CSS filter covers PICO-8's poster,
+  and the shader takes the game when it starts, at the screen's device pixels through the
+  handheld's transform. It draws the game as it plays and comes back from a lost context. With
+  no WebGL the CSS filter covers the game instead, once. The CRT button and a cart switch take
+  it away and bring it back. The look is checked on made-up pictures: 1-pixel columns stay
+  apart and every row is a scanline, against limits measured on versions that should fail. It
+  reads the shader's drawing buffer, because a broken shader leaves the CSS fallback showing,
+  and a screenshot would pass that.
 - **`theme.spec.ts`** — the theme control is one icon named for the current choice. It
   opens sideways when a mouse rests on it, without moving focus, and closes when the mouse
   leaves, staying open through a choice; a click, Enter or a tap opens it until a choice or a

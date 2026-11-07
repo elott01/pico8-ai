@@ -27,6 +27,7 @@ import TalkPanel from './TalkPanel.tsx';
 import type { TalkTurn } from './TalkPanel.tsx';
 import Handheld from './Handheld.tsx';
 import FullscreenLayer from './FullscreenLayer.tsx';
+import CrtScreen from './CrtScreen.tsx';
 import { BUTTON_KEYS } from '../lib/buttons.ts';
 import { CARTS } from '../lib/carts.ts';
 import styles from './Pico8Game.module.scss';
@@ -105,6 +106,8 @@ export default function Pico8Game({
       return !on;
     });
   }, []);
+  // CrtScreen covers the game once there is one, and .crt only ever covers PICO-8's poster.
+  const [crtOverGame, setCrtOverGame] = useState(false);
   const [keyboardHeld, setKeyboardHeld] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const [overlay, setOverlay] = useState(false);
@@ -452,7 +455,7 @@ export default function Pico8Game({
           >
             <div
               ref={screenRef}
-              className={`${styles.screen} ${overlay ? styles.overlay : crt ? styles.crt : ''}`}
+              className={`${styles.screen} ${overlay ? styles.overlay : crt && !crtOverGame ? styles.crt : ''}`}
             >
               {game === null ? (
                 <p className={styles.insert}>insert a cart</p>
@@ -489,12 +492,11 @@ export default function Pico8Game({
           </Handheld>
         </div>
       </div>
-      {(fullscreen || overlay) && iframeRef.current && (
-        <FullscreenLayer
-          frame={iframeRef.current}
-          crt={crt}
-          onExit={fullscreen ? toggleFullscreen : undefined}
-        />
+      {fullscreen && iframeRef.current && (
+        <FullscreenLayer frame={iframeRef.current} onExit={toggleFullscreen} />
+      )}
+      {crt && status === 'ready' && iframeRef.current && (
+        <CrtScreen key={game} frame={iframeRef.current} onOverGame={setCrtOverGame} />
       )}
       {status !== 'missing' && (
         <div className={styles.panel}>

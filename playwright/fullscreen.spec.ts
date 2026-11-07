@@ -160,7 +160,7 @@ test.describe('on a desktop', () => {
   });
 
   test.describe('the CRT filter', () => {
-    const filter = (page: Page) => page.frameLocator('iframe').locator('.fullscreen-crt');
+    const filter = (page: Page) => page.frameLocator('iframe').locator('.crt-screen');
     const choose = (page: Page, choice: 'on' | 'off') =>
       page.addInitScript((choice) => localStorage.setItem('pico-crt', choice), choice);
 
@@ -172,11 +172,22 @@ test.describe('on a desktop', () => {
           const r = el?.getBoundingClientRect();
           return r && { x: r.x, y: r.y, width: r.width, height: r.height };
         };
-        return { filter: box(doc.querySelector('.fullscreen-crt')), game: box(doc.getElementById('canvas')) };
+        const tube = doc.querySelector<HTMLCanvasElement>('.crt-screen');
+        return {
+          filter: box(tube),
+          game: box(doc.getElementById('canvas')),
+          // The shader's picture, in device pixels: the game's, through the handheld's transform
+          // on a short window, which fullscreen leaves behind
+          drawn: tube?.width ?? 0,
+          devicePixels: (frame.getBoundingClientRect().width / frame.offsetWidth) * devicePixelRatio,
+        };
       });
 
     const expectOverGame = async (page: Page, width: number) => {
       await expect.poll(async () => (await boxes(page)).filter?.width).toBe(width);
+      await expect
+        .poll(async () => { const { drawn, devicePixels } = await boxes(page); return drawn === width * devicePixels; })
+        .toBe(true);
       const { filter, game } = await boxes(page);
       expect(game!.width).toBe(width);
       expect(filter!.height).toBe(game!.height);
@@ -185,7 +196,7 @@ test.describe('on a desktop', () => {
       expect(Math.abs(filter!.y - game!.y)).toBeLessThan(0.5);
     };
 
-    test('chosen on the handheld, it covers the game exactly, at the game\'s own pixel', async ({ page }) => {
+    test('chosen on the handheld, it covers the game exactly, at the screen\'s own pixel', async ({ page }) => {
       await choose(page, 'on');
       await loaded(page);
       await start(page);
@@ -199,8 +210,9 @@ test.describe('on a desktop', () => {
       await expect(exit(page)).toBeVisible();
       await exit(page).click();
 
+      // The same filter, back on the handheld's screen
       await expect.poll(() => canvasWidth(page)).toBe(512);
-      await expect(filter(page)).toHaveCount(0);
+      await expectOverGame(page, 512);
     });
 
     test('it follows the game when the window changes', async ({ page, browserName }) => {
