@@ -165,9 +165,13 @@ routing switched off, as they do elsewhere. What needed changing was the harness
   separate code paths. One test walks the knight into the dungeon, home, and back in, and
   checks that the run (max depth, uptime) survives each `load()`. The other lets a dead weight
   kill him and rolls back, and checks the rollback is counted, he's refilled, and the hub
-  carries it back down. This is the only file that starts a cart and plays it. It reads each
-  switch from the runtime's console log, and steers through `pico8_buttons` rather than the
-  keyboard, for the reason below. The death takes ~12s, the slowest test in the suite.
+  carries it back down. A third walks him up through the shop's door to gem-in-eye and back
+  out. That door loads nothing, so the test knows the shop by its backdrop on screen, compared
+  with the hub's sprites 128-255. It's the one door that needs lining up, so he climbs the left
+  wall and then holds up and right, which turns him in the frame he reaches it. This is the
+  only file that starts a cart and plays it. It reads each switch from the runtime's console
+  log, and steers through `pico8_buttons` rather than the keyboard, for the reason below. The
+  death takes ~12s, the slowest test in the suite.
 
 ## Input that changes mid-load is lost
 
