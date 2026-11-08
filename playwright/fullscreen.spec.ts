@@ -66,6 +66,7 @@ async function expectKeyMovesCursor(page: Page, key: string) {
 
 test.describe('on a desktop', () => {
   test.skip(({ isMobile }) => !!isMobile, 'a finger gets the overlay; see overlay.spec.ts');
+  // Firefox's fullscreen fills the screen instead, so playwright.config.ts sets its screen to this
   test.use({ viewport: { width: 1728, height: 1086 } });
 
   test('the game fills the window at a whole multiple of 128, then returns to the crop', async ({ page }) => {
@@ -228,6 +229,7 @@ test.describe('on a desktop', () => {
 
     test('it follows the game when the window changes', async ({ page, browserName }) => {
       test.skip(browserName === 'chromium', "automation can't resize a fullscreen window there");
+      test.skip(browserName === 'firefox', 'resizing the window there leaves fullscreen');
       await choose(page, 'on');
       await loaded(page);
       await start(page);

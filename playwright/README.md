@@ -1,7 +1,7 @@
 # Browser tests
 
 ```sh
-npm run test:playwright      # all three projects
+npm run test:playwright      # all four projects
 npm run test:playwright:ui   # watch mode with a time-travel debugger
 npx playwright test --project=webkit
 ```
@@ -16,16 +16,17 @@ rather than hostage to a model whose p95 has been measured at 14s.
 First run downloads browsers:
 
 ```sh
-npx playwright install chromium webkit
+npx playwright install chromium webkit firefox
 ```
 
-## Why three projects
+## Why four projects
 
 | project | covers |
 | --- | --- |
 | `chromium` | the common case |
 | `webkit` | **the reason this suite exists** |
 | `mobile-safari` | real touch — `hasTouch`, mobile viewport, not just a narrow window. The only project where PICO-8's own touch layout can switch on |
+| `firefox` | the third engine. Its first run found no bug in the page, only in the harness (below) |
 
 WebKit is not redundant with Chromium. The cart switcher was keyboard-unreachable in Safari
 while passing every Chromium check, because WebKit leaves buttons out of the tab order unless
@@ -34,6 +35,28 @@ bug. Verified by mutation: deleting the `tabIndex={0}` from `CartCard` fails `we
 leaves `chromium` passing. Links are left out the same way, and the header's Source link was
 once committed without it: `about.spec.ts` now fails in `webkit` if a header link loses its
 `tabIndex={0}`.
+
+## Firefox
+
+Added 2026-11-08, on macOS 27.2 with Playwright 1.62.1 (Firefox 153). Everything the other
+desktop engines run, it runs and passes: the 3/4 cartridges' `zoom` and their labels, the CRT
+shader, fullscreen, the keyboard's order, and the volume slider. Its sound checks fail with the
+routing switched off, as they do elsewhere. What needed changing was the harness:
+
+- **On macOS 27 it hangs at launch.** Each worker's Firefox ("Nightly" in Activity Monitor)
+  sits at 100% CPU until the launch times out, then Playwright starts another. Its app data
+  resolves to `~/Library/Application Support/Firefox`, which macOS 27 protects, and headless it
+  spins on a "Profile Missing" dialog it can't draw. That happened here with no Firefox
+  installed and no such folder. `MOZ_APP_DATA` and `MOZ_LOCAL_APP_DATA`, set in
+  `playwright.config.ts`, give it a folder of its own. The `sandbox_extension_issue_file`
+  and `RenderCompositorSWGL` lines in its log are red herrings: turning off its sandboxes,
+  GPU process and Fission changed nothing. Fixed upstream in Firefox 158
+  ([microsoft/playwright#42768](https://github.com/microsoft/playwright/issues/42768)).
+- **Its fullscreen fills the screen**, where Chromium and WebKit keep the viewport, and a
+  headless Firefox's screen is 1366 x 768. PICO-8 drew 768 there, the right size for that
+  screen. The config sets the screen to `fullscreen.spec.ts`'s 1728 x 1086 window.
+- **It lays out in 1/60px**, so two edges that meet can differ by a rounding error.
+  `theme.spec.ts` allows 0.01px where the open theme control meets the header's edge.
 
 ## What each file guards
 
@@ -89,7 +112,8 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   rests, and leaves on a real click, which is what a popover in the page failed. The CRT
   filter carries over when it's chosen, covers the game exactly, drawn at the screen's own
   pixels (or at 1024, on a machine whose frames fell behind), follows it when the window
-  changes, and comes back to the handheld with it.
+  changes (in WebKit only: automation can't resize a fullscreen window in Chromium, and in
+  Firefox a resize leaves fullscreen), and comes back to the handheld with it.
 - **`overlay.spec.ts`** — the phone's fullscreen, on `mobile-safari` only. Fullscreen stretches
   the same iframe over the page, in both orientations, with PICO-8's controller and without its
   icons, and from a scrolled page, which is where it first went wrong. A real touch reaches the

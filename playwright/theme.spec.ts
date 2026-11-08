@@ -38,7 +38,8 @@ test('it opens sideways and moves nothing else in the header', async ({ page }) 
   const open = (await pill.boundingBox())!;
   const header = before[0]!;
   expect(await boxes()).toEqual(before);
-  expect(open.x + open.width).toBeLessThanOrEqual(header.x + header.width);
+  // The two edges meet, and Firefox lays out in 1/60px, so they can differ by a rounding error
+  expect(open.x + open.width).toBeLessThanOrEqual(header.x + header.width + 0.01);
 });
 
 test.describe('with a mouse and a keyboard', () => {

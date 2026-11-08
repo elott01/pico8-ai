@@ -23,10 +23,11 @@ node scripts/cart-label.ts png carts/gemini.p8 label.png   # look at a cart's sa
 node scripts/favicon.ts                      # redraw the favicon from gem-in-eye's head (sprite 76)
 ```
 
-`playwright/` is a separate suite from `npm test` — three engines, ~20s, needs
-`npx playwright install chromium webkit` once. **WebKit is not redundant with Chromium**:
+`playwright/` is a separate suite from `npm test` — four projects in three engines, ~2 minutes,
+needs `npx playwright install chromium webkit firefox` once. **WebKit is not redundant with Chromium**:
 the cart switcher was keyboard-unreachable in Safari while passing every Chromium check.
-See `playwright/README.md`.
+**On macOS 27, Playwright's Firefox hangs at launch** with a core at 100% each, unless it has
+app data of its own; `playwright.config.ts` gives it some. See `playwright/README.md`.
 
 `bench/` calls Gemini for real, reading `GEMINI_API_KEY` straight out of `.env.local`. It is
 a local tool only — CI never runs it, and it burns free-tier quota, so `--runs`/`--gap` are
@@ -263,7 +264,8 @@ Breaking any of these fails silently, so verify them when touching the relevant 
 - **On a short window the handheld is a transform.** Wider than `$full-device` and shorter
   than `$full-height`, it draws at 3/4 (`--device-scale`) and the rest of the page keeps its
   size. PICO-8 has to go on measuring a 540px iframe, so a smaller `--stage-size` would bring
-  the blur back. CSS `zoom` keeps it 540px in Chromium and WebKit, but Firefox is unchecked.
+  the blur back. CSS `zoom` keeps it 540px in Chromium and WebKit, and was never tried in
+  Firefox, where the transform passes `screen.spec.ts`.
   Only 0.75 lands every 4px block on whole pixels at any pixel density. A transform leaves
   the box full-size, so `.device` sets the scaled height from `--device-height`, which is the
   shell's height copied by hand; `screen.spec.ts` fails if the two drift. `$full-height` and
@@ -273,7 +275,7 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   a label loses one row and one column in four, and in Chromium which ones moves with the
   window's size, so it's drawn at 128 / 0.75 to stay 128 screen pixels. Its 32px are more than
   the shelf has to spare there, so at 3/4 the tagline is visually hidden to give them back.
-  `labels.spec.ts` compares each label on screen with its PNG, at 1x.
+  `labels.spec.ts` compares each label on screen with its PNG, at 1x, in Firefox too.
 - **Touches inside the cart's page don't reach PICO-8, outside the phone's overlay.** At its
   first touch PICO-8 switches to its own touch layout: it shrinks the game to two thirds of its
   window, draws a controller over it, and zeroes `pico8_buttons` on every later touch, breaking
@@ -329,7 +331,7 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   a finger drags the drawing, with pointer capture and `keepFocus` like the D-pad, so the
   keyboard stays in the cart; a visually hidden range input is the keyboard's and screen
   readers', and its focus is drawn on the slot. `volume.spec.ts` listens to what reaches the
-  speakers in Chromium and WebKit. Its listener goes in at the iframe's first, blank document,
+  speakers in Chromium, WebKit and Firefox. Its listener goes in at the iframe's first, blank document,
   because Chromium keeps that window for the cart's page and Playwright doesn't run init scripts
   again there. A phone's shell has no slider, nor room for one beside CRT's light.
 - **Fullscreen is the export's own, run from outside its page.** The handheld's button calls
