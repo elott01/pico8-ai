@@ -77,6 +77,11 @@ If nothing needs exporting and no label was asked for, say so and stop.
 
 ## 2. A new label, only if one was asked for
 
+**Not for `gemini`.** Its label is composed, not captured: the title, GEM-IN-EYE'S QUEST, is on
+no game screen, and a capture would drop it. Stop before the capture: don't give these steps. Say
+why, and redraw only the pixels whose art changed with `cart-label.ts`'s `readLabelPng` and
+`withLabel`, as `29f28bd` did. Then go on to step 3.
+
 This is the only step that needs a person in PICO-8. A saved label stays in the `.p8` and every
 export reads it, so it only needs capturing when the picture should change. Give the user
 these steps:

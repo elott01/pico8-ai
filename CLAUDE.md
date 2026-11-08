@@ -179,6 +179,10 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   `node scripts/cart-label.ts png carts/<cart>.p8 public/labels/<cart>.png 1`.
   An edit to `gemini_dungeon.p8` means `/reexport-cart gemini`: the export bundles every cart
   the code loads by name.
+  - **Gem-in-Eye's label is composed, not captured.** Its title, GEM-IN-EYE'S QUEST, is on no
+    game screen, so a Ctrl-7 capture would silently replace the label and drop it. To change the
+    picture, redraw only the pixels whose art changed, with `cart-label.ts`'s `readLabelPng` and
+    `withLabel`, as `29f28bd` did. Then re-export as usual.
 - **`carts/` is the only copy of a cart that counts.** PICO-8 resolves a bare `load` against
   its *own* carts folder, which has already left two tic-tac-toe carts drifting apart
   unnoticed. Never treat a cart file outside `carts/` as the source. The same goes for a cart
