@@ -7,7 +7,8 @@
 // by reacting to sample lines, and refined over four bench runs (bench/results/talk*.md).
 // This is the fourth version; the first three are in git history at e3b5902, beside the
 // results that measured them. One rule was added after the switch to 3.5 Flash-Lite, the
-// agent's number in digits; the A/B that chose it is at 936982a.
+// agent's number in digits; the A/B that chose it is at 936982a. Since then the number is
+// only given when it's news (bench/results/README.md has the before and after).
 //
 // What the prompt never contains is a judgement of the agent. It states raw stats and the
 // game's rules; whether 15 rollbacks in 15 minutes is contemptible is the model's call. If
@@ -84,6 +85,16 @@ function was(prev: TalkStats | null, pick: (s: TalkStats) => number | string, no
   return then === now ? ' [unchanged since the last purchase]' : ` [was ${then} at the last purchase]`;
 }
 
+/**
+ * Whether the agent's number is news: the first purchase gem-in-eye remembers, the first
+ * after a reload, or the first since a rollback, which is a new agent. Any other purchase is
+ * the agent he spoke to last time.
+ */
+function isNewAgent(req: TalkRequest): boolean {
+  const { stats: s, memory: mem } = req;
+  return !mem.lastStats || mem.newSession || s.rollbacks > mem.lastStats.rollbacks;
+}
+
 function agentLines(req: TalkRequest): string[] {
   const { stats: s, memory: mem } = req;
   // After a reload every stat restarts from zero. Shown per stat, that reads as a collapse,
@@ -91,7 +102,13 @@ function agentLines(req: TalkRequest): string[] {
   const prev = mem.newSession ? null : mem.lastStats;
   const cap = STASH_CAPS[s.tiers.stash];
   const lines = [
-    `agent number: ${mem.agentNumber}. the agents before it are the numbers below; each was lost to a rollback or a reload.`,
+    // The number only when it's news. Shown on every purchase, it was said on most of them:
+    // a good run heard "agent 4012" throughout. Left out, he says it only when his remembered
+    // speeches carry it, far less often. It cost some of his eye for what changed since the
+    // last purchase, and a rewording didn't win that back; bench/results/README.md has both.
+    isNewAgent(req)
+      ? `agent number: ${mem.agentNumber}. the agents before it are the numbers below; each was lost to a rollback or a reload.`
+      : 'the same agent as at your last purchase, with no rollback since. the agents before it were each lost to a rollback or a reload.',
     `pruned (dead weights destroyed, never goes down): ${s.pruned}${was(prev, (p) => p.pruned, s.pruned)}`,
     `rollbacks (deaths, never goes down): ${s.rollbacks}${was(prev, (p) => p.rollbacks, s.rollbacks)}`,
     `uptime (time since the game started): ${uptime(s.uptimeSec)}${was(prev, (p) => uptime(p.uptimeSec), uptime(s.uptimeSec))}`,
@@ -132,6 +149,7 @@ function purchaseLines(req: TalkRequest): string[] {
 // - The agent's number in digits: 3.5 Flash-Lite mangled it while spelling it out ("forty-one
 //   sixteen" for agent 4016 with 41 new prunes), in about 1 speech in 7. All numbers in digits
 //   fixed that too, but turned the lines into stat readouts; this one number alone did not.
+//   The rule stays when the number is left out (isNewAgent): it is in his remembered speeches.
 
 const VOICE = [
   'WHO YOU ARE',

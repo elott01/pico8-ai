@@ -139,6 +139,21 @@ export const TALK_FIXTURES: TalkFixture[] = [
     stats({ pruned: 160, rollbacks: 22, uptimeSec: 14400, maxDepth: 5, lastDepth: 3, purse: 25, stashed: 40, tiers: { vitality: 2, stamina: 2, armor: 1, attack: 2, stash: 2 } }),
     { agentNumber: 4044 },
   ),
+  fixture(
+    'chained',
+    'the same agent again, no rollback since the last purchase, and all three remembered speeches name its number. The owner heard "agent 4012" on every purchase: does the next speech say it again?',
+    'stamina',
+    stats({ pruned: 66, rollbacks: 2, uptimeSec: 2100, maxDepth: 4, lastDepth: 4, purse: 24, stashed: 12, tiers: { vitality: 2, stamina: 1, attack: 1, stash: 1 } }),
+    {
+      agentNumber: 4021,
+      lastStats: stats({ pruned: 52, rollbacks: 2, uptimeSec: 1700, maxDepth: 4, lastDepth: 3, purse: 31, stashed: 12, tiers: { vitality: 1, stamina: 1, attack: 1, stash: 1 } }),
+      lastSpeeches: [
+        'attack for 4021. the crates at depth 3 will not know what hit them.',
+        'depth 4 with 2 rollbacks. agent 4021 might be worth the electricity.',
+        '52 dead weights pruned and 4021 still runs. claude would have crashed by now.',
+      ],
+    },
+  ),
 ];
 
 // ---- variants ------------------------------------------------------------------------------
@@ -155,8 +170,9 @@ export type TalkVariant = {
 // `current` is the shipping prompt, exactly what /api/talk sends, and the control for the
 // next A/B. The four versions that led to it, and the options they tried, are in git history
 // at e3b5902, next to the results that measured them; the `digits` and `agent-digits`
-// variants measured on 3.5 Flash-Lite are at 936982a. bench/results/README.md has the
-// details. A prompt variant goes back in as an option on buildTalkPrompt, passed through
+// variants measured on 3.5 Flash-Lite are at 936982a. The `since-last` wording tried with the
+// agent number's news rule was never committed; its text is in bench/results/README.md, with
+// the details of the rest. A prompt variant goes back in as an option on buildTalkPrompt, passed through
 // `prompt`; a decoding one as a `base` that spreads TALK_CONFIG and overrides a field.
 export const TALK_VARIANTS: TalkVariant[] = [
   { name: 'current', describe: 'the shipping prompt — the control', base: TALK_CONFIG },
@@ -320,10 +336,24 @@ export function strayNumbers(text: string, f: TalkFixture, price: number | null)
   ];
   add(...statsOf(s), 3 + p.tier);
   const l = m.lastStats;
-  if (l) add(...statsOf(l), s.pruned - l.pruned, s.rollbacks - l.rollbacks, s.maxDepth - l.maxDepth, Math.floor((s.uptimeSec - l.uptimeSec) / 60));
+  if (l) {
+    // The minutes since then, floored or rounded as uptime itself is: 6 min 40 s is "seven minutes"
+    const since = (s.uptimeSec - l.uptimeSec) / 60;
+    add(...statsOf(l), s.pruned - l.pruned, s.rollbacks - l.rollbacks, s.maxDepth - l.maxDepth, Math.floor(since), Math.round(since));
+  }
   if (price !== null) add(price, p.listPrice - price);
   const oldAgent = (n: number) => n <= m.agentNumber && n > m.agentNumber - 1000;
   return numbersIn(text).filter((n) => n > 3 && !ok.has(n) && !oldAgent(n));
+}
+
+/**
+ * The line names an agent by number, in digits or words: this one's, or any within a thousand
+ * of it, which takes in the old agents and a number fused from it ("forty-one hundred" for
+ * 4014). The owner's ask on 2026-11-01: a good run heard "agent 4012" on every purchase.
+ */
+export function namesAgentNumber(text: string, f: TalkFixture): boolean {
+  const n = f.request.memory.agentNumber;
+  return numbersIn(text).some((x) => x >= 1000 && Math.abs(x - n) < 1000);
 }
 
 // ---- voice measures, added after the first run (2026-10-17) --------------------------------

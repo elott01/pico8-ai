@@ -10,6 +10,7 @@ record of one measurement, not as a checked-in fixture.
 | `ab-connect_four-parity.log` | an earlier Connect Four run — **console log only** | see below |
 | `before.json` | `node bench/baseline.ts before` — **pre-fix runner** | nothing (see below) |
 | `talk.json` + `talk.md` | `node bench/talk.ts` (gem-in-eye's dialogue) | other `talk` runs with the same `--variants` and fixtures |
+| `talk-agent-number-*`, `talk-chained-*`, `talk-same-agent-ab` | `node bench/talk.ts --label …` | each other; see below |
 
 Runs of the same suite with different `--variants` are different measurements. Pass
 `--label <name>` to give one its own file; without it the suite's default file is replaced,
@@ -45,6 +46,56 @@ depth 8 with 140 pruned and only 2 rollbacks"). `agent-digits` matched it on str
 like the control. Its one remaining fusion was the agent's number used as a count, spelled
 out: "forty-one hundred agents" for agent 4014. `talk-agent-digits` has no control of its
 own; compare it with both `current` rows above, which ran on the same model the same day.
+
+## `agent-number` and `chained`: the agent's number only when it's news (2026-11-07)
+
+The owner heard "agent 4012" on almost every purchase of a good run. The number was the first
+line of THE AGENT every time, and it changes only on a rollback or a reload. The `chained`
+fixture measures it: the same agent, no rollback since, and three remembered speeches that
+use its number. The fix gives the number only on the first purchase gem-in-eye remembers, after
+a reload, or after a rollback, and otherwise says it's the same agent. The digits rule stays.
+
+All on 3.5 Flash-Lite at a 5s gap, every call valid. `before` is the prompt at `df309f8`; each
+phase is the full suite at 5 runs plus `chained` alone at 15.
+
+| | before | after |
+| --- | --- | --- |
+| `chained`: speeches naming the agent's number | 15/20 | 3/20 |
+| `since-last-time` (same agent, no number in memory) | 1/5 | 0/5 |
+| the other 8 fixtures, where it's still news and the prompt is unchanged | 18/40 | 14/40 |
+| stray numbers in speeches, full suite | 3/50 | 3/50 |
+| stray numbers in notices, full suite | 1/50 | 0/50 |
+
+The three strays before were all the agent's number mangled: "forty-four hundred agents" for
+4014, "four hundred fifteen", an invented agent 7820. The three after were none of them agent
+numbers. The 3 of 20 that still name it on `chained` take it from the remembered speeches.
+
+**The cost: he notices less of what changed.** On the two same-agent fixtures, speeches naming
+the change since the last purchase ("forty-one dead weights", "fourteen more") fell from 20/25
+to 4/25, and ones citing the running total instead ("eighty-eight dead weights") rose from 2/25
+to 21/25. The agent as subject seems to have led the sentence to the change: the old notices
+read "agent 4016 reached depth 5 and pruned 41 more", the new ones "pruned jumped from 47 to
+88", with the speech then quoting 88. `since-last-time` also went from 0/5 to 5/5 on Claude,
+against "never two speeches running". Rerun noise is large there, though: on the 8 fixtures
+whose prompt didn't change, Claude went from 14/40 to 22/40 between the two runs.
+
+`talk-same-agent-ab` tried to win the change back with one wording, `since-last`, never
+committed: after "the same agent as at your last purchase, with no rollback since." it added
+"you have spoken to it before, so the news is what changed since then, marked [was ...] below."
+Same two fixtures, 10 runs each:
+
+| | `current` | `since-last` |
+| --- | --- | --- |
+| names the change | 5/20 | 5/20 |
+| cites the total | 15/20 | 15/20 |
+| Claude | 5/20 | 6/20 |
+| names the agent's number | 0/20 | 1/20 |
+
+No better on anything, so it was dropped.
+
+The stored `strayNumbers` in the four before and after files flag "seven minutes" on `chained`,
+an uptime gap of 6 min 40 s that the measure then only accepted floored. It accepts it rounded
+too now, and the table above is rescored with that; `talk-same-agent-ab` ran after the fix.
 
 ## The `talk` runs measured prompts that are no longer in the code
 
