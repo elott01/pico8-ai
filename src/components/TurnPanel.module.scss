@@ -22,9 +22,35 @@
   background: var(--surface);
 }
 
-.empty {
+/* ---- Before the first card (EmptyPanel) -------------------------------------------- */
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
   padding: 0.75rem;
   color: var(--ink-dim);
+}
+
+// The one thing to do, so it reads first
+.action {
+  color: var(--ink);
+}
+
+.shows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding-left: 1.1rem;
+  list-style: disc;
+}
+
+// The card's own heading for that part, at the card's size for it (.summary)
+.label {
+  margin-right: 0.4em;
+  color: var(--ink);
+  font-size: calc(12px + var(--text-step));
 }
 
 /* ---- Live model indicator ---------------------------------------------------------- */

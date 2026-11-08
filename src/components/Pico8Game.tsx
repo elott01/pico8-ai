@@ -30,7 +30,7 @@ import FullscreenLayer from './FullscreenLayer.tsx';
 import CrtScreen from './CrtScreen.tsx';
 import { BUTTON_KEYS } from '../lib/buttons.ts';
 import { readVolume, saveVolume, routeAudio } from '../lib/volume.ts';
-import { CARTS } from '../lib/carts.ts';
+import { CARTS, NO_CART_PANEL } from '../lib/carts.ts';
 import styles from './Pico8Game.module.scss';
 
 declare global {
@@ -548,12 +548,12 @@ export default function Pico8Game({
       )}
       {status !== 'missing' && (
         <div className={styles.panel}>
-          {boardProtocol ? (
-            <TurnPanel turns={turns} thinking={thinking} />
-          ) : talkProtocol ? (
-            <TalkPanel talks={talks} thinking={thinking} />
+          {game !== null && boardProtocol ? (
+            <TurnPanel turns={turns} thinking={thinking} intro={CARTS[game].panel} />
+          ) : game !== null && talkProtocol ? (
+            <TalkPanel talks={talks} thinking={thinking} intro={CARTS[game].panel} />
           ) : (
-            <TurnPanel turns={[]} thinking={false} empty="Insert a cart to start a game." />
+            <TurnPanel turns={[]} thinking={false} intro={NO_CART_PANEL} />
           )}
         </div>
       )}

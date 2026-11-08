@@ -5,6 +5,8 @@
 import { isLegalMove } from '../lib/gpio.ts';
 import type { Board, Protocol } from '../lib/gpio.ts';
 import type { AiFailure, Line } from '../lib/ai.ts';
+import type { PanelIntro } from '../lib/carts.ts';
+import EmptyPanel from './EmptyPanel.tsx';
 import MiniBoard from './MiniBoard.tsx';
 import styles from './TurnPanel.module.scss';
 
@@ -40,12 +42,12 @@ type Badge = { text: string; kind: BadgeKind };
 export default function TurnPanel({
   turns,
   thinking,
-  empty = "Waiting for the AI's first move…",
+  intro,
 }: {
   turns: Turn[];
   thinking: boolean;
-  /** What the panel says before the first turn. */
-  empty?: string;
+  /** What the panel says before the first turn: the cart's, or the empty slot's. */
+  intro: PanelIntro;
 }) {
   return (
     <aside className={styles.panel}>
@@ -58,9 +60,7 @@ export default function TurnPanel({
           </div>
         )}
 
-        {turns.length === 0 && !thinking && (
-          <p className={styles.empty}>{empty}</p>
-        )}
+        {turns.length === 0 && <EmptyPanel intro={intro} thinking={thinking} />}
 
         {turns
           .slice()

@@ -6,7 +6,9 @@
 // cart's fallback as something Gemini said.
 
 import type { ShopItem, TalkStats, Verdict } from '../../api/_types.ts';
+import type { PanelIntro } from '../lib/carts.ts';
 import type { TalkFailure } from '../lib/talk.ts';
+import EmptyPanel from './EmptyPanel.tsx';
 import styles from './TurnPanel.module.scss';
 
 export type TalkTurn = {
@@ -35,7 +37,16 @@ type BadgeKind = 'win' | 'threat' | 'notice';
 
 const VERDICT_KIND: Record<Verdict, BadgeKind> = { impressed: 'win', neutral: 'notice', unimpressed: 'threat' };
 
-export default function TalkPanel({ talks, thinking }: { talks: TalkTurn[]; thinking: boolean }) {
+export default function TalkPanel({
+  talks,
+  thinking,
+  intro,
+}: {
+  talks: TalkTurn[];
+  thinking: boolean;
+  /** What the panel says before the first purchase. */
+  intro: PanelIntro;
+}) {
   return (
     <aside className={styles.panel}>
       <h2 className={styles.heading}>Gemini</h2>
@@ -47,9 +58,7 @@ export default function TalkPanel({ talks, thinking }: { talks: TalkTurn[]; thin
           </div>
         )}
 
-        {talks.length === 0 && !thinking && (
-          <p className={styles.empty}>Buy something in the shop to hear from gem-in-eye.</p>
-        )}
+        {talks.length === 0 && <EmptyPanel intro={intro} thinking={thinking} />}
 
         {talks
           .slice()

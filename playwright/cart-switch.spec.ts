@@ -87,7 +87,8 @@ test.describe('switching carts mid-turn', () => {
     await page.waitForTimeout(MOVE_DELAY + 4000);
 
     await expect(page.locator('aside')).not.toContainText(PHANTOM);
-    await expect(page.locator('aside')).toContainText("Waiting for the AI's first move");
+    // Connect Four's own intro, so the panel is the new cart's and still empty
+    await expect(page.locator('aside')).toContainText('Drop your first piece.');
   });
 
   test('switching clears the previous cart\'s turn history', async ({ page }) => {

@@ -125,6 +125,9 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
 - **`cart-switch.spec.ts`** — a turn in flight when you switch carts must never land in the
   new cart's panel. Stages a request by writing `ST_REQUEST` into `pico8_gpio` directly (the
   iframe is same-origin, which is how the page reads it at all), rather than driving the game.
+- **`panel.spec.ts`** — the Gemini panel before its first card. Each cart opens it with its
+  own intro (what to do, then what its cards hold, under the cards' own headings), which stays
+  through the first "Gemini is thinking…" without the action and goes when the first card lands.
 - **`talk.spec.ts`** — gem-in-eye's talk loop, with `/api/talk` stubbed and the cart's side
   of the handshake played by writing GPIO directly. A purchase gets the first page and later
   pages come from memory, a failed call answers with the fallback, and a reply that arrives
