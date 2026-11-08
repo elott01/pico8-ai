@@ -10,8 +10,9 @@
 // reaches the cart at all comes back as `keyboardInCart`, and the lettering says so.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MouseEvent, PointerEvent, ReactNode } from 'react';
+import type { CSSProperties, MouseEvent, PointerEvent, ReactNode } from 'react';
 import { BUTTON } from '../lib/buttons.ts';
+import { VOLUME_STEP, toStep } from '../lib/volume.ts';
 import styles from './Handheld.module.scss';
 
 export default function Handheld({
@@ -23,6 +24,8 @@ export default function Handheld({
   onFullscreen,
   crt,
   onCrt,
+  volume,
+  onVolume,
   onButtons,
   keyboardHeld = 0,
   keyboardInCart = true,
@@ -43,6 +46,9 @@ export default function Handheld({
   /** The CRT filter is over the screen. */
   crt: boolean;
   onCrt: () => void;
+  /** The volume slider's setting, in percent, a whole number of VOLUME_STEPs. */
+  volume: number;
+  onVolume: (percent: number) => void;
   /** Every change to what's held on the D-pad and keys, as player 1's button bits. */
   onButtons?: (held: number) => void;
   /** The button bits the keyboard is holding in the cart, drawn pressed like a click. */
@@ -79,6 +85,19 @@ export default function Handheld({
     document.addEventListener('visibilitychange', letGo);
     return () => document.removeEventListener('visibilitychange', letGo);
   }, [update]);
+
+  // The volume slider under a mouse or a finger: the level whose nub would be centred under the
+  // pointer, in whole steps. Measured from the drawing, so it holds at 3/4 too.
+  const slotRef = useRef<HTMLSpanElement>(null);
+  const draggingRef = useRef(false);
+  const slide = (e: PointerEvent<HTMLElement>) => {
+    const slot = slotRef.current;
+    const nub = slot?.firstElementChild;
+    if (!slot || !nub) return;
+    const box = slot.getBoundingClientRect();
+    const width = nub.getBoundingClientRect().width;
+    onVolume(toStep(((e.clientX - box.left - width / 2) / (box.width - width)) * 100));
+  };
 
   const control = (bit: number, className: string, label: string) => ({
     type: 'button' as const,
@@ -153,13 +172,48 @@ export default function Handheld({
           <PixelIcon rows={CRT_ICON} />
           <span className={styles.name}>CRT</span>
         </button>
-        {/* The volume slider, in the shell's bottom edge at the right. Drawn only, for now. */}
-        <span className={styles.volume} aria-hidden="true">
-          <svg className={styles.wedge} width="80" height="8" viewBox="0 0 80 8">
-            <polygon points="0,8 80,0 80,8" fill="currentColor" />
-          </svg>
-          <span className={styles.volumeSlot}>
-            <span className={styles.volumeNub} />
+        {/* The volume slider, in the shell's bottom edge at the right. The range input is the
+            keyboard's and screen readers', hidden from sight. A mouse or a finger drags the
+            drawing instead, which leaves focus where it was, as the buttons do. */}
+        <span className={styles.volume} style={{ '--volume': volume / 100 } as CSSProperties}>
+          <input
+            className={styles.volumeInput}
+            type="range"
+            aria-label="Volume"
+            aria-valuetext={`${volume}%`}
+            min={0}
+            max={100}
+            step={VOLUME_STEP}
+            value={volume}
+            tabIndex={0}
+            onChange={(e) => onVolume(Number(e.currentTarget.value))}
+          />
+          <span
+            className={styles.volumeGrip}
+            aria-hidden="true"
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              // Captured, so a drag off the end still moves it; see the D-pad.
+              try {
+                e.currentTarget.setPointerCapture(e.pointerId);
+              } catch {
+                // a synthetic pointer: the press still lands
+              }
+              draggingRef.current = true;
+              slide(e);
+            }}
+            onPointerMove={(e) => draggingRef.current && slide(e)}
+            onPointerUp={() => (draggingRef.current = false)}
+            onPointerCancel={() => (draggingRef.current = false)}
+            onLostPointerCapture={() => (draggingRef.current = false)}
+            onMouseDown={keepFocus}
+          >
+            <svg className={styles.wedge} width="80" height="8" viewBox="0 0 80 8">
+              <polygon points="0,8 80,0 80,8" fill="currentColor" />
+            </svg>
+            <span ref={slotRef} className={styles.volumeSlot}>
+              <span className={styles.volumeNub} />
+            </span>
           </span>
         </span>
       </div>
@@ -248,8 +302,9 @@ export default function Handheld({
 // Every button on the handheld leaves focus where it was when the mouse presses it, usually in
 // the cart, so its keys still work afterwards. Any that took focus would also flash the
 // lettering's CLICK SCREEN for as long as it was held: Eject and Fullscreen did, before emptying
-// the slot or handing focus back. Enter and Space still press one that Tab has focused.
-function keepFocus(e: MouseEvent<HTMLButtonElement>) {
+// the slot or handing focus back. Enter and Space still press one that Tab has focused. The
+// volume slider's drawing does the same.
+function keepFocus(e: MouseEvent<HTMLElement>) {
   e.preventDefault();
 }
 

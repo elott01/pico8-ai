@@ -52,6 +52,8 @@ test('Tab reaches Eject before the cart, which swallows Tab', async ({ page, isM
     await page.keyboard.press('Tab');
     await expect(page.getByRole('button', { name, exact: true })).toBeFocused();
   }
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('slider', { name: 'Volume' })).toBeFocused();
 });
 
 // Eject in the middle of the row, on the screen's centre line, and the three buttons one size,

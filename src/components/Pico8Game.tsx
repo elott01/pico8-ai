@@ -29,6 +29,7 @@ import Handheld from './Handheld.tsx';
 import FullscreenLayer from './FullscreenLayer.tsx';
 import CrtScreen from './CrtScreen.tsx';
 import { BUTTON_KEYS } from '../lib/buttons.ts';
+import { readVolume, saveVolume, routeAudio } from '../lib/volume.ts';
 import { CARTS } from '../lib/carts.ts';
 import styles from './Pico8Game.module.scss';
 
@@ -112,6 +113,19 @@ export default function Pico8Game({
   }, []);
   // CrtScreen covers the game once there is one, and .crt only ever covers PICO-8's poster.
   const [crtOverGame, setCrtOverGame] = useState(false);
+  // The volume slider's setting, kept across visits like CRT's. A cart's sound starts from the
+  // ref, and the setter routeAudio gave for the cart that's in takes each change after that.
+  const [volume, setVolume] = useState(() => readVolume(browserStorage()));
+  const volumeRef = useRef(volume);
+  const setGainRef = useRef<((percent: number) => void) | null>(null);
+  const changeVolume = useCallback((percent: number) => {
+    // A drag reports every move, most of them to the step it's already on
+    if (percent === volumeRef.current) return;
+    volumeRef.current = percent;
+    setVolume(percent);
+    saveVolume(browserStorage(), percent);
+    setGainRef.current?.(percent);
+  }, []);
   const [keyboardHeld, setKeyboardHeld] = useState(0);
   // Whether the cart's window has focus, which is whether the keyboard reaches it, and how many
   // keys meant for it have gone to the page instead. The handheld's lettering shows both.
@@ -145,6 +159,7 @@ export default function Pico8Game({
     setTalks([]);
     setThinking(false);
     setKeyboardHeld(0); // watchKeys' blur doesn't cover this: WebKit sends none from a removed iframe
+    setGainRef.current = null; // the last cart's sound went with its window
     // Nor watchFocus's. The hint shows while the next cart loads, so it can't wait for that
     // cart's own check: a switch that left focus in the old one would show the P line till then.
     setKeyboardInCart(false);
@@ -477,6 +492,8 @@ export default function Pico8Game({
             onFullscreen={toggleFullscreen}
             crt={crt}
             onCrt={toggleCrt}
+            volume={volume}
+            onVolume={changeVolume}
             onButtons={pressButtons}
             keyboardHeld={keyboardHeld}
             keyboardInCart={keyboardInCart}
@@ -502,6 +519,7 @@ export default function Pico8Game({
                   src={src}
                   title={game}
                   onLoad={() => {
+                    setGainRef.current = routeVolume(iframeRef.current, volumeRef.current);
                     paintPageBlack(iframeRef.current);
                     keepTouchOut(iframeRef.current, letTouchInRef);
                     watchKeys(iframeRef.current, setKeyboardHeld);
@@ -562,6 +580,14 @@ function keepTouchOut(frame: HTMLIFrameElement | null, letIn: { current: boolean
       { capture: true },
     );
   }
+}
+
+// The volume slider's gain, put between PICO-8 and the speakers when the cart's page has loaded,
+// which is before its play button can be pressed and PICO-8 connects its sound. A Gem-in-Eye door
+// is a load() inside the same page, so the gain stays. See lib/volume.ts.
+function routeVolume(frame: HTMLIFrameElement | null, percent: number) {
+  const win = frame?.contentWindow as (Window & typeof globalThis) | null | undefined;
+  return win?.AudioNode ? routeAudio(win, percent) : null;
 }
 
 // PICO-8's page has a #222 background, which shows round the game wherever the iframe is bigger

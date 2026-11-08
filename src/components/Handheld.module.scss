@@ -559,11 +559,39 @@
   bottom: 0;
   width: 80px;
   display: none;
-  flex-direction: column;
-  gap: 4px;
 
   @media (min-width: bp.$full-device) {
-    display: flex;
+    display: block;
+  }
+}
+
+// The keyboard's and screen readers' slider, out of sight, so its focus shows on the slot. :focus
+// rather than :focus-visible, since only the keyboard focuses it: a pointer drags the drawing.
+.volumeInput {
+  @include a11y.visually-hidden;
+}
+
+.volume:has(.volumeInput:focus) .volumeSlot {
+  outline: 2px solid var(--print);
+  outline-offset: 3px;
+}
+
+// What a mouse or a finger drags: the wedge and the slot, made 44px tall to take hold of by the
+// ::before, which reaches up over the face and down over the nub.
+.volumeGrip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -20px -6px -4px;
   }
 }
 

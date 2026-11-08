@@ -221,7 +221,7 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   reintroduces the flash.
 - **`tabIndex={0}` on a `<button>` or a link is required, not redundant.** WebKit leaves
   buttons and links out of the tab order unless macOS keyboard navigation is enabled, so on
-  default Safari the carts, the theme control, Fullscreen, Eject, CRT, the header's links and About's links
+  default Safari the carts, the theme control, Fullscreen, Eject, CRT, the volume slider, the header's links and About's links
   are unreachable by keyboard without it — Tab cycles the iframe and body only. It looks like
   something a linter should strip; deleting it silently makes the page mouse-only for a
   large share of visitors. Verified against Playwright's WebKit, which reproduces the
@@ -234,8 +234,8 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   handler fighting the runtime. The shell can't be patched either; a re-export regenerates it.
   - **So Tab reaches only what comes before the iframe in the DOM**, and the layout is built
     around that. The carts come first in the DOM at every width, and grid areas place them
-    on screen. The handheld's bottom row (Fullscreen, Eject, CRT) is first in `Handheld`'s DOM,
-    in the order it's drawn, and CSS `order` draws it at the bottom.
+    on screen. The handheld's bottom row (Fullscreen, Eject, CRT, then the volume slider) is
+    first in `Handheld`'s DOM, in the order it's drawn, and CSS `order` draws it at the bottom.
     About comes after the cart, so the header's About link is the keyboard's way there:
     following `#about` moves Tab's starting point into it. A new control the keyboard needs
     goes before the iframe in the DOM. `eject.spec.ts` and `about.spec.ts` check these paths.
@@ -314,6 +314,22 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   `.shell:has(.crtButton[aria-pressed='true'])`, so it can't disagree with what a screen reader
   hears; `crt.spec.ts` compares its colour with POWER's. It sits `--action-step` right of the
   shell's centre, the step the buttons are spaced by, so moving one moves the other.
+- **The volume slider is a gain the page puts between PICO-8 and the speakers.** PICO-8's own
+  volume is in its pause menu, and the export lets the page only mute it
+  (`Module.pico8ToggleSound`) and read it back (`pico8_state.sound_volume`), never set it. So the
+  slider is a second volume after the menu's, as a Game Boy's wheel is after a game's options.
+  `routeAudio` (`src/lib/volume.ts`) wraps `AudioNode.prototype.connect` in the cart's window, so
+  PICO-8's connection to the destination lands on a gain, one per context. It must be in before
+  PICO-8 connects, which is when the cart starts: `Pico8Game` routes from the iframe's `onLoad`,
+  and a cart started before that would play at full volume until the next one. A Gem-in-Eye door
+  is a `load()` inside the same page, so the gain stays, though no cart there has sound yet to
+  prove it. The level is the slider squared, since loudness is heard on a log scale. A mouse or
+  a finger drags the drawing, with pointer capture and `keepFocus` like the D-pad, so the
+  keyboard stays in the cart; a visually hidden range input is the keyboard's and screen
+  readers', and its focus is drawn on the slot. `volume.spec.ts` listens to what reaches the
+  speakers in Chromium and WebKit. Its listener goes in at the iframe's first, blank document,
+  because Chromium keeps that window for the cart's page and Playwright doesn't run init scripts
+  again there. A phone's shell has no slider, nor room for one beside CRT's light.
 - **Fullscreen is the export's own, run from outside its page.** The handheld's button calls
   `p8_request_fullscreen()` in the iframe, which fullscreens PICO-8's play area, so PICO-8
   draws a whole multiple of 128. `iframe.requestFullscreen()` also works, but PICO-8 can't tell
