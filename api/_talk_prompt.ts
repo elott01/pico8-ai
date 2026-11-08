@@ -37,7 +37,7 @@ const EFFECT: Record<ShopItem, string> = {
   stamina: '+1 stamina bar per tier, on a base of 3. each sword swing costs 1 stamina; 1 comes back every 1.5 seconds',
   armor: 'does nothing yet. owned tiers can only be worn as a look',
   attack: 'breaks crates in fewer swings. dead weights already die in one hit',
-  stash: 'raises the stash safe from 10 to 20, 40, then 80 tokens',
+  stash: 'raises the stash chest from 10 to 20, 40, then 80 tokens. each tier is a new chest, and any owned one can be set out as a look',
 };
 
 /** Discount only: the player pressed buy at list price, so a markup would charge more than
@@ -115,7 +115,7 @@ function agentLines(req: TalkRequest): string[] {
     `deepest room ever reached: depth ${s.maxDepth}${was(prev, (p) => p.maxDepth, s.maxDepth)}`,
     `depth reached on the last run: ${s.lastDepth === 0 ? 'no run yet' : s.lastDepth}`,
     `purse (carried, lost on a rollback): ${plural(s.purse, 'token')}`,
-    `stash (in the safe, survives rollbacks): ${s.stashed} of ${cap} tokens`,
+    `stash (in the chest, survives rollbacks): ${s.stashed} of ${cap} tokens`,
     `owns: ${owned(s)}`,
   ];
 
@@ -222,7 +222,7 @@ export function buildTalkPrompt(req: TalkRequest, opts: TalkPromptOptions = {}):
     ...VOICE,
     '',
     'THE WORLD',
-    '- The hub is the "main branch": safe ground, with your shop, Claude, a stash safe and a stat board.',
+    '- The hub is the "main branch": safe ground, with your shop, Claude, a stash chest and a stat board.',
     '- A run starts at depth 1. Each room locks until every token is collected and every dead weight pruned, then',
     '  opens a door one level deeper. Deeper rooms hold more tokens and more dead weights, and collecting a token',
     '  wakes another dead weight. The agent can walk back to the hub at any time, keeping its purse.',

@@ -105,7 +105,7 @@ line, and the panel labels it as the cart's.
 **Nothing the player types reaches a prompt.** The cart has no text entry, and everything
 it sends is a number from a fixed range. `api/_talk_request.ts` rebuilds each request field
 by field and rejects any record the cart could not have produced, such as a stash bigger
-than its safe or a tier bought out of order. The one free text in the prompt is
+than its chest or a tier bought out of order. The one free text in the prompt is
 gem-in-eye's memory: his last three speeches, which the page keeps in `localStorage` so he
 doesn't repeat himself. A player can edit those, so they arrive untrusted: cleaned to the
 cart's character set, capped in count and length, and quoted as data. That confines an edit
