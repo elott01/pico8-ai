@@ -269,9 +269,11 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   shell's height copied by hand; `screen.spec.ts` fails if the two drift. `$full-height` and
   `$tight-height` in `_breakpoints.scss` are measured from it too, and so is the shortest window
   `layout.spec.ts` fits the arcade into, so a change to the shell's height moves all four. The cartridges come
-  down with it through `zoom`, since they hold no iframe. Safari won't draw zoomed text under
-  9px, which is why their tagline is 12px before the zoom: any less and Gem-in-Eye's wraps to
-  a third line there alone, making that cartridge taller than the others.
+  down with it through `zoom`, since they hold no iframe, all but their labels. Zoomed to 96px,
+  a label loses one row and one column in four, and in Chromium which ones moves with the
+  window's size, so it's drawn at 128 / 0.75 to stay 128 screen pixels. Its 32px are more than
+  the shelf has to spare there, so at 3/4 the tagline is visually hidden to give them back.
+  `labels.spec.ts` compares each label on screen with its PNG, at 1x.
 - **Touches inside the cart's page don't reach PICO-8, outside the phone's overlay.** At its
   first touch PICO-8 switches to its own touch layout: it shrinks the game to two thirds of its
   window, draws a controller over it, and zeroes `pico8_buttons` on every later touch, breaking

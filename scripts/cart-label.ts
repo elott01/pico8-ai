@@ -106,8 +106,9 @@ export function readPoster(html: string): string {
 }
 
 /**
- * A label image as colour digits, for one `labelPng` wrote at scale 1. Compared by pixel, not
- * byte, because a newer zlib can compress the same picture differently.
+ * A label image as colour digits, for one `labelPng` wrote at scale 1, or a browser's
+ * screenshot of one. Compared by pixel, not byte, because a newer zlib can compress the same
+ * picture differently.
  */
 export function readLabelPng(png: Buffer): string {
   return pngDigits(png, PALETTE, 'label image');
@@ -125,34 +126,36 @@ function pngDigits(png: Buffer, palette: number[], what: string): string {
     if (type === 'IDAT') data.push(body);
     at += 12 + length;
   }
-  // 8-bit RGB, not interlaced: the only form PICO-8 or labelPng writes.
+  // 8-bit RGB, not interlaced: the only form PICO-8 or labelPng writes. RGBA too, which is
+  // how WebKit saves a screenshot; the alpha is ignored.
   if (
     !header ||
     header.readUInt32BE(0) !== SIZE ||
     header.readUInt32BE(4) !== SIZE ||
     header[8] !== 8 ||
-    header[9] !== 2 ||
+    (header[9] !== 2 && header[9] !== 6) ||
     header[12] !== 0
   ) {
     throw new Error(`the ${what} is not a ${SIZE}x${SIZE} 8-bit RGB PNG`);
   }
 
-  const stride = SIZE * 3;
+  const bytes = header[9] === 6 ? 4 : 3;
+  const stride = SIZE * bytes;
   const raw = inflateSync(Buffer.concat(data));
   const rgb = Buffer.alloc(SIZE * stride);
   for (let y = 0; y < SIZE; y++) {
     const filter = raw[y * (stride + 1)]!;
     for (let i = 0; i < stride; i++) {
-      const left = i >= 3 ? rgb[y * stride + i - 3]! : 0;
+      const left = i >= bytes ? rgb[y * stride + i - bytes]! : 0;
       const up = y > 0 ? rgb[(y - 1) * stride + i]! : 0;
-      const corner = y > 0 && i >= 3 ? rgb[(y - 1) * stride + i - 3]! : 0;
+      const corner = y > 0 && i >= bytes ? rgb[(y - 1) * stride + i - bytes]! : 0;
       rgb[y * stride + i] = (raw[y * (stride + 1) + 1 + i]! + predict(filter, left, up, corner)) & 0xff;
     }
   }
 
   let digits = '';
   for (let i = 0; i < SIZE * SIZE; i++) {
-    const colour = palette.indexOf(rgb.readUIntBE(i * 3, 3));
+    const colour = palette.indexOf(rgb.readUIntBE(i * bytes, 3));
     if (colour === -1) {
       const kind = palette === DIMMED ? 'dimmed palette' : 'palette';
       throw new Error(`${what} pixel ${i % SIZE},${Math.floor(i / SIZE)} is not a ${kind} colour`);

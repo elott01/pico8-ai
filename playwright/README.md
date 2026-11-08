@@ -46,7 +46,7 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   particular widths. The size check runs at 1400px too, where the carts stand in a column:
   in a row, stretching hides a mismatch. Also that the shelf, shell and panel fit a laptop's
   window and end level, from 1208 x 879 to 2560 x 1440, that a 3/4 cartridge keeps its
-  full-size shape, and that the panel's title matches the shelf's in font and position. Also
+  label full-size and its tagline for screen readers, and that the panel's title matches the shelf's in font and position. Also
   that the arcade has the first screen to itself, so the window's edge can't cut About, that
   About lines up with it at every layout, and which windows get the wider page and larger
   text: a regular one must not.
@@ -59,6 +59,11 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   set from it, and that the iframe keeps `scrolling="no"`. Headless browsers
   draw no scrollbars, so this can't see them come back. It checks the attribute instead,
   plus the reason for it, that PICO-8's page still overflows the iframe.
+- **`labels.spec.ts`** — each label on the shelf is its PNG on screen, pixel for pixel, at
+  1x, across a cycle of 8 window sizes in each direction, in every layout the shelf has.
+  Zoomed to 96px at 3/4, a label lost a quarter of its rows and columns, and in Chromium which
+  ones changed with the window's size. One on a half pixel would blend. A layout check sees
+  neither, and nor does 2x, where half a pixel is a whole one.
 - **`controls.spec.ts`** — the handheld's D-pad and keys set and clear bits in
   `pico8_buttons[0]`, two held at once, focus staying in the cart, a click with no pointer
   tapping, letting go on a cart switch, and the disabled state with no cart. Keys held in the

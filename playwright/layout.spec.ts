@@ -161,7 +161,7 @@ test('the panel’s title matches the shelf’s, in font and position', async ({
   expect(await top(panel.locator(below))).toBeCloseTo(await top(shelf.locator(below)), 0);
 });
 
-test('at 3/4 a cartridge keeps its full-size shape, in a shelf that stays wider', async ({
+test('at 3/4 a cartridge keeps its label full-size, in a shelf that stays wider', async ({
   page,
   isMobile,
 }) => {
@@ -169,12 +169,16 @@ test('at 3/4 a cartridge keeps its full-size shape, in a shelf that stays wider'
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   expect((await page.getByRole('region', { name: 'Carts' }).boundingBox())!.width).toBe(198);
-  // 176 x 261, the full-size cartridge
+  // The 128px label and 10.5px each side of it. The tagline gives up its height to the
+  // label's, which keeps the cartridge about as tall as a full-size one at 3/4, 196. It's 194,
+  // and Chromium draws 193, rounding the zoomed 1.5px borders down
   for (const card of await page.locator(cards).all()) {
     const box = (await card.boundingBox())!;
-    expect(Math.abs(box.width - 132)).toBeLessThan(1);
-    expect(Math.abs(box.height - 195.75)).toBeLessThan(1);
+    expect(Math.abs(box.width - 149)).toBeLessThan(1);
+    expect(Math.abs(box.height - 194)).toBeLessThanOrEqual(1);
   }
+  // Hidden from sight, not from screen readers
+  await expect(page.getByRole('button', { name: /^Gem-in-Eye/ })).toHaveAccessibleName(/talks back$/);
 });
 
 test('every cartridge is the same size, the empty slot included', async ({ page, isMobile }) => {

@@ -3,6 +3,10 @@
 // on the shelf follows the theme, since it is drawn on the shelf, not the plastic.
 
 @use '../styles/breakpoints' as bp;
+@use '../styles/a11y';
+
+// The label's size on screen, at full size and at 3/4 alike; see .label.
+$label: 128px;
 
 .cart {
   position: relative;
@@ -60,9 +64,12 @@
 
   // Beside the 3/4 handheld, three full-size cartridges stack taller than it does, so they
   // come down to its scale. zoom, unlike the handheld's transform, shrinks the room they
-  // take as well, and with no iframe inside there's no reason to avoid it.
+  // take as well, and with no iframe inside there's no reason to avoid it. All but the label,
+  // which keeps its full size (see .label), so the cartridge is as wide as that needs: the
+  // label, then the sticker's 4px, this 8px padding and the 2px border each side.
   @media #{bp.$compact} {
     zoom: var(--device-scale);
+    width: calc(#{$label} / var(--device-scale) + 28px);
   }
 }
 
@@ -86,20 +93,23 @@
   padding: 4px 4px 8px;
   background: var(--sticker);
   border-radius: 3px;
-
-  // Half of the room the larger tagline needs; see .tagline.
-  @media #{bp.$compact} {
-    padding-bottom: 4px;
-  }
 }
 
-// 1:1, so each label pixel is a whole screen pixel.
+// 1:1, so each label pixel is a whole screen pixel, and at 3/4 as well. Zoomed with the
+// cartridge, 128 pixels would go into 96 screen pixels, dropping one row and one column in
+// four, and in Chromium which ones moves with the window's size. So it's drawn as much
+// bigger as the zoom takes off. playwright/labels.spec.ts compares it with its PNG at 1x.
 .label {
   display: block;
   align-self: center;
-  width: 128px;
-  height: 128px;
+  width: $label;
+  height: $label;
   image-rendering: pixelated;
+
+  @media #{bp.$compact} {
+    width: calc(#{$label} / var(--device-scale));
+    height: calc(#{$label} / var(--device-scale));
+  }
 }
 
 // Silkscreen at a multiple of 8px only; see .title in App.module.scss.
@@ -120,14 +130,12 @@
   min-height: 3.9em;
   color: var(--sticker-dim);
 
-  // 9px once zoomed, on purpose: Safari won't draw zoomed text any smaller, so a smaller size
-  // here would wrap Gem-in-Eye's tagline onto a third line there alone, making that cartridge
-  // taller than the others. Three lines of this need 4px more than three of 10px, even
-  // packed closer, and .sticker gives them up, so a cartridge is still 261px before the zoom.
+  // At 3/4 the full-size label takes 32px more of each cartridge's height, and the shelf
+  // beside the 3/4 handheld has about 10px to spare. The tagline gives it back, and screen
+  // readers still hear it as part of the cart's name.
   @media #{bp.$compact} {
-    font-size: 12px;
-    line-height: 1.2;
-    min-height: 3.6em;
+    @include a11y.visually-hidden;
+    min-height: 0;
   }
 }
 
