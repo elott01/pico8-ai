@@ -176,6 +176,10 @@ export default function Handheld({
             keyboard's and screen readers', hidden from sight. A mouse or a finger drags the
             drawing instead, which leaves focus where it was, as the buttons do. */}
         <span className={styles.volume} style={{ '--volume': volume / 100 } as CSSProperties}>
+          {/* Printed on the face, for sight only: the input's own name already says it. */}
+          <span className={styles.volumeCaption} aria-hidden="true">
+            VOLUME
+          </span>
           <input
             className={styles.volumeInput}
             type="range"

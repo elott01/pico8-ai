@@ -576,8 +576,25 @@
   outline-offset: 3px;
 }
 
-// What a mouse or a finger drags: the wedge and the slot, made 44px tall to take hold of by the
-// ::before, which reaches up over the face and down over the nub.
+// The slider's name, printed 10px above the wedge as a key's caption is 10px below the key,
+// which centres it on the Fullscreen, Eject and CRT row. Right-aligned to the wedge's tall end.
+// The wedge alone could be brightness or contrast, and doesn't read as something to take hold of.
+.volumeCaption {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  line-height: 1.25;
+  color: var(--print);
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+// What a mouse or a finger drags: the wedge and the slot, made 34px tall to take hold of by the
+// ::before, which reaches up over the face to the caption and down over the nub. It stops short
+// of the caption, so pressing the word doesn't jump the level to wherever the press landed.
 .volumeGrip {
   position: relative;
   display: flex;
@@ -591,7 +608,7 @@
   &::before {
     content: '';
     position: absolute;
-    inset: -20px -6px -4px;
+    inset: -10px -6px -4px;
   }
 }
 
