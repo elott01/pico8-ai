@@ -375,19 +375,21 @@ function PixelIcon({ rows }: { rows: string[] }) {
 }
 
 // The speaker grille between the D-pad and the keys, for the look: rows of 3, 4, 5, 4 and 3
-// holes, each a dark hole over a lighter rim a pixel lower, so it reads as punched in.
+// holes, each a dark hole over a lighter rim two pixels lower, so it reads as punched in.
+// It's 100px tall, and with its 24px lift it stays shorter than the D-pad and its caption, so
+// the row, and the shell, keep their height. Past 138px it would make --device-height wrong.
 const GRILLE_ROWS = [3, 4, 5, 4, 3];
 
 function Grille() {
   const holes = GRILLE_ROWS.flatMap((count, row) =>
-    Array.from({ length: count }, (_, i) => ({ x: 31 + (i - (count - 1) / 2) * 12, y: 4 + row * 10 })),
+    Array.from({ length: count }, (_, i) => ({ x: 62 + (i - (count - 1) / 2) * 24, y: 8 + row * 20 })),
   );
   return (
-    <svg className={styles.grille} aria-hidden="true" width="62" height="50" viewBox="0 0 62 50">
+    <svg className={styles.grille} aria-hidden="true" width="124" height="100" viewBox="0 0 124 100">
       {holes.map(({ x, y }) => (
         <g key={`${x},${y}`}>
-          <circle className={styles.rim} cx={x} cy={y + 1} r={3} />
-          <circle className={styles.hole} cx={x} cy={y} r={3} />
+          <circle className={styles.rim} cx={x} cy={y + 2} r={6} />
+          <circle className={styles.hole} cx={x} cy={y} r={6} />
         </g>
       ))}
     </svg>
