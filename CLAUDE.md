@@ -62,7 +62,8 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
 - **`src/components/Pico8Game.tsx`** embeds the cart's *exported `.html`* in an iframe (not the
   `.js` — the export needs its own shell) and polls `contentWindow.pico8_gpio` every 100ms.
   **`Handheld.tsx`** draws the device around it: the shell, the cart in its slot, the POWER
-  and GEMINI lights, the D-pad and keys, Eject and Fullscreen. `Pico8Game` passes the screen in as
+  and GEMINI lights, the D-pad and keys, the speaker grille, the Fullscreen, Eject and CRT
+  buttons, and CRT's light and the volume slider in the bottom edge. `Pico8Game` passes the screen in as
   `children` and keeps everything about the cart. **`App.tsx`** owns the page's grid (header,
   carts, device, panel, About), rearranged at the widths in `src/styles/_breakpoints.scss`.
 - **`src/lib/gpio.ts`** is the byte-protocol source of truth, one `PROTOCOLS` entry per game
@@ -220,7 +221,7 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   reintroduces the flash.
 - **`tabIndex={0}` on a `<button>` or a link is required, not redundant.** WebKit leaves
   buttons and links out of the tab order unless macOS keyboard navigation is enabled, so on
-  default Safari the carts, the theme control, Eject, Fullscreen, the header's links and About's links
+  default Safari the carts, the theme control, Fullscreen, Eject, CRT, the header's links and About's links
   are unreachable by keyboard without it — Tab cycles the iframe and body only. It looks like
   something a linter should strip; deleting it silently makes the page mouse-only for a
   large share of visitors. Verified against Playwright's WebKit, which reproduces the
@@ -233,8 +234,8 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   handler fighting the runtime. The shell can't be patched either; a re-export regenerates it.
   - **So Tab reaches only what comes before the iframe in the DOM**, and the layout is built
     around that. The carts come first in the DOM at every width, and grid areas place them
-    on screen. Eject and Fullscreen are first in `Handheld`'s DOM, and CSS `order` draws them
-    at the bottom.
+    on screen. The handheld's bottom row (Fullscreen, Eject, CRT) is first in `Handheld`'s DOM,
+    in the order it's drawn, and CSS `order` draws it at the bottom.
     About comes after the cart, so the header's About link is the keyboard's way there:
     following `#about` moves Tab's starting point into it. A new control the keyboard needs
     goes before the iframe in the DOM. `eject.spec.ts` and `about.spec.ts` check these paths.
@@ -265,7 +266,9 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   the blur back. CSS `zoom` keeps it 540px in Chromium and WebKit, but Firefox is unchecked.
   Only 0.75 lands every 4px block on whole pixels at any pixel density. A transform leaves
   the box full-size, so `.device` sets the scaled height from `--device-height`, which is the
-  shell's height copied by hand; `screen.spec.ts` fails if the two drift. The cartridges come
+  shell's height copied by hand; `screen.spec.ts` fails if the two drift. `$full-height` and
+  `$tight-height` in `_breakpoints.scss` are measured from it too, and so is the shortest window
+  `layout.spec.ts` fits the arcade into, so a change to the shell's height moves all four. The cartridges come
   down with it through `zoom`, since they hold no iframe. Safari won't draw zoomed text under
   9px, which is why their tagline is 12px before the zoom: any less and Gem-in-Eye's wraps to
   a third line there alone, making that cartridge taller than the others.
@@ -305,6 +308,12 @@ Breaking any of these fails silently, so verify them when touching the relevant 
     a screenshot**, headless or headed: no taper, and a `perspective()` in the transform comes
     out twisted. Its layout is right, matching Chromium to the decimal, so measure 3D with
     `getBoundingClientRect` as `controls.spec.ts` does, and judge the look in Chromium or Safari.
+- **The bottom row is named by its icons, and CRT's light reads `aria-pressed`.** Each button's
+  name is visually hidden text (`.name`), which is what screen readers and every spec find it by,
+  so a new button there needs one. CRT's light in the shell's bottom edge is lit by
+  `.shell:has(.crtButton[aria-pressed='true'])`, so it can't disagree with what a screen reader
+  hears; `crt.spec.ts` compares its colour with POWER's. It sits `--action-step` right of the
+  shell's centre, the step the buttons are spaced by, so moving one moves the other.
 - **Fullscreen is the export's own, run from outside its page.** The handheld's button calls
   `p8_request_fullscreen()` in the iframe, which fullscreens PICO-8's play area, so PICO-8
   draws a whole multiple of 128. `iframe.requestFullscreen()` also works, but PICO-8 can't tell

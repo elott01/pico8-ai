@@ -73,7 +73,9 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   in the cart. On `mobile-safari`, the hint never shows, and a tap starts the cart without
   PICO-8 switching to its touch layout.
 - **`eject.spec.ts`** — Eject empties the device, focus moves to the first cart, a cart goes
-  back in, and Tab reaches Eject before the cart's iframe, which swallows Tab.
+  back in, and Tab reaches the bottom row in its drawn order (Fullscreen, Eject, CRT) before the
+  cart's iframe, which swallows Tab. Eject sits on the screen's centre line between two buttons
+  its size, at full size and at 3/4.
 - **`fullscreen.spec.ts`** — the Fullscreen button draws the game at 8× and comes back to the
   crop without restarting the run. Arrow keys move the cursor in fullscreen, checked on real
   pixels, since a cart can look right there and take no keys. A turn played in fullscreen
@@ -98,7 +100,7 @@ once committed without it: `about.spec.ts` now fails in `webkit` if a header lin
   fullscreen picture whose frames fall behind is drawn at 1024 and enlarged, with the cart's page
   held up 50ms a frame to make them, since a test machine's GPU decides whether they would. With
   no WebGL the CSS filter covers the game instead, once. The CRT button and a cart switch take
-  it away and bring it back. The look is checked on made-up pictures: 1-pixel columns stay
+  it away and bring it back, and CRT's light in the shell's edge is lit only while it's on. The look is checked on made-up pictures: 1-pixel columns stay
   apart and every row has scanlines, against limits measured on versions that should fail. It
   reads the shader's drawing buffer, because a broken shader leaves the CSS fallback showing,
   and a screenshot would pass that.

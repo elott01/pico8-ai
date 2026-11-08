@@ -323,7 +323,8 @@ test.describe('on a desktop', () => {
 
   test('Tab reaches it before the cart, which swallows Tab', async ({ page }) => {
     await loaded(page);
-    await page.getByRole('button', { name: 'Eject' }).focus();
+    // The last cart on the shelf, which comes right before the handheld's bottom row
+    await page.getByRole('button', { name: /Gem-in-Eye/ }).focus();
     await page.keyboard.press('Tab');
     await expect(button(page)).toBeFocused();
   });

@@ -62,6 +62,18 @@ const picture = (page: Page) =>
 // The game's white, through the shader, is about 735 of 765. Black is 0.
 const LIT = 600;
 
+/**
+ * CRT's light in the shell's bottom edge: 'lit' in POWER's colour, 'dark' in GEMINI's at rest.
+ * It has no role, being drawn for sight, so it's found by its class.
+ */
+const edgeLight = (page: Page) =>
+  page.evaluate(() => {
+    const colour = (el: Element) => getComputedStyle(el).backgroundColor;
+    const [power, gemini] = [...document.querySelectorAll('[class*="_led_"]')];
+    const light = colour(document.querySelector('[class*="edgeLight"]')!);
+    return light === colour(power!) ? 'lit' : light === colour(gemini!) ? 'dark' : light;
+  });
+
 /** Press the cart's play button and wait until it's running. */
 async function start(page: Page) {
   await page.frameLocator('iframe').locator('#p8_start_button').click();
@@ -236,15 +248,18 @@ test.describe('the CRT filter', () => {
     await page.goto('/');
     await start(page);
     await expect.poll(async () => (await picture(page)).brightest).toBeGreaterThan(LIT);
+    await expect.poll(() => edgeLight(page)).toBe('lit');
 
     await crt.click();
     await expect(crt).toHaveAttribute('aria-pressed', 'false');
     await expect(tube).toHaveCount(0);
     expect((await filter(page)).screenFilter).toBe('none');
+    await expect.poll(() => edgeLight(page)).toBe('dark');
 
     await crt.click();
     await expect(tube).toHaveCount(1);
     await expect.poll(async () => (await picture(page)).brightest).toBeGreaterThan(LIT);
+    await expect.poll(() => edgeLight(page)).toBe('lit');
 
     await page.getByRole('button', { name: /Connect Four/ }).click();
     await expect(page.locator('iframe')).toHaveAttribute('src', /connect_four/);

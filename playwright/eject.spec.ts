@@ -1,5 +1,6 @@
 // The handheld's Eject button. It unloads the cart: no iframe, no poll loop, an empty slot
-// and an "insert a cart" screen, and focus on the shelf, where the next move is.
+// and an "insert a cart" screen, and focus on the shelf, where the next move is. It's the
+// middle of the bottom row, so the row's order and layout are checked here too.
 
 import { test, expect, type Page } from '@playwright/test';
 
@@ -45,8 +46,35 @@ test('Tab reaches Eject before the cart, which swallows Tab', async ({ page, isM
   test.skip(isMobile, 'tab order is the webkit project’s to check; this is the same engine');
   await loaded(page);
   await page.getByRole('button', { name: /Gem-in-Eye/ }).focus();
-  await page.keyboard.press('Tab');
-  // Eject is drawn at the bottom of the shell but sits before the iframe in the DOM. After
-  // the iframe, nothing could be reached by Tab at all.
-  await expect(eject(page)).toBeFocused();
+  // The bottom row is drawn at the bottom of the shell but sits before the iframe in the DOM,
+  // in the order it's drawn. After the iframe, nothing could be reached by Tab at all.
+  for (const name of ['Fullscreen', 'Eject', 'CRT']) {
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name, exact: true })).toBeFocused();
+  }
 });
+
+// Eject in the middle of the row, on the screen's centre line, and the three buttons one size,
+// at full size and at 3/4.
+for (const height of [1200, 900]) {
+  test(`Eject is centred under the screen, between two buttons its size, ${height} tall`, async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile, 'the phone’s row is the same; the 3/4 handheld is the one that scales');
+    await page.setViewportSize({ width: 1400, height });
+    await loaded(page);
+    const boxes = await Promise.all(
+      ['Fullscreen', 'Eject', 'CRT'].map(async (name) => (await page.getByRole('button', { name, exact: true }).boundingBox())!),
+    );
+    const screen = (await page.locator('iframe').locator('..').boundingBox())!;
+    const [fullscreen, middle, crt] = boxes;
+    expect(middle!.x + middle!.width / 2).toBeCloseTo(screen.x + screen.width / 2, 0);
+    expect(fullscreen!.x).toBeLessThan(middle!.x);
+    expect(crt!.x).toBeGreaterThan(middle!.x);
+    for (const box of boxes) {
+      expect(box.width).toBeCloseTo(middle!.width, 1);
+      expect(box.height).toBeCloseTo(middle!.height, 1);
+    }
+  });
+}

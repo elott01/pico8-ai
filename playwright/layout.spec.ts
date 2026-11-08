@@ -27,11 +27,11 @@ test('the page never scrolls sideways', async ({ page }) => {
 // The carts, the handheld and the panel inside a laptop's window at 100% zoom, header
 // included, and the three ending level beside each other. 1208 x 879 is the window the
 // owner zoomed out to 75% to fit them all in, before the handheld scaled itself. Below
-// 1134px tall the handheld and cartridges draw at 3/4; 2560 x 1440 has the full-size ones.
-// 830 tall is the shortest that fits, with the title as high as it goes. A shorter window,
+// 1122px tall the handheld and cartridges draw at 3/4; 2560 x 1440 has the full-size ones.
+// 821 tall is the shortest that fits, with the title as high as it goes. A shorter window,
 // like 1280 x 720, doesn't fit even at 3/4.
 for (const [width, height] of [
-  [1564, 830],
+  [1564, 821],
   [1564, 838],
   [1208, 879],
   [1440, 900],
@@ -85,11 +85,12 @@ for (const [width, height] of [
 
 // Only the three columns give up the space above the title, and only when they need it: at
 // 892 tall the title is where it was, and so it is at 1000 x 800, where the carts sit under
-// the device and the page scrolls anyway.
+// the device and the page scrolls anyway. 838 and 892 tall are the arcade centred in the
+// window, so they move with the 3/4 handheld's height.
 for (const [width, height, top] of [
   [1280, 720, 4],
-  [1564, 838, 6],
-  [1568, 892, 33],
+  [1564, 838, 11],
+  [1568, 892, 38],
   [1000, 800, 30],
 ]) {
   test(`a ${width} x ${height} window has ${top}px above the title`, async ({ page, isMobile }) => {

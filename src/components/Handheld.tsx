@@ -1,6 +1,7 @@
 // The handheld the cart plays in: the lavender shell, the cart standing in its slot, the
 // bezel with its two status lights and the black glass the screen sits in, the printed
-// lettering, the D-pad and O/X keys, and the Eject, Fullscreen and CRT buttons.
+// lettering, the D-pad and O/X keys with the speaker grille between them, the Fullscreen,
+// Eject and CRT buttons, and in the bottom edge CRT's light and the volume slider.
 //
 // Pico8Game owns the cart and passes the screen in as `children`. The D-pad and keys report
 // what's held through `onButtons`, as the bitfield in lib/buttons.ts, and Pico8Game hands
@@ -116,38 +117,55 @@ export default function Handheld({
       {/* First in the DOM, drawn last (see .actions' order). The cart's iframe swallows Tab,
           so a keyboard user can reach these only before the screen, never after it. */}
       <div className={styles.actions}>
+        {/* Named by their icons alone. The name each one says is hidden text, for screen readers
+            and the specs, which find them by it. */}
         <button
           type="button"
           className={styles.action}
           // Required for WebKit's tab order; see CartCard.
           tabIndex={0}
-          disabled={!canEject}
-          onClick={onEject}
+          disabled={!powered}
+          onClick={onFullscreen}
           onMouseDown={keepFocus}
         >
-          Eject
+          <PixelIcon rows={FULLSCREEN_ICON} />
+          <span className={styles.name}>Fullscreen</span>
         </button>
         <button
           type="button"
           className={styles.action}
           tabIndex={0}
-          disabled={!powered}
-          onClick={onFullscreen}
+          disabled={!canEject}
+          onClick={onEject}
           onMouseDown={keepFocus}
         >
-          Fullscreen
+          <PixelIcon rows={EJECT_ICON} />
+          <span className={styles.name}>Eject</span>
         </button>
         <button
           type="button"
-          className={styles.action}
+          className={`${styles.action} ${styles.crtButton}`}
           tabIndex={0}
           aria-pressed={crt}
           onClick={onCrt}
           onMouseDown={keepFocus}
         >
-          CRT
+          <PixelIcon rows={CRT_ICON} />
+          <span className={styles.name}>CRT</span>
         </button>
+        {/* The volume slider, in the shell's bottom edge at the right. Drawn only, for now. */}
+        <span className={styles.volume} aria-hidden="true">
+          <svg className={styles.wedge} width="80" height="8" viewBox="0 0 80 8">
+            <polygon points="0,8 80,0 80,8" fill="currentColor" />
+          </svg>
+          <span className={styles.volumeSlot}>
+            <span className={styles.volumeNub} />
+          </span>
+        </span>
       </div>
+      {/* CRT's light, in the shell's bottom edge under its button. It's lit from the button's own
+          aria-pressed (see .edgeLight), so it can't disagree with what a screen reader hears. */}
+      <span className={styles.edgeLight} aria-hidden="true" />
 
       <span className={styles.slot} aria-hidden="true" />
       {/* The cart that's in, standing up out of the slot. The switcher's status line already
@@ -211,6 +229,7 @@ export default function Handheld({
           </div>
           <span className={styles.caption}>OR ARROW KEYS</span>
         </div>
+        <Grille />
         <div className={styles.keys}>
           <div className={`${styles.control} ${styles.low}`}>
             <button {...control(BUTTON.o, styles.key, 'O button')}>O</button>
@@ -238,6 +257,84 @@ function Chevron({ points }: { points: string }) {
   return (
     <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2">
       <polyline points={points} />
+    </svg>
+  );
+}
+
+// The bottom row's icons, drawn on a 9 x 9 grid in 2px pixels: the same pixel as the 16px
+// Silkscreen lettering on the shell. Each X is a pixel.
+const FULLSCREEN_ICON = [
+  'XXX...XXX',
+  'X.......X',
+  'X.......X',
+  '.........',
+  '.........',
+  '.........',
+  'X.......X',
+  'X.......X',
+  'XXX...XXX',
+];
+
+const EJECT_ICON = [
+  '.........',
+  '....X....',
+  '...XXX...',
+  '..XXXXX..',
+  '.XXXXXXX.',
+  'XXXXXXXXX',
+  '.........',
+  'XXXXXXXXX',
+  'XXXXXXXXX',
+];
+
+// A television, its screen in scanlines
+const CRT_ICON = [
+  '..X...X..',
+  '...X.X...',
+  '.XXXXXXX.',
+  'X.......X',
+  'X.XXXXX.X',
+  'X.......X',
+  'X.XXXXX.X',
+  'X.......X',
+  '.XXXXXXX.',
+];
+
+function PixelIcon({ rows }: { rows: string[] }) {
+  const width = rows[0]!.length;
+  const path = rows
+    .flatMap((row, y) => [...row].map((pixel, x) => (pixel === 'X' ? `M${x} ${y}h1v1h-1z` : '')))
+    .join('');
+  return (
+    <svg
+      aria-hidden="true"
+      width={width * 2}
+      height={rows.length * 2}
+      viewBox={`0 0 ${width} ${rows.length}`}
+      fill="currentColor"
+      shapeRendering="crispEdges"
+    >
+      <path d={path} />
+    </svg>
+  );
+}
+
+// The speaker grille between the D-pad and the keys, for the look: rows of 3, 4, 5, 4 and 3
+// holes, each a dark hole over a lighter rim a pixel lower, so it reads as punched in.
+const GRILLE_ROWS = [3, 4, 5, 4, 3];
+
+function Grille() {
+  const holes = GRILLE_ROWS.flatMap((count, row) =>
+    Array.from({ length: count }, (_, i) => ({ x: 31 + (i - (count - 1) / 2) * 12, y: 4 + row * 10 })),
+  );
+  return (
+    <svg className={styles.grille} aria-hidden="true" width="62" height="50" viewBox="0 0 62 50">
+      {holes.map(({ x, y }) => (
+        <g key={`${x},${y}`}>
+          <circle className={styles.rim} cx={x} cy={y + 1} r={3} />
+          <circle className={styles.hole} cx={x} cy={y} r={3} />
+        </g>
+      ))}
     </svg>
   );
 }

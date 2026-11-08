@@ -137,7 +137,7 @@ test.describe('--device-height', () => {
     await page.goto('/');
     const shell = (await shellOf(page).boundingBox())!;
     const device = (await shellOf(page).locator('xpath=../..').boundingBox())!;
-    expect(shell.height).toBeCloseTo(936 * 0.75, 0);
+    expect(shell.height).toBeCloseTo(924 * 0.75, 0);
     expect(Math.abs(shell.y + shell.height - (device.y + device.height))).toBeLessThan(1);
   });
 });

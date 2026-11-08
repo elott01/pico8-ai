@@ -1,3 +1,4 @@
+@use '../styles/a11y';
 @use '../styles/breakpoints' as bp;
 
 // Every colour is a handheld or cartridge token from src/styles/tokens.scss. The device is a
@@ -23,9 +24,11 @@
     inset 0 -8px 0 var(--shell-lo),
     0 30px 60px -30px rgba(0, 0, 0, 0.8);
   text-align: left;
+  // How far apart the Fullscreen, Eject and CRT buttons' centres are. CRT's light is placed by it.
+  --action-step: 72px;
 
   @media (min-width: bp.$full-device) {
-    padding: 40px 36px 32px;
+    padding: 40px 36px 24px;
   }
 }
 
@@ -250,6 +253,39 @@
       outline-offset: 3px;
     }
   }
+
+  // Three columns, which put the speaker grille on the shell's centre line between the D-pad and
+  // the keys. Only where the handheld is full-size: a phone's shell has no room for the grille.
+  @media (min-width: bp.$full-device) {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+
+    > .control {
+      justify-self: start;
+    }
+
+    > .keys {
+      justify-self: end;
+    }
+  }
+}
+
+// Lifted to the D-pad's middle, which the caption under it pushes down.
+.grille {
+  display: none;
+  margin-bottom: 24px;
+
+  @media (min-width: bp.$full-device) {
+    display: block;
+  }
+}
+
+.hole {
+  fill: var(--bezel);
+}
+
+.rim {
+  fill: var(--shell-hi);
 }
 
 .control {
@@ -432,43 +468,51 @@
 }
 
 // First in the DOM so Tab reaches them before the cart's iframe, and `order` puts them back at
-// the bottom of the shell.
+// the bottom of the shell. Three columns --action-step wide and centred, so Eject, in the middle
+// one, sits on the shell's centre line under the screen's. The margin moves them 8px nearer the
+// shell's bottom edge than the gap alone would.
 .actions {
   order: 1;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
+  align-self: center;
+  display: grid;
+  grid-template-columns: repeat(3, var(--action-step));
+  justify-items: center;
+  margin-top: 8px;
 }
 
-// Named in lowercase in the markup; Silkscreen draws them in capitals.
+// All three one size, drawn 56 x 32. The ::before makes each 44px tall to press, reaching 6px
+// past the top and bottom: the 16px between them is enough that no two overlap.
 .action {
-  min-height: 44px;
-  padding: 0 24px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 32px;
+  // The icon in the middle of the face, which is the 28px above the shadow
+  padding: 0 0 4px;
   border: 0;
-  border-radius: 22px;
+  border-radius: 16px;
   background: var(--eject);
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35);
-  font-family: var(--font-pixel);
-  font-size: 16px;
-  line-height: 1;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.35);
   color: var(--eject-ink);
   cursor: pointer;
 
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -6px 0;
+  }
+
+  // Pressed in: down by the depth of its shadow, which takes the icon's lift with it.
   &:active:not(:disabled) {
-    transform: translateY(2px);
+    transform: translateY(4px);
     box-shadow: none;
+    padding-bottom: 0;
   }
 
   &:disabled {
     cursor: default;
     opacity: 0.5;
-  }
-
-  // A toggle that is on stays pressed in, ringed in the POWER light's green.
-  &[aria-pressed='true'] {
-    transform: translateY(2px);
-    box-shadow: inset 0 0 0 2px var(--led-power);
   }
 
   // Black, not the page's --accent: the accent blue is under 2:1 against the lavender, where
@@ -478,6 +522,73 @@
     outline: 2px solid var(--print);
     outline-offset: 3px;
   }
+}
+
+.name {
+  @include a11y.visually-hidden;
+}
+
+// CRT's light, set into the shell's bottom edge (the --shell-lo band) under the CRT button, the
+// way a Game Boy Advance SP's lights sit in its side. CRT on is the button's aria-pressed, which
+// is what lights it, so the two can't disagree. Lit, it's 4.2:1 against the band and glows onto
+// the face and the page below; unlit, it's a dim lens. Its sizes stay whole at 3/4.
+.edgeLight {
+  position: absolute;
+  bottom: 0;
+  left: calc(50% + var(--action-step) - 8px);
+  width: 16px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--led-off);
+}
+
+.shell:has(.crtButton[aria-pressed='true']) .edgeLight {
+  background: var(--led-power);
+  box-shadow:
+    0 0 4px 1px color-mix(in srgb, var(--led-power) 70%, transparent),
+    0 0 14px 3px color-mix(in srgb, var(--led-power) 35%, transparent);
+}
+
+// The volume slider, in the bottom edge like CRT's light, its right end under the X key's and
+// clear of the shell's rounded corner. The slot is cut into the edge band, the ridged nub hangs
+// 4px below the shell, and the wedge is printed on the face above. --volume, from 0 to 1, places
+// the nub. A phone's shell has no room for it beside CRT's light.
+.volume {
+  position: absolute;
+  right: 40px;
+  bottom: 0;
+  width: 80px;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+
+  @media (min-width: bp.$full-device) {
+    display: flex;
+  }
+}
+
+.wedge {
+  display: block;
+  color: var(--print);
+}
+
+.volumeSlot {
+  position: relative;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--bezel);
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+.volumeNub {
+  position: absolute;
+  top: 0;
+  left: calc(var(--volume, 1) * (100% - 12px));
+  width: 12px;
+  height: 12px;
+  border-radius: 1px 1px 4px 4px;
+  background: repeating-linear-gradient(90deg, var(--shell-hi) 0 3px, var(--shell-lo) 3px 4px);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.3);
 }
 
 // .controls, to outweigh the padding in its button reset.

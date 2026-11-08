@@ -77,7 +77,7 @@
   // Its height at that width. Nothing sets it; it's what the shell's contents add up to.
   // Only a scaled handheld needs it, to give back the room a transform doesn't (see .device
   // in Pico8Game.module.scss). playwright/screen.spec.ts fails if the two drift apart.
-  --device-height: 936px;
+  --device-height: 924px;
   // 0.75 on a window too short for the full-size arcade, set below. Only 0.75 keeps the
   // screen sharp: PICO-8 still draws 512, and each 4px block lands on 3.
   --device-scale: 1;
