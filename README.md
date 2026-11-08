@@ -4,7 +4,7 @@
 
 PICO-8 carts with Google Gemini built in.
 
-[![The arcade: a lavender handheld running Gem-in-Eye, with the shelf of carts on its left and the AI panel on its right](docs/screenshot.png)](https://pico8-ai.vercel.app)
+[![The arcade: a lavender handheld running Gem-in-Eye's shop, with the shelf of carts on its left and, on its right, the Gemini panel showing gem-in-eye's verdict on a purchase](docs/screenshot.png)](https://pico8-ai.vercel.app)
 
 PICO-8 games embedded in a React app and played in a handheld drawn around the cart, with
 Gemini on the other side of each: the opponent in two board games, and the shopkeeper in a
