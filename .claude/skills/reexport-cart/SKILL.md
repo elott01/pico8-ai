@@ -115,6 +115,9 @@ Afterwards:
 
 ## 3. Export
 
+First note the budget with `node scripts/cart-budget.ts <cart>`. It still reads the old
+export, so this is the "before" for step 5.
+
 ```sh
 node scripts/export-cart.ts <cart>
 ```
@@ -146,9 +149,13 @@ label. It takes a second or two, with a 60s limit.
 - `npm run test:playwright`: boots the real exported carts in Chromium, WebKit and mobile
   Safari, which is the first time the new export actually runs. If the browsers aren't
   installed, report that. Don't treat a skipped run as a pass.
-- For Gem-in-Eye, `playwright/doors.spec.ts` walks the knight through both doors of the new
-  export, so the run above covers its `load()`s. A new bundled cart has no such test until one
-  is written. Until then, ask the user to take one trip into it and back under `vercel dev`.
+- `node scripts/cart-budget.ts <cart>`: each cart's tokens, characters and compressed code
+  against PICO-8's limits, the compressed size read from the new export. A `*` now means the
+  export's code isn't the `.p8`'s, so PICO-8 exported some other copy: stop and tell the user.
+- For Gem-in-Eye, `playwright/doors.spec.ts` walks the knight through the dungeon's door and
+  back, and into the shop and out, so the run above covers its `load()`s. A new bundled cart
+  has no such test until one is written. Until then, ask the user to take one trip into it and
+  back under `vercel dev`.
 
 ## If a poster and its label disagree
 
@@ -170,4 +177,6 @@ node scripts/cart-label.ts png carts/<cart>.p8 public/labels/<cart>.png 1
 
 ## 5. Report
 
-List which files changed and what each check showed. Don't commit; that's the user's call.
+List which files changed and what each check showed. Give the budget as before and after for
+each cart the code edit touched, for example "hub 14,070 → 14,310 of 15,616 compressed, 1,306
+left", since compressed size is the limit carts run into. Don't commit; that's the user's call.
