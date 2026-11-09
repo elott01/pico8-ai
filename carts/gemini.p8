@@ -555,7 +555,7 @@ shine_step = 1		-- diagonals per frame
 shine_hold = 2		-- frames per step
 shine_pause = 70	-- frames between sweeps
 
-wiz_msg = "you again. or a fork of you. hard to tell anymore."
+wiz_msg = "you again. or a fork of you? hard to tell anymore."
 
 -- his line under the menu. purchases overwrite it
 wiz_prompt = "well? you're eating into my thinking tokens."
