@@ -44,6 +44,12 @@ const listen = (page: Page) =>
     } as AudioNode['connect'];
   });
 
+/** Put tic-tac-toe in place of Gem-in-Eye, which the page starts with and has no sound yet. */
+async function insertTicTacToe(page: Page) {
+  await page.getByRole('button', { name: /Tic-Tac-Toe/ }).click();
+  await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
+}
+
 /** Press the cart's play button and wait until it's running. */
 async function start(page: Page) {
   await page.frameLocator('iframe').locator('#p8_start_button').click();
@@ -149,6 +155,7 @@ test('a drag moves it, and leaves the keyboard in the cart', async ({ page }) =>
 test('it turns the cart’s sound down, and off at 0', async ({ page }) => {
   await listen(page);
   await page.goto('/');
+  await insertTicTacToe(page);
   await start(page);
   const move = cursor(page);
 
@@ -170,6 +177,7 @@ test('a cart starts at the level it was left at', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('pico-volume', '0'));
   await page.goto('/');
   await expect(slider(page)).toHaveValue('0');
+  await insertTicTacToe(page);
   await start(page);
   const move = cursor(page);
 

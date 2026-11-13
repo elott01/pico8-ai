@@ -100,5 +100,8 @@ export const NO_CART_PANEL: PanelIntro = {
   shows: [],
 };
 
-/** Render order for the switcher. Explicit, because object key order is not a design decision. */
-export const CART_ORDER: CartId[] = ['tic_tac_toe', 'connect_four', 'gemini'];
+/**
+ * Render order for the switcher. Explicit, because object key order is not a design decision.
+ * The first is also the cart in the device when the page opens.
+ */
+export const CART_ORDER: CartId[] = ['gemini', 'connect_four', 'tic_tac_toe'];

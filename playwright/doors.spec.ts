@@ -124,11 +124,11 @@ async function pressUntil(page: Page, runs: Run[], buttons: number, cart: string
   return arrived()!;
 }
 
-/** Open Gem-in-Eye, start it, and wait for the hub. Returns the runs as they come in. */
+/** Load the page, start Gem-in-Eye, and wait for the hub. Returns the runs as they come in. */
 async function startHub(page: Page): Promise<Run[]> {
   const runs = watchRuns(page);
   await page.goto('/');
-  await page.getByRole('button', { name: /Gem-in-Eye/ }).click();
+  // The cart the page starts with
   await expect(page.locator('iframe')).toHaveAttribute('src', /gemini/);
   // The export waits for a click before it starts
   await page.frameLocator('iframe').locator('#p8_start_button').click();

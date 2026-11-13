@@ -177,8 +177,9 @@ test('at 3/4 a cartridge keeps its label full-size, in a shelf that stays wider'
     expect(Math.abs(box.width - 149)).toBeLessThan(1);
     expect(Math.abs(box.height - 194)).toBeLessThanOrEqual(1);
   }
-  // Hidden from sight, not from screen readers
-  await expect(page.getByRole('button', { name: /^Gem-in-Eye/ })).toHaveAccessibleName(/talks back$/);
+  // Hidden from sight, not from screen readers. On a cartridge on the shelf: the one in the
+  // device is named for its slot instead
+  await expect(page.getByRole('button', { name: /^Tic-Tac-Toe/ })).toHaveAccessibleName(/solved by minimax$/);
 });
 
 test('every cartridge is the same size, the empty slot included', async ({ page, isMobile }) => {
@@ -227,7 +228,7 @@ test('the cart fits the viewport after switching to the wider board', async ({ p
 test('tapping a card switches the cart', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'tap() needs a touch-enabled context');
   await page.goto('/');
-  await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
+  await expect(page.locator('iframe')).toHaveAttribute('src', /gemini/);
 
   await page.getByRole('button', { name: /Connect Four/ }).tap();
   await expect(page.locator('iframe')).toHaveAttribute('src', /connect_four/);

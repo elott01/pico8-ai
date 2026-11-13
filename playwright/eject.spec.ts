@@ -29,7 +29,7 @@ test('focus moves to the first cart after an eject', async ({ page }) => {
   await loaded(page);
   await eject(page).click();
   // Eject disables itself, which would otherwise drop focus to the page
-  await expect(page.getByRole('button', { name: /Tic-Tac-Toe/ })).toBeFocused();
+  await expect(page.getByRole('button', { name: /Gem-in-Eye/ })).toBeFocused();
 });
 
 test('a cart goes back in after an eject', async ({ page }) => {
@@ -45,7 +45,8 @@ test('a cart goes back in after an eject', async ({ page }) => {
 test('Tab reaches Eject before the cart, which swallows Tab', async ({ page, isMobile }) => {
   test.skip(isMobile, 'tab order is the webkit project’s to check; this is the same engine');
   await loaded(page);
-  await page.getByRole('button', { name: /Gem-in-Eye/ }).focus();
+  // The last cart on the shelf
+  await page.getByRole('button', { name: /Tic-Tac-Toe/ }).focus();
   // The bottom row is drawn at the bottom of the shell but sits before the iframe in the DOM,
   // in the order it's drawn. After the iframe, nothing could be reached by Tab at all.
   for (const name of ['Fullscreen', 'Eject', 'CRT']) {

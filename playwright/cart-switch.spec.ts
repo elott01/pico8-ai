@@ -66,6 +66,8 @@ test.describe('switching carts mid-turn', () => {
   test('a turn in flight never lands in the new cart\'s panel', async ({ page }) => {
     await stubSlowModel(page);
     await page.goto('/');
+    // In place of Gem-in-Eye, which the page starts with: the request staged below is a board's
+    await page.getByRole('button', { name: /Tic-Tac-Toe/ }).click();
     await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
 
     await stageCartRequest(page);
@@ -100,6 +102,8 @@ test.describe('switching carts mid-turn', () => {
       }),
     );
     await page.goto('/');
+    await page.getByRole('button', { name: /Tic-Tac-Toe/ }).click();
+    await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
     await stageCartRequest(page);
     await expect(page.locator('aside')).toContainText('first cart turn');
 

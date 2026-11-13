@@ -27,7 +27,7 @@ const sources = Object.fromEntries(
 test.use({ deviceScaleFactor: 1 });
 test.skip(({ isMobile }) => !!isMobile, 'measured at 1x; a phone draws the labels at 3x');
 
-/** The labels showing on the shelf, the selected cart's being hidden, with the shelf in view. */
+/** The labels showing on the shelf, with the shelf in view. A cart in the device hides its own. */
 async function labelsOnScreen(page: Page) {
   await page.evaluate(async (shelf) => {
     // Under the handheld, the shelf starts below the window
@@ -55,6 +55,14 @@ for (const [layout, width, height] of [
   test(`the labels are their PNGs, pixel for pixel: ${layout}`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await page.goto('/');
+    // With the slot empty, every label is on the shelf, whichever cart the page starts with
+    const eject = page.getByRole('button', { name: 'Eject' });
+    await expect(eject).toBeEnabled();
+    await eject.click();
+    await expect(page.locator('iframe')).toHaveCount(0);
+    // And the mouse off the shelf. Left on Eject, scrolling the shelf into view under the
+    // handheld brought a cartridge under it, which lifted on hover while it was being read
+    await page.mouse.move(0, 0);
     await page.evaluate(async () => {
       await document.fonts.ready;
       await Promise.all([...document.images].map((image) => image.decode()));
@@ -68,7 +76,7 @@ for (const [layout, width, height] of [
     for (const [w, h] of sizes) {
       await page.setViewportSize({ width: w!, height: h! });
       const labels = await labelsOnScreen(page);
-      expect(labels, `${w} x ${h}`).toHaveLength(2);
+      expect(labels, `${w} x ${h}`).toHaveLength(CART_ORDER.length);
       for (const label of labels) {
         if (Math.abs(label.width - SIZE) > 0.01) {
           failures.push(`${w} x ${h}, ${label.cart}: drawn ${label.width}px wide`);

@@ -74,6 +74,17 @@ const edgeLight = (page: Page) =>
     return light === colour(power!) ? 'lit' : light === colour(gemini!) ? 'dark' : light;
   });
 
+/**
+ * Load the page with tic-tac-toe in place of Gem-in-Eye, which it starts with. Its board stands
+ * still until a key is pressed, where the hub never does, so a change in the picture is the
+ * tube's or the cursor's.
+ */
+async function loaded(page: Page) {
+  await page.goto('/');
+  await page.getByRole('button', { name: /Tic-Tac-Toe/ }).click();
+  await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
+}
+
 /** Press the cart's play button and wait until it's running. */
 async function start(page: Page) {
   await page.frameLocator('iframe').locator('#p8_start_button').click();
@@ -96,7 +107,7 @@ test.describe('the CRT filter', () => {
     // covers where it sits there.
     test.skip(!!isMobile, 'the game fills the window only on the wide layouts');
     await choose(page, 'on');
-    await page.goto('/');
+    await loaded(page);
     await expect(page.frameLocator('iframe').locator('#p8_start_button')).toBeVisible();
     expect((await filter(page)).screenFilter).not.toBe('none');
 
@@ -114,7 +125,7 @@ test.describe('the CRT filter', () => {
 
   test('it draws the game as it plays', async ({ page }) => {
     await choose(page, 'on');
-    await page.goto('/');
+    await loaded(page);
     await start(page);
     await expect.poll(async () => (await picture(page)).brightest).toBeGreaterThan(LIT);
     const before = await picture(page);
@@ -136,7 +147,7 @@ test.describe('the CRT filter', () => {
 
   test('the tube moves while the game stands still', async ({ page }) => {
     await choose(page, 'on');
-    await page.goto('/');
+    await loaded(page);
     await start(page);
     await expect.poll(async () => (await picture(page)).brightest).toBeGreaterThan(LIT);
     const game = await gameStill(page);
@@ -149,7 +160,7 @@ test.describe('the CRT filter', () => {
     // The cart's page has to see it too, since that's where the shader asks
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await choose(page, 'on');
-    await page.goto('/');
+    await loaded(page);
     await start(page);
     await expect.poll(async () => (await picture(page)).brightest).toBeGreaterThan(LIT);
     const game = await gameStill(page);
@@ -169,7 +180,7 @@ test.describe('the CRT filter', () => {
 
     test('is drawn at the cap, and enlarged', async ({ page }) => {
       await choose(page, 'on');
-      await page.goto('/');
+      await loaded(page);
       const fullscreen = page.getByRole('button', { name: 'Fullscreen' });
       await expect(fullscreen).toBeEnabled();
       await start(page);
@@ -206,7 +217,7 @@ test.describe('the CRT filter', () => {
       } as typeof real;
     });
     await choose(page, 'on');
-    await page.goto('/');
+    await loaded(page);
     await start(page);
 
     await expect.poll(async () => (await filter(page)).box?.width).toBeGreaterThan(0);
@@ -219,7 +230,7 @@ test.describe('the CRT filter', () => {
 
   test('a lost context comes back, as a phone takes one from a page in the background', async ({ page }) => {
     await choose(page, 'on');
-    await page.goto('/');
+    await loaded(page);
     await start(page);
     await expect.poll(async () => (await picture(page)).brightest).toBeGreaterThan(LIT);
 
@@ -245,7 +256,7 @@ test.describe('the CRT filter', () => {
     const crt = page.getByRole('button', { name: 'CRT' });
     const tube = page.frameLocator('iframe').locator('.crt-screen');
     await choose(page, 'on');
-    await page.goto('/');
+    await loaded(page);
     await start(page);
     await expect.poll(async () => (await picture(page)).brightest).toBeGreaterThan(LIT);
     await expect.poll(() => edgeLight(page)).toBe('lit');

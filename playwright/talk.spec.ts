@@ -58,8 +58,9 @@ async function stagePurchase(page: Page) {
 test.describe('gem-in-eye talk loop', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
+    // Read at each purchase, so clearing it with the cart already in still counts
     await page.evaluate(() => localStorage.clear());
-    await page.getByRole('button', { name: /Gem-in-Eye/ }).click();
+    // The cart the page starts with
     await expect(page.locator('iframe')).toHaveAttribute('src', /gemini/);
     await gpioReady(page);
   });

@@ -31,27 +31,29 @@ async function stageCartRequest(page: Page) {
 }
 
 test('each cart opens the panel with its own intro', async ({ page }) => {
+  // Along the shelf, from Gem-in-Eye, which the page starts with
   await page.goto('/');
-  await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
-  await expect(panel(page)).toContainText('Make your first move.');
-  await expect(panel(page)).toContainText('Gemini plays O');
-  await expect(panel(page)).toContainText('reasoning:');
-  await expect(panel(page)).toContainText('picks a taken cell');
-
-  await page.getByRole('button', { name: /Connect Four/ }).click();
-  await expect(page.locator('iframe')).toHaveAttribute('src', /connect_four/);
-  await expect(panel(page)).toContainText('Drop your first piece.');
-  await expect(panel(page)).toContainText('in one sentence of its own');
-  await expect(panel(page)).toContainText('picks a full column');
-  await expect(panel(page)).not.toContainText('Gemini plays O');
-
-  await page.getByRole('button', { name: /Gem-in-Eye/ }).click();
   await expect(page.locator('iframe')).toHaveAttribute('src', /gemini/);
   await expect(panel(page)).toContainText('Buy something in the shop.');
   // The talk card's own headings, so the first real card is recognisable
   await expect(panel(page)).toContainText('noticed:');
   await expect(panel(page)).toContainText('what he was shown:');
   await expect(panel(page)).not.toContainText('reasoning:');
+
+  await page.getByRole('button', { name: /Connect Four/ }).click();
+  await expect(page.locator('iframe')).toHaveAttribute('src', /connect_four/);
+  await expect(panel(page)).toContainText('Drop your first piece.');
+  await expect(panel(page)).toContainText('in one sentence of its own');
+  await expect(panel(page)).toContainText('picks a full column');
+  await expect(panel(page)).not.toContainText('what he was shown:');
+
+  await page.getByRole('button', { name: /Tic-Tac-Toe/ }).click();
+  await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
+  await expect(panel(page)).toContainText('Make your first move.');
+  await expect(panel(page)).toContainText('Gemini plays O');
+  await expect(panel(page)).toContainText('reasoning:');
+  await expect(panel(page)).toContainText('picks a taken cell');
+  await expect(panel(page)).not.toContainText('in one sentence of its own');
 });
 
 test('the intro stays through the first think without its action, and goes with the first card', async ({
@@ -66,6 +68,8 @@ test('the intro stays through the first think without its action, and goes with 
     });
   });
   await page.goto('/');
+  await page.getByRole('button', { name: /Tic-Tac-Toe/ }).click();
+  await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
   await stageCartRequest(page);
 
   await expect(panel(page).getByRole('status')).toHaveText('Gemini is thinking…');

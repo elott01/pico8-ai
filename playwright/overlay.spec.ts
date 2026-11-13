@@ -56,9 +56,15 @@ const frames = (page: Page) =>
     .locator('iframe')
     .evaluate((frame: HTMLIFrameElement) => (frame.contentWindow as Cart).pico8_state?.frame_number ?? 0);
 
-/** Load the page and wait for the handheld, since the button stays disabled until a cart is up. */
+/**
+ * Load the page with tic-tac-toe in place of Gem-in-Eye, which it starts with, since these press
+ * its board and take its turns. Then wait for the handheld, since the button stays disabled
+ * until a cart is up.
+ */
 async function loaded(page: Page) {
   await page.goto('/');
+  await page.getByRole('button', { name: /Tic-Tac-Toe/ }).tap();
+  await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
   await expect(button(page)).toBeEnabled();
 }
 
@@ -248,7 +254,7 @@ test("a door's load() stays in the overlay", async ({ page }) => {
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: /Gem-in-Eye/ }).tap();
+  // The cart the page starts with
   await expect(page.locator('iframe')).toHaveAttribute('src', /gemini/);
   await page.frameLocator('iframe').locator('#p8_start_button').tap();
   await expect.poll(() => ran, { timeout: 20_000 }).toContain('gemini');

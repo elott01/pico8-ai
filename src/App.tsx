@@ -9,8 +9,8 @@ import type { CartId } from './lib/gpio.ts';
 import styles from './App.module.scss';
 
 export default function App() {
-  // null once Eject has emptied the device.
-  const [game, setGame] = useState<CartId | null>('tic_tac_toe');
+  // The shelf's first cart to start with, and null once Eject has emptied the device.
+  const [game, setGame] = useState<CartId | null>(CART_ORDER[0]);
   // Each cart is a 1.6MB PICO-8 runtime, so a switch is not instant. Latching here stops a
   // second selection racing the first — two `src` writes in flight would leave the poll loop
   // reading whichever iframe won. Cleared when the new cart reports ready.

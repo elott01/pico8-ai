@@ -30,9 +30,15 @@ const cart = (page: Page) =>
 
 const canvasWidth = async (page: Page) => (await cart(page)).width;
 
-/** Load the page and wait for the handheld, since the button stays disabled until a cart is up. */
+/**
+ * Load the page with tic-tac-toe in place of Gem-in-Eye, which it starts with, since these move
+ * its cursor and take its turns. Then wait for the handheld, since the button stays disabled
+ * until a cart is up.
+ */
 async function loaded(page: Page) {
   await page.goto('/');
+  await page.getByRole('button', { name: /Tic-Tac-Toe/ }).click();
+  await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
   await expect(button(page)).toBeEnabled();
 }
 
@@ -292,7 +298,7 @@ test.describe('on a desktop', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: /Gem-in-Eye/ }).click();
+    // The cart the page starts with
     await expect(page.locator('iframe')).toHaveAttribute('src', /gemini/);
     await page.frameLocator('iframe').locator('#p8_start_button').click();
     await expect.poll(() => ran, { timeout: 20_000 }).toContain('gemini');
@@ -326,7 +332,7 @@ test.describe('on a desktop', () => {
   test('Tab reaches it before the cart, which swallows Tab', async ({ page }) => {
     await loaded(page);
     // The last cart on the shelf, which comes right before the handheld's bottom row
-    await page.getByRole('button', { name: /Gem-in-Eye/ }).focus();
+    await page.getByRole('button', { name: /Tic-Tac-Toe/ }).focus();
     await page.keyboard.press('Tab');
     await expect(button(page)).toBeFocused();
   });
