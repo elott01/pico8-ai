@@ -94,12 +94,19 @@ routing switched off, as they do elsewhere. What needed changing was the harness
   leaves or the cart changes. A held arm tips the whole D-pad, and two tip it to a corner. Its
   lip closes on the side pressed in and opens on the far side. The depth is measured from
   layout, since WebKit's screenshots paint 3D flat. The lettering reads `CLICK SCREEN` while
-  keys don't reach the cart, and blinks for each cart key pressed on the page. A cart switch
-  changes it once, with no flicker while the next cart loads, and an eject leaves it alone.
-  Those hold the press like a person and the next cart's page like a slow server, since an
-  instant click and a fast load hide the flicker. Eject, Fullscreen and CRT leave the keyboard
-  in the cart. On `mobile-safari`, the hint never shows, and a tap starts the cart without
-  PICO-8 switching to its touch layout.
+  keys don't reach the cart, and the light beside it flashes for each cart key pressed on the
+  page. Keys that reach the cart flash nothing, and the cart taking the keys cuts a flash
+  short. A cart switch changes the lettering once, with no flicker while the next cart loads,
+  and an eject leaves it alone. Those hold the press like a person and the next cart's page
+  like a slow server, since an instant click and a fast load hide the flicker. Eject,
+  Fullscreen and CRT leave the keyboard in the cart. From 520px the pause button sits between
+  the D-pad and the keys, under a mouse or a finger, with the D-pad's caption still on one
+  line. A narrower window under a mouse keeps the keyboard light and has no pause button, and
+  at 360px the keys still sit beside the D-pad. On `mobile-safari`, the hint never shows: the
+  pause button takes the light's place at the lettering's right edge, without making the row
+  taller, and presses `0x40`. No key's caption is drawn there. A phone's shell gives back
+  their room, and a wider one keeps it, so the shell stays `--device-height`. A tap starts the
+  cart without PICO-8 switching to its touch layout.
 - **`eject.spec.ts`** — Eject empties the device, focus moves to the first cart, a cart goes
   back in, and Tab reaches the bottom row in its drawn order (Fullscreen, Eject, CRT, then the
   volume slider) before the cart's iframe, which swallows Tab. Eject sits on the screen's centre
@@ -117,7 +124,8 @@ routing switched off, as they do elsewhere. What needed changing was the harness
 - **`overlay.spec.ts`** — the phone's fullscreen, on `mobile-safari` only. Fullscreen stretches
   the same iframe over the page, in both orientations, with PICO-8's controller and without its
   icons, and from a scrolled page, which is where it first went wrong. A real touch reaches the
-  controller, Exit puts everything back and touches stop reaching PICO-8 again, and a turn and a
+  controller, whose O and X are traded to sit where the handheld's are, and each circle, tapped,
+  presses the button it shows. Exit puts everything back and touches stop reaching PICO-8 again, and a turn and a
   door both work inside it. The page behind can't scroll and isn't drawn, every touch in the cart
   is cancelled, and Exit returns to the same scroll position. The CRT filter is the handheld's
   own, sits on the game and follows it round a turn of the phone. This engine has no Safari

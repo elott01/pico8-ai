@@ -140,7 +140,7 @@ exercise every loop, and obviously not the model.
 | `vercel dev` | **Local dev — use this.** Serves the frontend *and* the `api/` functions on `localhost:3000`. The only local command where the AI works. |
 | `npm run dev` | Frontend only. `/api/move` and `/api/talk` 404, so no AI — fine for pure UI work. |
 | `npm test` | Unit suite (`node --test`), ~3s, needs nothing. `npm run test:watch` to watch. |
-| `npm run test:playwright` | Browser suite across Chromium, WebKit and mobile Safari. Boots Vite itself; no API key needed. |
+| `npm run test:playwright` | Browser suite across Chromium, WebKit, Firefox and mobile Safari. Boots Vite itself; no API key needed. |
 | `npm run bench` | Prompt benchmark against the real model. **Spends Gemini quota.** |
 | `node bench/talk.ts` | gem-in-eye's dialogue benchmark. Writes every speech to `bench/results/talk.md` for reading. `--dry` spends nothing. |
 | `npm run build` | Production build → `dist/`. Vercel runs this on deploy. |
@@ -189,14 +189,18 @@ public/labels/*.png       each cart's label for the shelf, checked against the c
 src/components/           the handheld, iframe embed, GPIO poll loops, cart shelf, move and
                           talk panels, theme control, About
 src/lib/                  gpio.ts (byte protocol per cart), ai.ts + talk.ts (API clients),
-                          gem-in-eye's memory in localStorage, buttons.ts (the handheld's
-                          controls), site.ts (About's bio and links)
+                          gem-in-eye's memory in localStorage, carts.ts (each cart's name
+                          and description), buttons.ts (the handheld's controls), crt.ts
+                          (the CRT filter's shader), volume.ts (the volume slider's gain),
+                          controller.ts (O and X on the phone's fullscreen controller),
+                          site.ts (About's bio and links)
 src/styles/               design tokens (PICO-8 palette, geometry, the handheld's colours),
                           breakpoints + global reset
 tests/                    node:test suites — fast, no browser, no network
-playwright/               browser suite — Chromium, WebKit, mobile Safari
+playwright/               browser suite — Chromium, WebKit, Firefox, mobile Safari
 bench/                    prompt benchmarks against the real model + recorded results
-scripts/                  headless cart re-export (bundles Gem-in-Eye's two carts), label tool
+scripts/                  headless cart re-export (bundles Gem-in-Eye's two carts), label tool,
+                          cart budget against PICO-8's limits, favicon from gem-in-eye's head
 LICENSE / NOTICE          MIT, plus the Lexaloffle carve-out for public/games/
 ```
 
