@@ -29,6 +29,7 @@ import Handheld from './Handheld.tsx';
 import FullscreenLayer from './FullscreenLayer.tsx';
 import CrtScreen from './CrtScreen.tsx';
 import { BUTTON_KEYS } from '../lib/buttons.ts';
+import { matchHandheld } from '../lib/controller.ts';
 import { readVolume, saveVolume, routeAudio } from '../lib/volume.ts';
 import { CARTS, NO_CART_PANEL } from '../lib/carts.ts';
 import styles from './Pico8Game.module.scss';
@@ -212,7 +213,8 @@ export default function Pico8Game({
     frame?.contentWindow?.p8_request_fullscreen?.();
   }, []);
 
-  // The phone's fullscreen: the iframe stretched over the page, with PICO-8's own controller. The
+  // The phone's fullscreen: the iframe stretched over the page, with PICO-8's own controller, its
+  // O and X traded to match the handheld (lib/controller.ts). The
   // same iframe, because the poll loops live here, and a popover because the top layer is the way
   // out from under the handheld's transform, which traps a plain position: fixed. Everything
   // about the cart's page is the export's own switches, which keepTouchOut otherwise holds off.
@@ -228,6 +230,9 @@ export default function Pico8Game({
     letTouchInRef.current = true;
     win.p8_allow_mobile_menu = false; // its fullscreen and close icons do nothing here
     win.p8_touch_detected = true;
+    // Its O and X where the handheld has them, so going fullscreen doesn't swap them. Kept
+    // after Exit, since nothing reaches its controller then.
+    void matchHandheld(win);
     const release = holdPageStill(win);
     return () => {
       release();

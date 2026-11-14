@@ -388,6 +388,16 @@ Breaking any of these fails silently, so verify them when touching the relevant 
     WebKit's emulation can't drag; Chromium's can, with `Input.synthesizeScrollGesture`. WebKit stops the
     frames of an iframe out of sight, so PICO-8's layout and the game wait while it's scrolled
     away, and an overlay left off screen looks like a controller that never appeared.
+    - **PICO-8's controller has O and X the other way round from the handheld**, X lower-left,
+      so `matchHandheld` (`src/lib/controller.ts`) trades them, or going fullscreen swaps them
+      under the player's thumbs. It redraws `p8_gfx_dat.controls_right_panel` with the two
+      circles turned 180° about the point between them, and wraps `pico8_buttons_event`, which
+      every touch listener calls by name, to trade the two bits after it. That handler starts each
+      touch from 0, so trading after it can't drift. The picture and the bits trade together or
+      not at all: if `findCircles` doesn't find the picture it expects, both stay PICO-8's,
+      since buttons that don't do what they show are worse than buttons on the wrong side.
+      `tests/controller.test.ts` reads the picture out of every export, so a PICO-8 that redraws
+      it fails there, and `overlay.spec.ts` taps each circle.
   - **A control in real fullscreen has to be inside the cart's page.** While the iframe is
     fullscreen it takes every click, so a `popover` in this page draws over it and can't be
     pressed, in Chromium and WebKit alike. The overlay isn't real fullscreen, so its Exit stays

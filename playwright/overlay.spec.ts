@@ -3,7 +3,8 @@
 //
 // It's the same iframe, because the page's poll loops are what answer the cart, so nothing here
 // may reload it. And all of it runs on the export's private switches, p8_touch_detected and
-// p8_allow_mobile_menu, and the numbers of its layout, so a new PICO-8 could change any of them.
+// p8_allow_mobile_menu, the numbers of its layout, and its controller's picture and touch
+// handler, which the overlay trades O and X in, so a new PICO-8 could change any of them.
 //
 // This engine isn't a real iPhone: it has no Safari bars and no home indicator.
 
@@ -113,6 +114,42 @@ const recordTouches = (page: Page) =>
 const touches = (page: Page) =>
   page.locator('iframe').evaluate((frame: HTMLIFrameElement) => (frame.contentWindow as Cart).pressed);
 
+// The centres of the controller picture's two circles, in its own 300 x 350 pixels: 50 to one
+// of PICO-8's units, the picture spanning the window's corner, 6 units across and 7 down.
+const UPPER_RIGHT = { x: 205.5, y: 148.5 };
+const LOWER_LEFT = { x: 94.5, y: 251.5 };
+
+/** Where a point in the controller's picture is in the window. */
+function inPicture(page: Page, { x, y }: { x: number; y: number }) {
+  const { width, height } = page.viewportSize()!;
+  const unit = Math.min(Math.min(width, height) / 12, 40);
+  return { x: width - unit * 6 + (x * unit) / 50, y: height - unit * 7 + (y * unit) / 50 };
+}
+
+/**
+ * Which symbol the controller's picture draws in each circle, as shown. X's cross runs through
+ * the middle, and O's ring leaves it empty.
+ */
+const drawn = (page: Page) =>
+  page.locator('iframe').evaluate(
+    async (frame: HTMLIFrameElement, centres) => {
+      const img = new Image();
+      img.src = frame.contentDocument!.getElementById('controls_right_panel')!.getAttribute('src')!;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const g = canvas.getContext('2d')!;
+      g.drawImage(img, 0, 0);
+      const symbol = ({ x, y }: { x: number; y: number }) => {
+        const { data } = g.getImageData(Math.floor(x) - 2, Math.floor(y) - 2, 5, 5);
+        return data.some((value, i) => i % 4 === 3 && value > 32) ? 'X' : 'O';
+      };
+      return { upperRight: symbol(centres.upperRight), lowerLeft: symbol(centres.lowerLeft) };
+    },
+    { upperRight: UPPER_RIGHT, lowerLeft: LOWER_LEFT },
+  );
+
 /** Where PICO-8's handler reads the right of its D-pad: three of its units in from each edge. */
 function rightOfDpad(page: Page) {
   const { width, height } = page.viewportSize()!;
@@ -166,6 +203,28 @@ for (const [shape, device] of [
       const { x, y } = rightOfDpad(page);
       await page.touchscreen.tap(x, y);
       await expect.poll(() => touches(page)).toContain(BUTTON.right);
+    });
+
+    // PICO-8 draws X lower-left and O upper-right; the handheld has them the other way round,
+    // and the overlay trades PICO-8's to match. The picture and the buttons trade together, so
+    // each circle has to press what it shows.
+    test("its O and X are where the handheld's are, drawn and pressed", async ({ page }) => {
+      await loaded(page);
+      await start(page);
+      await enter(page);
+      await expect.poll(() => drawn(page)).toEqual({ upperRight: 'X', lowerLeft: 'O' });
+      await recordTouches(page);
+
+      for (const [centre, bit, other] of [
+        [LOWER_LEFT, BUTTON.o, BUTTON.x],
+        [UPPER_RIGHT, BUTTON.x, BUTTON.o],
+      ] as const) {
+        const { x, y } = inPicture(page, centre);
+        await page.touchscreen.tap(x, y);
+        await expect.poll(() => touches(page)).toContain(bit);
+        expect(await touches(page)).not.toContain(other);
+        await page.locator('iframe').evaluate((frame: HTMLIFrameElement) => ((frame.contentWindow as Cart).pressed = []));
+      }
     });
 
     test('Exit puts everything back, and touches stop at the door again', async ({ page }) => {
