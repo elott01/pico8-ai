@@ -63,8 +63,9 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
 - **`src/components/Pico8Game.tsx`** embeds the cart's *exported `.html`* in an iframe (not the
   `.js` — the export needs its own shell) and polls `contentWindow.pico8_gpio` every 100ms.
   **`Handheld.tsx`** draws the device around it: the shell, the cart in its slot, the POWER
-  and GEMINI lights, the D-pad and keys, the speaker grille, the Fullscreen, Eject and CRT
-  buttons, and CRT's light and the volume slider in the bottom edge. `Pico8Game` passes the screen in as
+  and GEMINI lights, the keyboard's light, the D-pad and keys, the speaker grille and the pause
+  button, the Fullscreen, Eject and CRT buttons, and CRT's light and the volume slider in the
+  bottom edge. `Pico8Game` passes the screen in as
   `children` and keeps everything about the cart. **`App.tsx`** owns the page's grid (header,
   carts, device, panel, About), rearranged at the widths in `src/styles/_breakpoints.scss`.
 - **`src/lib/gpio.ts`** is the byte-protocol source of truth, one `PROTOCOLS` entry per game
@@ -230,7 +231,8 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   are unreachable by keyboard without it — Tab cycles the iframe and body only. It looks like
   something a linter should strip; deleting it silently makes the page mouse-only for a
   large share of visitors. Verified against Playwright's WebKit, which reproduces the
-  default. The handheld's D-pad and keys are the exception, `-1` on purpose (see below).
+  default. The handheld's D-pad, keys and pause button are the exception, `-1` on purpose
+  (see below).
 - **The PICO-8 export swallows Tab.** Its keydown handler blocks keyCode 9 with the cursor
   keys ("block only cursors, M R P, tab"), so once focus is inside a running cart only a
   mouse click gets it back out. Catching Tab from the page was tried and reverted: a
@@ -287,8 +289,19 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   the capture phase on each new iframe's window, unless the overlay has let them in. A tap
   still clicks, so the play button still starts the cart. `controls.spec.ts` checks this on the
   mobile project.
-- **The handheld's D-pad and keys write `pico8_buttons[0]`**, the export's hook for on-page
-  buttons, with the bits in `src/lib/buttons.ts`. They let go of everything on a cart change,
+- **The handheld's D-pad, keys and pause button write `pico8_buttons[0]`**, the export's hook
+  for on-page buttons, with the bits in `src/lib/buttons.ts`. Pause is `0x40`, the bit PICO-8's
+  own touch controller sets for its menu button, and it opens the pause menu, where tic-tac-toe
+  and Connect Four keep their two-player switch. Without it, a player with no keyboard could
+  never reach that. Its face says PAUSE as O's says O, and its caption names the key, `OR P`.
+  Not Enter, which pauses too: pressed while the page has focus, it presses whatever button has
+  focus, such as the cart just picked. It sits under the grille, between the D-pad and the keys,
+  wherever they fit three across: from `$middle-column` (520px), a narrow window's shell
+  included. Under 502px the D-pad's caption would wrap, and the shell grow a line. A phone's
+  shell is narrower, so there it's at the lettering's right edge, under a finger only (`.phonePause`):
+  the keyboard's light isn't drawn under a finger, and a window that narrow under a mouse keeps
+  the light and has P. Two buttons in the DOM, never both shown. The phone's overlay has
+  PICO-8's own. They let go of everything on a cart change,
   since input held across a `load()` is lost, and when the tab is hidden. Not on window blur,
   which fires every time focus goes into the cart. A press leaves focus where it was, so the
   cart's own keys keep working. They are out of the tab order (`tabIndex -1`) on purpose:
@@ -298,10 +311,18 @@ Breaking any of these fails silently, so verify them when touching the relevant 
     `pico8_buttons`: the runtime already has the key, and `pressButtons` overwrites that whole
     int on every press. Keys pressed with focus outside the cart don't move anything, which
     is right, because the cart didn't get them either.
-  - **The lettering says when keys can't reach the cart.** While the cart's window lacks focus
-    (`watchFocus` in `Pico8Game.tsx`), `P · PAUSE MENU` reads `CLICK SCREEN`, and a cart key
-    pressed on the page blinks it. Both lines share one grid cell, so the swap can't wrap the
-    row and make `--device-height` wrong. The hint follows a cart being in the slot, not POWER:
+  - **The keyboard's light says whether keys reach the cart.** It's lit beside `KEYBOARD INPUT`
+    while the cart's window has focus (`watchFocus` in `Pico8Game.tsx`). While it hasn't, the
+    light is dark and the words read `CLICK SCREEN`. A cart key pressed on the page then flashes
+    the light red, not GEMINI's orange, so each colour means one thing, and the words stay
+    still. Focus going into the cart, or the slot emptying, cuts a flash short, so it never
+    covers the green or lights an empty slot.
+    With the slot empty it's dark beside `KEYBOARD INPUT`, since there's nothing to click into.
+    Under a finger the line isn't drawn at all. The light is one element after the words, at the
+    row's edge as GEMINI's is on the bezel, so it never moves when they change, as a light on
+    real hardware wouldn't. Both lines of words share one grid cell, so the swap can't wrap the
+    row and make `--device-height` wrong, and the light is empty, so it sits on their baseline
+    and can't make the row taller. The hint follows a cart being in the slot, not POWER:
     tied to POWER, a cart switch showed it, dropped it while the next cart loaded, and showed it
     again. Every handheld button keeps focus on a mouse press (`keepFocus` in `Handheld.tsx`).
     One that doesn't hands the keyboard to the page, and flashes the hint for as long as it's

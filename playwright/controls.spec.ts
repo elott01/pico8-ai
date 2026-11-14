@@ -1,6 +1,6 @@
-// The handheld's D-pad and O/X keys. They press the cart's buttons through pico8_buttons[0],
-// the export's hook for on-page controls, and on a touch screen they are the controls: PICO-8's
-// own touch layout is kept from switching on. They also move with the keyboard.
+// The handheld's D-pad, O/X keys and pause button. They press the cart's buttons through
+// pico8_buttons[0], the export's hook for on-page controls, and on a touch screen they are the
+// controls: PICO-8's own touch layout is kept from switching on. They also move with the keyboard.
 
 import { test, expect, type Page } from '@playwright/test';
 
@@ -11,6 +11,7 @@ const CONTROLS = [
   ['Right', 1 << 1],
   ['O button', 1 << 4],
   ['X button', 1 << 5],
+  ['Pause button', 1 << 6],
 ] as const;
 
 const control = (page: Page, name: string) => page.getByRole('button', { name, exact: true });
@@ -200,6 +201,7 @@ test.describe('the keyboard', () => {
     ['x', 'X button'],
     ['v', 'X button'],
     ['m', 'X button'],
+    ['p', 'Pause button'],
   ] as const;
 
   /** Load the page with focus in the cart, where the keys go. */
@@ -287,14 +289,16 @@ test.describe('the keyboard', () => {
   });
 });
 
-// The lettering's P line says CLICK SCREEN while keys don't reach the cart, and blinks when one
-// meant for it lands on the page. Both lines are always in the DOM, stacked so the row keeps its
-// size, so these check what's visible rather than what's there.
+// The lettering's keyboard light is lit beside KEYBOARD INPUT while the cart has the keys, and
+// dark beside CLICK SCREEN while it hasn't, flashing orange when a key meant for the cart lands
+// on the page. Both lines are always in the DOM, stacked so the row keeps its size, so these
+// check what's visible rather than what's there. The light is one, and doesn't move.
 test.describe("the keyboard's way in", () => {
   test.skip(({ isMobile }) => !!isMobile, 'no keyboard');
 
   const hint = (page: Page) => page.getByText('CLICK SCREEN', { exact: true });
-  const pause = (page: Page) => page.getByText('P · PAUSE MENU', { exact: true });
+  const keyboard = (page: Page) => page.getByText('KEYBOARD INPUT', { exact: true });
+  const light = (page: Page) => page.locator('[class*="keyLight"]');
 
   /** Connect Four's page held back, as a server slower than the local one would. */
   const slowConnectFour = (page: Page, ms: number) =>
@@ -317,8 +321,8 @@ test.describe("the keyboard's way in", () => {
       const seen: string[] = [];
       (window as unknown as { lettering: string[] }).lettering = seen;
       const read = () => {
-        const pause = [...document.querySelectorAll('span')].find((s) => s.textContent === 'P · PAUSE MENU');
-        const now = pause && getComputedStyle(pause).visibility === 'visible' ? 'P · PAUSE MENU' : 'CLICK SCREEN';
+        const keyboard = [...document.querySelectorAll('span')].find((s) => s.textContent?.trim() === 'KEYBOARD INPUT');
+        const now = keyboard && getComputedStyle(keyboard).visibility === 'visible' ? 'KEYBOARD INPUT' : 'CLICK SCREEN';
         if (seen.at(-1) !== now) seen.push(now);
       };
       new MutationObserver(read).observe(document.body, { subtree: true, childList: true, attributes: true });
@@ -330,11 +334,16 @@ test.describe("the keyboard's way in", () => {
   test('the lettering says to click the screen until the cart has the keyboard', async ({ page }) => {
     await loaded(page);
     await expect(hint(page)).toBeVisible();
-    await expect(pause(page)).toBeHidden();
+    await expect(keyboard(page)).toBeHidden();
+    await expect(light(page)).not.toHaveClass(/lit/);
+    const dark = await light(page).boundingBox();
 
     await page.locator('iframe').click();
-    await expect(pause(page)).toBeVisible();
+    await expect(keyboard(page)).toBeVisible();
+    await expect(light(page)).toHaveClass(/lit/);
     await expect(hint(page)).toBeHidden();
+    // In the same place, lit as dark: the words change beside it, not the light
+    expect(await light(page).boundingBox()).toEqual(dark);
 
     // The page's left gutter: a click on nothing in particular still takes the keyboard
     await page.mouse.click(4, 300);
@@ -347,13 +356,13 @@ test.describe("the keyboard's way in", () => {
   test("the handheld's buttons leave the keyboard in the cart", async ({ page }) => {
     await loaded(page);
     await page.locator('iframe').click();
-    await expect(pause(page)).toBeVisible();
+    await expect(keyboard(page)).toBeVisible();
 
     for (const name of ['Eject', 'Fullscreen', 'CRT']) {
       await page.getByRole('button', { name, exact: true }).hover();
       await page.mouse.down();
       expect(await page.evaluate(() => document.activeElement?.tagName), name).toBe('IFRAME');
-      await expect(pause(page), name).toBeVisible();
+      await expect(keyboard(page), name).toBeVisible();
       await page.mouse.move(4, 300);
       await page.mouse.up();
     }
@@ -362,14 +371,14 @@ test.describe("the keyboard's way in", () => {
   test('the CRT button, clicked, still leaves the keyboard in the cart', async ({ page }) => {
     await loaded(page);
     await page.locator('iframe').click();
-    await expect(pause(page)).toBeVisible();
+    await expect(keyboard(page)).toBeVisible();
 
     const crt = page.getByRole('button', { name: 'CRT', exact: true });
     const before = await crt.getAttribute('aria-pressed');
     await crt.click();
     await expect(crt).not.toHaveAttribute('aria-pressed', before!);
     expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('IFRAME');
-    await expect(pause(page)).toBeVisible();
+    await expect(keyboard(page)).toBeVisible();
   });
 
   // The card takes focus as it's pressed, and the next cart takes a moment to load. The hint
@@ -378,56 +387,75 @@ test.describe("the keyboard's way in", () => {
     await slowConnectFour(page, 500);
     await loaded(page);
     await page.locator('iframe').click();
-    await expect(pause(page)).toBeVisible();
+    await expect(keyboard(page)).toBeVisible();
     const seen = await recordLettering(page);
 
     await pressLikeAPerson(page, /Connect Four/);
     await expect(page.locator('iframe')).toHaveAttribute('src', /connect_four/);
     await expect(control(page, 'Left')).toBeEnabled();
-    expect(await seen()).toEqual(['P · PAUSE MENU', 'CLICK SCREEN']);
+    expect(await seen()).toEqual(['KEYBOARD INPUT', 'CLICK SCREEN']);
   });
 
   test('ejecting leaves the lettering alone, and the next cart changes it once', async ({ page }) => {
     await slowConnectFour(page, 500);
     await loaded(page);
     await page.locator('iframe').click();
-    await expect(pause(page)).toBeVisible();
+    await expect(keyboard(page)).toBeVisible();
     const seen = await recordLettering(page);
 
     await pressLikeAPerson(page, 'Eject');
     await expect(page.locator('iframe')).toHaveCount(0);
-    expect(await seen()).toEqual(['P · PAUSE MENU']);
+    expect(await seen()).toEqual(['KEYBOARD INPUT']);
+    // With no cart for keys to reach, the light goes out without asking for a click
+    await expect(light(page)).not.toHaveClass(/lit/);
 
     await pressLikeAPerson(page, /Connect Four/);
     await expect(control(page, 'Left')).toBeEnabled();
-    expect(await seen()).toEqual(['P · PAUSE MENU', 'CLICK SCREEN']);
+    expect(await seen()).toEqual(['KEYBOARD INPUT', 'CLICK SCREEN']);
   });
 
-  test("a cart's key pressed on the page blinks the hint, and each one blinks it again", async ({ page }) => {
+  test("a cart's key pressed on the page flashes the light, and each one flashes it again", async ({ page }) => {
     await loaded(page);
     // Neither a key the cart ignores nor a shortcut
     await page.keyboard.press('a');
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(100);
-    await expect(hint(page)).not.toHaveClass(/missed/);
+    await expect(light(page)).not.toHaveClass(/missed/);
 
     await page.keyboard.press('ArrowLeft');
-    await expect(hint(page)).toHaveClass(/missed/);
+    await expect(light(page)).toHaveClass(/missed/);
+    // The words stay still beside it
+    await expect(hint(page)).not.toHaveClass(/missed/);
 
     // A fresh element is a restarted animation
-    await hint(page).evaluate((el) => (el.dataset.seen = '1'));
+    await light(page).evaluate((el) => (el.dataset.seen = '1'));
     await page.keyboard.press('p');
-    await expect(hint(page)).not.toHaveAttribute('data-seen');
-    await expect(hint(page)).toHaveClass(/missed/);
+    await expect(light(page)).not.toHaveAttribute('data-seen');
+    await expect(light(page)).toHaveClass(/missed/);
   });
 
-  test('keys that reach the cart blink nothing', async ({ page }) => {
+  test('keys that reach the cart flash nothing', async ({ page }) => {
     await loaded(page);
     await page.locator('iframe').focus();
-    await expect(pause(page)).toBeVisible();
+    await expect(keyboard(page)).toBeVisible();
     await page.keyboard.press('ArrowLeft');
     await page.waitForTimeout(100);
-    await expect(hint(page)).not.toHaveClass(/missed/);
+    await expect(light(page)).not.toHaveClass(/missed/);
+  });
+
+  // The flash runs over a second, and a player who sees it clicks straight in
+  test('the cart taking the keys cuts a flash short, and losing them again starts none', async ({ page }) => {
+    await loaded(page);
+    await page.keyboard.press('ArrowLeft');
+    await expect(light(page)).toHaveClass(/missed/);
+
+    await page.locator('iframe').click();
+    await expect(light(page)).toHaveClass(/lit/);
+    await expect(light(page)).not.toHaveClass(/missed/);
+
+    await page.mouse.click(4, 300);
+    await expect(hint(page)).toBeVisible();
+    await expect(light(page)).not.toHaveClass(/missed/);
   });
 
   // The cart keeps focus through a click that doesn't move it, and WebKit sends no blur from
@@ -436,7 +464,7 @@ test.describe("the keyboard's way in", () => {
     await slowConnectFour(page, 1000);
     await loaded(page);
     await page.locator('iframe').focus();
-    await expect(pause(page)).toBeVisible();
+    await expect(keyboard(page)).toBeVisible();
 
     await page.getByRole('button', { name: /Connect Four/ }).dispatchEvent('click');
     await expect(hint(page)).toBeVisible();
@@ -446,11 +474,70 @@ test.describe("the keyboard's way in", () => {
   });
 });
 
-test('on a touch screen the lettering never asks for a click', async ({ page, isMobile }) => {
+// A phone's shell has no room for the pause button between the D-pad and the keys, and a finger
+// no keyboard for the light to speak for, so the button takes the light's place.
+test("on a phone the pause button takes the keyboard light's place in the lettering", async ({ page, isMobile }) => {
   test.skip(!isMobile, 'needs a touch-enabled context');
   await loaded(page);
-  await expect(page.getByText('P · PAUSE MENU', { exact: true })).toBeVisible();
+  await expect(page.getByText('KEYBOARD INPUT', { exact: true })).toBeHidden();
+  await expect(page.locator('[class*="keyLight"]')).toBeHidden();
   await expect(page.getByText('CLICK SCREEN', { exact: true })).toBeHidden();
+
+  // At the row's right edge, and no taller than the row was without it
+  const pause = control(page, 'Pause button');
+  await expect(pause).toHaveText('PAUSE');
+  const row = (await page.locator('[class*="lettering"]').boundingBox())!;
+  const bar = (await pause.boundingBox())!;
+  expect(row.height).toBe(20);
+  expect(bar.y).toBeCloseTo(row.y, 0);
+  expect(bar.x + bar.width).toBeCloseTo(row.x + row.width, 0);
+
+  await finger(page, 'Pause button', 'pointerdown', 1);
+  expect(await held(page)).toBe(1 << 6);
+  await finger(page, 'Pause button', 'pointerup', 1);
+  expect(await held(page)).toBe(0);
+});
+
+// A shell narrower than the full-size one, with room between the D-pad and the keys, has the
+// pause button there, under a mouse or a finger. $middle-column is 520: at the least room it
+// takes, the D-pad's caption must stay on one line, or the shell grows a line.
+test('a window with room between the D-pad and the keys has the pause button there', async ({ page }) => {
+  await page.setViewportSize({ width: 520, height: 900 });
+  await loaded(page);
+  const pause = control(page, 'Pause button');
+  await expect(pause).toHaveCount(1);
+  await expect(page.getByText('OR P', { exact: true })).toBeVisible();
+
+  const right = (await control(page, 'Right').boundingBox())!;
+  const o = (await control(page, 'O button').boundingBox())!;
+  const bar = (await pause.boundingBox())!;
+  expect(bar.x).toBeGreaterThan(right.x + right.width);
+  expect(bar.x + bar.width).toBeLessThan(o.x);
+
+  const arrows = (await page.getByText('OR ARROW KEYS', { exact: true }).boundingBox())!;
+  const z = (await page.getByText('OR Z', { exact: true }).boundingBox())!;
+  expect(arrows.height).toBe(z.height);
+});
+
+// The phone's shell in a window under a mouse, which has the keyboard, and P with it
+test('a narrow window under a mouse keeps the keyboard light, and has no pause button', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'needs a mouse');
+  await page.setViewportSize({ width: 393, height: 852 });
+  await loaded(page);
+  await expect(page.getByText('CLICK SCREEN', { exact: true })).toBeVisible();
+  await expect(control(page, 'Pause button')).toHaveCount(0);
+});
+
+// 360px is a common Android phone, and narrower than the iPhone SE and mini's 375. Both wrapped
+// the keys under the D-pad once.
+test('a 360px window keeps the keys beside the D-pad', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  await loaded(page);
+  const right = (await control(page, 'Right').boundingBox())!;
+  const down = (await control(page, 'Down').boundingBox())!;
+  const o = (await control(page, 'O button').boundingBox())!;
+  expect(o.x).toBeGreaterThan(right.x + right.width);
+  expect(o.y).toBeLessThan(down.y + down.height);
 });
 
 test('a tap on the cart starts it without PICO-8 switching to its touch layout', async ({ page, isMobile }) => {

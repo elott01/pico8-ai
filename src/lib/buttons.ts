@@ -9,6 +9,9 @@ export const BUTTON = {
   down: 1 << 3,
   o: 1 << 4,
   x: 1 << 5,
+  // The pause button, which opens PICO-8's pause menu: "0x40 menu" in the export's own notes,
+  // and the bit its touch controller's menu button sets.
+  pause: 1 << 6,
 } as const;
 
 // The keys PICO-8 reads as those same buttons, by keyCode, since that's what its runtime reads.
@@ -24,6 +27,9 @@ export const BUTTON_KEYS: Record<number, number> = {
   88: BUTTON.x, // X
   86: BUTTON.x, // V
   77: BUTTON.x, // M
+  // Enter opens the pause menu too, but on the page it presses whatever button has focus, so
+  // it isn't a key meant for the cart.
+  80: BUTTON.pause, // P
 };
 
 declare global {

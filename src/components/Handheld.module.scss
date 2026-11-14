@@ -175,10 +175,24 @@
   font-weight: 700;
 }
 
-// P · PAUSE MENU and CLICK SCREEN, stacked in one cell so the row is always as wide as the
+// The words, then the keyboard's light, at the row's right edge as GEMINI's light is at the
+// bezel's, so the light stays in one place whichever words show.
+.keysLine {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+
+  // No keyboard to speak of under a finger: TOUCH_INPUT in Pico8Game.tsx. Gone rather than
+  // hidden, which leaves the model's name alone in a row that can only get shorter.
+  @media (hover: none), (pointer: coarse) {
+    display: none;
+  }
+}
+
+// KEYBOARD INPUT and CLICK SCREEN, stacked in one cell so the row is always as wide as the
 // longer. A swap that changed its width could wrap the row and make the shell taller than
 // --device-height says.
-.keysLine {
+.keysWords {
   display: grid;
   justify-items: end;
 
@@ -187,50 +201,56 @@
   }
 }
 
+// The bezel's LED, set into the face. Empty, so its baseline is its bottom edge: it sits on the
+// words' baseline, inside their line, and can't make the row taller.
+.keyLight {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--led-off);
+}
+
+.lit {
+  background: var(--led-power);
+}
+
 .reconnect {
   visibility: hidden;
 }
 
 .away {
-  .pause {
+  .keyboard {
     visibility: hidden;
   }
 
   .reconnect {
     visibility: visible;
   }
-
-  // No keyboard to point to under a finger: TOUCH_INPUT in Pico8Game.tsx
-  @media (hover: none), (pointer: coarse) {
-    .pause {
-      visibility: visible;
-    }
-
-    .reconnect {
-      visibility: hidden;
-    }
-  }
 }
 
-// A key meant for the cart reached the page: three blinks, at GEMINI's dim. Under reduced
-// motion the hint just stays lit.
+// A key meant for the cart reached the page: the light flashes red three times and goes dark
+// again, while the words beside it stay still and say what to do. Red, not GEMINI's orange, so
+// each colour on the device means one thing. Under reduced
+// motion global.scss's reset cuts it to nothing, and the words alone do that.
 .missed {
-  animation: blink 0.4s steps(1, end) 3;
+  animation: missed 0.4s steps(1, end) 3;
+}
 
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
+// Red for the first half, dark for the second
+@keyframes missed {
+  0% {
+    background: var(--led-missed);
+  }
+
+  50% {
+    background: var(--led-off);
   }
 }
 
-.controls {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-  padding: 0 4px;
-  // Held, not dragged or selected: a long press mustn't scroll the page, zoom, or select
-  // the captions.
+// The buttons a finger holds: the D-pad, the keys and the pause button in .controls, and the
+// pause button again in .phonePause. Held, not dragged or selected: a long press mustn't scroll
+// the page, zoom, or select the captions.
+@mixin held-buttons {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -253,12 +273,28 @@
       outline-offset: 3px;
     }
   }
+}
 
-  // Three columns, which put the speaker grille on the shell's centre line between the D-pad and
-  // the keys. Only where the handheld is full-size: a phone's shell has no room for the grille.
-  @media (min-width: bp.$full-device) {
+// On a phone's shell, the D-pad and the keys at either edge. At least 4px apart, which keeps
+// them side by side from a 358px window: the D-pad's column is its caption's 150px and the keys
+// are 132, and 24px apart they wrapped on a 360 or 375px phone. Narrower still, the keys go
+// under the D-pad.
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px 4px;
+  padding: 0 4px;
+  @include held-buttons;
+
+  // Three columns, which put the grille and the pause button on the shell's centre line between
+  // the D-pad and the keys. Wherever they fit: the full-size handheld, and a narrow window's
+  // shell. A phone's has no room.
+  @media (min-width: bp.$middle-column) {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
+    column-gap: 24px;
 
     > .control {
       justify-self: start;
@@ -270,14 +306,25 @@
   }
 }
 
-// Lifted to the D-pad's middle, which the caption under it pushes down.
-.grille {
+// The middle column, between the D-pad and the keys: the speaker grille, and under it the pause
+// button. Stretched to the row's height, which the D-pad and its caption set, so the button's
+// caption ends in line with theirs and the grille is centred in the room above the button.
+// From $middle-column only: a phone's shell has no room for it, so the pause button moves to
+// .phonePause and the grille goes.
+.middle {
   display: none;
-  margin-bottom: 24px;
 
-  @media (min-width: bp.$full-device) {
-    display: block;
+  @media (min-width: bp.$middle-column) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    align-self: stretch;
   }
+}
+
+.grille {
+  margin-block: auto;
 }
 
 .hole {
@@ -661,5 +708,58 @@
     transform: translateY(4px);
     box-shadow: none;
     padding-bottom: 4px;
+  }
+}
+
+// The pause button on a phone's shell, under a finger: at the lettering's right edge, where the
+// keyboard's light would be (.keysLine is drawn under a mouse only). Centred on the row rather
+// than its baseline, so the bar, as tall as the row, can't make it taller.
+.phonePause {
+  display: none;
+  align-self: center;
+  @include held-buttons;
+
+  @media (hover: none), (pointer: coarse) {
+    display: flex;
+  }
+
+  // A shell with room has it under the grille
+  @media (min-width: bp.$middle-column) {
+    display: none;
+  }
+}
+
+// The pause button: a bar in the D-pad's navy with the bottom row's shadow, and PAUSE on its
+// face as O and X carry theirs. The ::before makes it 44px tall to press, reaching 12px past
+// the top and bottom, which stays clear of the grille and the caption's letters, and of the
+// screen's glass and the D-pad on a phone.
+.controls .pauseButton,
+.phonePause .pauseButton {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 20px;
+  // Lifts the word into the face above the shadow, as .key does its letter
+  padding-bottom: 6px;
+  border-radius: 4px;
+  background: var(--recess);
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.35);
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--btn-ink);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -12px 0;
+  }
+
+  // Pressed in, as the keys are
+  &.held {
+    transform: translateY(4px);
+    box-shadow: none;
   }
 }

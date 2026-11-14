@@ -46,10 +46,6 @@ declare global {
 // Where the D-pad and keys are pressed by a finger, and fullscreen has to bring its own.
 const TOUCH_INPUT = '(hover: none), (pointer: coarse)';
 
-// P, PICO-8's pause key, which the handheld's lettering names. Enter opens the pause menu too,
-// but on the page it presses whatever button has focus, so it isn't a key meant for the cart.
-const PAUSE_KEY = 80;
-
 // 'empty' is no cart in the device at all: ejected.
 type CartStatus = 'loading' | 'ready' | 'missing' | 'empty';
 
@@ -166,16 +162,21 @@ export default function Pico8Game({
   }, [game, applyStatus]);
 
   // A key the cart would have taken, pressed while the page has the keyboard: the moment a
-  // player finds the cart isn't listening, so the lettering blinks its hint. The key itself is
+  // player finds the cart isn't listening, so the keyboard's light flashes. The key itself is
   // left alone. Arrow keys still scroll the page, since someone reading About may mean them, and
   // moving focus into the cart unasked would be focus moving invisibly. Repeats from a held key
   // count once, and anything under a modifier is a shortcut, not a game key. It listens whenever
-  // the hint shows, which is while a cart is in, loading or not.
+  // the hint shows, which is while a cart is in, loading or not. Once the cart has the keys, or
+  // the slot is empty, the count goes back to 0, which stops a flash still running: it would
+  // cover the green light, or light up an empty slot.
   useEffect(() => {
-    if (game === null || keyboardInCart) return;
+    if (game === null || keyboardInCart) {
+      setMissedKeys(0);
+      return;
+    }
     const missed = (event: KeyboardEvent) => {
       if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.keyCode in BUTTON_KEYS || event.keyCode === PAUSE_KEY) setMissedKeys((n) => n + 1);
+      if (event.keyCode in BUTTON_KEYS) setMissedKeys((n) => n + 1);
     };
     window.addEventListener('keydown', missed);
     return () => window.removeEventListener('keydown', missed);

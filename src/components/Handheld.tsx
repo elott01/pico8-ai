@@ -1,7 +1,9 @@
 // The handheld the cart plays in: the lavender shell, the cart standing in its slot, the
 // bezel with its two status lights and the black glass the screen sits in, the printed
-// lettering, the D-pad and O/X keys with the speaker grille between them, the Fullscreen,
-// Eject and CRT buttons, and in the bottom edge CRT's light and the volume slider.
+// lettering and the keyboard's light, the D-pad and O/X keys with the speaker grille and the
+// pause button between them (on a phone's shell, the pause button in the lettering instead),
+// the Fullscreen, Eject and CRT buttons, and in the bottom edge CRT's light and the volume
+// slider.
 //
 // Pico8Game owns the cart and passes the screen in as `children`. The D-pad and keys report
 // what's held through `onButtons`, as the bitfield in lib/buttons.ts, and Pico8Game hands
@@ -256,14 +258,30 @@ export default function Handheld({
 
       <div className={styles.lettering}>
         <span className={styles.model}>GEMBOY-8</span>
-        {/* P reaches the cart only while it has the keyboard, so otherwise this line says how to
-            give it back. Both stay in the DOM in one cell, so the swap can't resize the row. */}
+        {/* The keyboard's light, lit while the cart has the keyboard. While it hasn't, the words
+            beside it say how to give it back, and a key meant for the cart flashes it. Both lines
+            stay in the DOM in one cell, so the swap can't resize the row, and the light comes
+            after them, at the edge as GEMINI's is on the bezel, so it stays put whichever shows.
+            With the slot empty there's no cart for keys to reach, so it's dark without asking
+            for a click. */}
         <span className={`${styles.keysLine} ${cartName !== null && !keyboardInCart ? styles.away : ''}`}>
-          <span className={styles.pause}>P · PAUSE MENU</span>
-          {/* Keyed so each missed key remounts it, which restarts the blink */}
-          <span key={missedKeys} className={`${styles.reconnect} ${missedKeys ? styles.missed : ''}`}>
-            CLICK SCREEN
+          <span className={styles.keysWords}>
+            <span className={styles.keyboard}>KEYBOARD INPUT</span>
+            <span className={styles.reconnect}>CLICK SCREEN</span>
           </span>
+          {/* Keyed so each missed key remounts it, which restarts the flash */}
+          <span
+            key={missedKeys}
+            className={`${styles.keyLight} ${cartName !== null && keyboardInCart ? styles.lit : ''} ${missedKeys ? styles.missed : ''}`}
+            aria-hidden="true"
+          />
+        </span>
+        {/* The pause button on a phone's shell, which has no room for it between the D-pad and
+            the keys. Only under a finger: there's no keyboard, so the keyboard's light isn't
+            drawn, and this takes its place. A window that narrow under a mouse shows the light,
+            and has P. No caption, since a finger has no key to name. */}
+        <span className={styles.phonePause}>
+          <button {...control(BUTTON.pause, styles.pauseButton, 'Pause button')}>PAUSE</button>
         </span>
       </div>
 
@@ -287,7 +305,14 @@ export default function Handheld({
           </div>
           <span className={styles.caption}>OR ARROW KEYS</span>
         </div>
-        <Grille />
+        {/* Its face says PAUSE as O's says O, and its caption names the key, as theirs do. Only
+            P: Enter pauses too, but pressed while the page has focus, it presses whatever button
+            has focus, such as the cart just picked. */}
+        <div className={styles.middle}>
+          <Grille />
+          <button {...control(BUTTON.pause, styles.pauseButton, 'Pause button')}>PAUSE</button>
+          <span className={styles.caption}>OR P</span>
+        </div>
         <div className={styles.keys}>
           <div className={`${styles.control} ${styles.low}`}>
             <button {...control(BUTTON.o, styles.key, 'O button')}>O</button>
@@ -378,22 +403,23 @@ function PixelIcon({ rows }: { rows: string[] }) {
   );
 }
 
-// The speaker grille between the D-pad and the keys, for the look: rows of 3, 4, 5, 4 and 3
-// holes, each a dark hole over a lighter rim two pixels lower, so it reads as punched in.
-// It's 100px tall, and with its 24px lift it stays shorter than the D-pad and its caption, so
-// the row, and the shell, keep their height. Past 138px it would make --device-height wrong.
+// The speaker grille between the D-pad and the keys, above the pause button, for the look: rows
+// of 3, 4, 5, 4 and 3 holes, each a dark hole over a lighter rim two pixels lower, so it reads
+// as punched in. 9px holes 18 x 14 apart, 82 x 68 in all. With the button and its caption under
+// it, the column is 128px tall, shorter than the D-pad and its caption, so the row, and the
+// shell, keep their height. Past 162px it would make --device-height wrong.
 const GRILLE_ROWS = [3, 4, 5, 4, 3];
 
 function Grille() {
   const holes = GRILLE_ROWS.flatMap((count, row) =>
-    Array.from({ length: count }, (_, i) => ({ x: 62 + (i - (count - 1) / 2) * 24, y: 8 + row * 20 })),
+    Array.from({ length: count }, (_, i) => ({ x: 41 + (i - (count - 1) / 2) * 18, y: 5 + row * 14 })),
   );
   return (
-    <svg className={styles.grille} aria-hidden="true" width="124" height="100" viewBox="0 0 124 100">
+    <svg className={styles.grille} aria-hidden="true" width="82" height="68" viewBox="0 0 82 68">
       {holes.map(({ x, y }) => (
         <g key={`${x},${y}`}>
-          <circle className={styles.rim} cx={x} cy={y + 2} r={6} />
-          <circle className={styles.hole} cx={x} cy={y} r={6} />
+          <circle className={styles.rim} cx={x} cy={y + 2} r={4.5} />
+          <circle className={styles.hole} cx={x} cy={y} r={4.5} />
         </g>
       ))}
     </svg>

@@ -116,6 +116,7 @@
   --eject-ink: var(--p8-white);
   --led-power: var(--p8-green);
   --led-gemini: var(--p8-orange);
+  --led-missed: var(--p8-red); // the keyboard's light, for a key the cart didn't get
   --led-off: #3a3f55;
   // The shell's colour doubles as the brand colour: the "AI" in the title, the active
   // theme icon, the Gemini step in the About chain.
