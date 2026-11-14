@@ -500,13 +500,15 @@ test("on a phone the pause button takes the keyboard light's place in the letter
 
 // A shell narrower than the full-size one, with room between the D-pad and the keys, has the
 // pause button there, under a mouse or a finger. $middle-column is 520: at the least room it
-// takes, the D-pad's caption must stay on one line, or the shell grows a line.
-test('a window with room between the D-pad and the keys has the pause button there', async ({ page }) => {
+// takes, the D-pad's caption must stay on one line, or the shell grows a line. Under a finger
+// the captions are invisible there, but still take their room.
+test('a window with room between the D-pad and the keys has the pause button there', async ({ page, isMobile }) => {
   await page.setViewportSize({ width: 520, height: 900 });
   await loaded(page);
   const pause = control(page, 'Pause button');
   await expect(pause).toHaveCount(1);
-  await expect(page.getByText('OR P', { exact: true })).toBeVisible();
+  if (isMobile) await expect(page.getByText('OR P', { exact: true })).toBeHidden();
+  else await expect(page.getByText('OR P', { exact: true })).toBeVisible();
 
   const right = (await control(page, 'Right').boundingBox())!;
   const o = (await control(page, 'O button').boundingBox())!;
@@ -514,9 +516,41 @@ test('a window with room between the D-pad and the keys has the pause button the
   expect(bar.x).toBeGreaterThan(right.x + right.width);
   expect(bar.x + bar.width).toBeLessThan(o.x);
 
-  const arrows = (await page.getByText('OR ARROW KEYS', { exact: true }).boundingBox())!;
-  const z = (await page.getByText('OR Z', { exact: true }).boundingBox())!;
-  expect(arrows.height).toBe(z.height);
+  const height = (text: string) =>
+    page.getByText(text, { exact: true }).evaluate((el) => el.getBoundingClientRect().height);
+  expect(await height('OR ARROW KEYS')).toBe(await height('OR Z'));
+});
+
+// The captions name the keys a keyboard would press, and a finger has none. A phone's shell
+// drops them and the room they took, which lets the D-pad's column be the D-pad and keeps the
+// keys beside it on a narrower phone. Wider, they're only invisible: from $full-device the
+// shell's height is --device-height, copied by hand, and a phone on its side is scaled by it.
+test("under a finger the keys' captions aren't drawn, and only a phone's shell gives back their room", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(!isMobile, 'needs a touch-enabled context');
+  const captions = ['OR ARROW KEYS', 'OR P', 'OR Z', 'OR X'].map((text) => page.getByText(text, { exact: true }));
+  await loaded(page);
+  for (const caption of captions) await expect(caption).toBeHidden();
+  const group = page.getByRole('group', { name: 'Cart buttons' });
+  const column = (await group.locator(':scope > *').first().boundingBox())!;
+  const dpad = (await group.locator('[class*="dpad"]').boundingBox())!;
+  expect(column.width).toBe(dpad.width);
+  expect(column.height).toBe(dpad.height);
+
+  await page.setViewportSize({ width: 340, height: 800 });
+  const right = (await control(page, 'Right').boundingBox())!;
+  const o = (await control(page, 'O button').boundingBox())!;
+  expect(o.x).toBeGreaterThan(right.x + right.width);
+
+  await page.setViewportSize({ width: 1024, height: 1366 });
+  for (const caption of captions) await expect(caption).toBeHidden();
+  const [shell, token] = await group.locator('..').evaluate((el: HTMLElement) => [
+    el.offsetHeight,
+    parseFloat(getComputedStyle(el).getPropertyValue('--device-height')),
+  ]);
+  expect(shell).toBe(token);
 });
 
 // The phone's shell in a window under a mouse, which has the keyboard, and P with it

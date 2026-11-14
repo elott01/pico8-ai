@@ -301,7 +301,10 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   shell is narrower, so there it's at the lettering's right edge, under a finger only (`.phonePause`):
   the keyboard's light isn't drawn under a finger, and a window that narrow under a mouse keeps
   the light and has P. Two buttons in the DOM, never both shown. The phone's overlay has
-  PICO-8's own. They let go of everything on a cart change,
+  PICO-8's own. Under a finger no control has a caption, there being no key to name: a phone's
+  shell drops them and their room, and from `$middle-column` they're invisible but keep it,
+  since from `$full-device` the shell's height is `--device-height`. The controls let go of
+  everything on a cart change,
   since input held across a `load()` is lost, and when the tab is hidden. Not on window blur,
   which fires every time focus goes into the cart. A press leaves focus where it was, so the
   cart's own keys keep working. They are out of the tab order (`tabIndex -1`) on purpose:

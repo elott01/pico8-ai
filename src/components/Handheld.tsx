@@ -279,7 +279,7 @@ export default function Handheld({
         {/* The pause button on a phone's shell, which has no room for it between the D-pad and
             the keys. Only under a finger: there's no keyboard, so the keyboard's light isn't
             drawn, and this takes its place. A window that narrow under a mouse shows the light,
-            and has P. No caption, since a finger has no key to name. */}
+            and has P. No caption: under a finger no button has one, there being no key to name. */}
         <span className={styles.phonePause}>
           <button {...control(BUTTON.pause, styles.pauseButton, 'Pause button')}>PAUSE</button>
         </span>

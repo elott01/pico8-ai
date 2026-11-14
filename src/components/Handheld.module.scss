@@ -277,8 +277,8 @@
 
 // On a phone's shell, the D-pad and the keys at either edge. At least 4px apart, which keeps
 // them side by side from a 358px window: the D-pad's column is its caption's 150px and the keys
-// are 132, and 24px apart they wrapped on a 360 or 375px phone. Narrower still, the keys go
-// under the D-pad.
+// are 132, and 24px apart they wrapped on a 360 or 375px phone. Under a finger there's no
+// caption, so the column is the D-pad's 132px. Narrower still, the keys go under the D-pad.
 .controls {
   display: flex;
   flex-wrap: wrap;
@@ -342,11 +342,25 @@
   gap: 10px;
 }
 
+// The key a keyboard would press, under each control. A finger has no keys to name, so under one
+// they aren't drawn, as the keyboard's light isn't. On a phone's shell they're gone, which gives
+// back their row and narrows the D-pad's column to the D-pad. From $middle-column they're only
+// invisible, keeping their room: the three columns line up on them, and from $full-device the
+// shell's height is --device-height, copied by hand, which a phone on its side is scaled by.
 .caption {
   font-family: var(--font-pixel);
   font-size: 16px;
   line-height: 1.25;
   color: var(--print);
+
+  @media (hover: none), (pointer: coarse) {
+    display: none;
+
+    @media (min-width: bp.$middle-column) {
+      display: block;
+      visibility: hidden;
+    }
+  }
 }
 
 // One piece of plastic on a base that stays put, so it can rock. .cross is the plastic, and the
