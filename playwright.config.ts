@@ -44,11 +44,11 @@ const firefoxLaunch = {
   },
 };
 
-// In CI, the tests that read what the CRT shader drew run in Chromium only. CI's machines have
-// no GPU, so in the other engines those tests measured the machine: Firefox had no WebGL at all,
-// and WebKit on the Mac runner moved a picture that holds still on a real Mac. They still run in
-// every engine locally. The tag is on the tests, from playwright/_ci.ts.
-const gpuInChromiumOnly = process.env.CI ? { grepInvert: new RegExp(GPU.tag) } : {};
+// In CI, Firefox skips the tests that read what the CRT shader drew. CI's Linux machine has no
+// GPU, and Firefox there has no WebGL at all, so those tests could only fail. They still run in
+// Firefox locally, and in every other engine everywhere. The tag is on the tests, from
+// playwright/_ci.ts.
+const noWebGl = process.env.CI ? { grepInvert: new RegExp(GPU.tag) } : {};
 
 export default defineConfig({
   testDir: './playwright',
@@ -66,13 +66,13 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     // The engine that found the bug this suite exists to prevent.
-    { name: 'webkit', use: { ...devices['Desktop Safari'] }, ...gpuInChromiumOnly },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
     // Real touch emulation — hasTouch and a mobile viewport, not just a narrow window.
-    { name: 'mobile-safari', use: { ...devices['iPhone 15'] }, ...gpuInChromiumOnly },
+    { name: 'mobile-safari', use: { ...devices['iPhone 15'] } },
     {
       name: 'firefox',
       use: { ...devices['Desktop Firefox'], launchOptions: firefoxLaunch },
-      ...gpuInChromiumOnly,
+      ...noWebGl,
     },
   ],
 

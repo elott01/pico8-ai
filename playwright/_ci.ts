@@ -2,10 +2,10 @@
 // Underscore-prefixed and not a *.spec.ts, so the runner doesn't take it for tests.
 
 /**
- * The tag on a test that reads what the CRT shader drew. CI runs these in Chromium only (see
- * playwright.config.ts), since its machines have no GPU: Firefox there has no WebGL at all, and
- * WebKit on the Mac runner moved a picture that holds still on a real Mac. A failure there would
- * be about the machine, not about what a player sees. Locally they run in every engine.
+ * The tag on a test that reads what the CRT shader drew, which needs WebGL. Firefox skips these in
+ * CI (see playwright.config.ts): the Linux machine it runs on there has no GPU, and Firefox there
+ * has no WebGL at all, so they could only fail. Every other engine runs them in CI, and every
+ * engine runs them locally.
  */
 export const GPU = { tag: '@gpu' };
 

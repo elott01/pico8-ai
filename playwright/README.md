@@ -66,11 +66,15 @@ differ from a run on a desktop, all because CI's machines have no GPU and run sl
 - **WebKit and mobile-safari run on a Mac runner.** Linux has a WebKit too, but it's a different
   port no Safari user runs, and on a Linux runner it ran PICO-8 about ten times slower than real
   time: a cart took 12s to boot, and everything that waits for frames timed out.
-- **The tests that read the CRT shader's picture run in Chromium only.** They carry the `@gpu`
-  tag (`playwright/_ci.ts`), which the other projects skip when `CI` is set. On machines with no
-  GPU, Firefox had no WebGL at all, and WebKit on the Mac runner moved a picture that holds still
-  on a real Mac: results about the machine, not the page. Locally they run in every engine, so
-  run the suite here before merging a change to the shader.
+- **Firefox skips the tests that read the CRT shader's picture.** They carry the `@gpu` tag
+  (`playwright/_ci.ts`), which the `firefox` project skips when `CI` is set: on the Linux runner,
+  with no GPU, Firefox has no WebGL at all, so they could only fail. Chromium, WebKit and
+  mobile-safari run them in CI, and every engine runs them locally, so run the suite here
+  before merging a change to the shader.
+- **The `webkit` project skips one shader test, reduced motion.** On the Mac runner its picture
+  moved between two reads with the game still, twice in a row. It holds still on a real Mac, and
+  mobile-safari passes it on the same runner, so the runner looks to blame, though the reason
+  isn't known. The skip says so where it is in `crt.spec.ts`.
 - **A cart gets `BOOT_MS` (30s) to boot, and a test 60s in CI.** A desktop boots one in a second
   or two; CI has taken over 10s with the filter drawn in software at 2x. Nothing here tests how
   fast PICO-8 boots, so the time costs nothing but a slower failure.
