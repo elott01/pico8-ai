@@ -4,6 +4,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import { BUTTON } from '../src/lib/buttons.ts';
+import { BOOT_MS } from './_ci.ts';
 
 type CartWindow = Window & {
   pico8_buttons: number[];
@@ -56,6 +57,7 @@ async function start(page: Page) {
   await expect
     .poll(() =>
       page.locator('iframe').evaluate((frame: HTMLIFrameElement) => (frame.contentWindow as CartWindow).pico8_state?.frame_number ?? 0),
+      { timeout: BOOT_MS },
     )
     .toBeGreaterThan(30);
 }

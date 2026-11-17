@@ -14,6 +14,7 @@ import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
+import { GPU } from './playwright/_ci.ts';
 
 const PORT = 5174; // not 3000/5173, so a dev server you already have open is left alone
 const BASE_URL = `http://localhost:${PORT}`;
@@ -33,13 +34,8 @@ const BASE_URL = `http://localhost:${PORT}`;
 const firefoxAppData = join(tmpdir(), 'pico-ai-playwright-firefox');
 const onMac = process.platform === 'darwin';
 if (onMac) mkdirSync(firefoxAppData, { recursive: true });
-//
-// On a Linux machine with no GPU, as in CI, it refuses WebGL: the only GL there is Mesa's software
-// one, which Firefox blocks. The CRT filter then never draws and crt.spec fails throughout, so
-// the block is lifted. Chromium and WebKit use software GL there without being asked.
 const firefoxLaunch = {
   timeout: 30_000,
-  firefoxUserPrefs: { 'webgl.force-enabled': true },
   env: {
     ...process.env,
     MOZ_HEADLESS_WIDTH: '1728',
@@ -48,10 +44,19 @@ const firefoxLaunch = {
   },
 };
 
+// In CI, the tests that read what the CRT shader drew run in Chromium only. CI's machines have
+// no GPU, so in the other engines those tests measured the machine: Firefox had no WebGL at all,
+// and WebKit on the Mac runner moved a picture that holds still on a real Mac. They still run in
+// every engine locally. The tag is on the tests, from playwright/_ci.ts.
+const gpuInChromiumOnly = process.env.CI ? { grepInvert: new RegExp(GPU.tag) } : {};
+
 export default defineConfig({
   testDir: './playwright',
   // Cart switches involve a 1.6MB runtime load; the default 5s expect timeout is tight.
   expect: { timeout: 10_000 },
+  // A cart may take BOOT_MS (30s) to boot in CI, the whole of a test's default time, so a test
+  // there gets twice that. A desktop boots one in a second or two.
+  timeout: process.env.CI ? 60_000 : 30_000,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -61,10 +66,14 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     // The engine that found the bug this suite exists to prevent.
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, ...gpuInChromiumOnly },
     // Real touch emulation — hasTouch and a mobile viewport, not just a narrow window.
-    { name: 'mobile-safari', use: { ...devices['iPhone 15'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'], launchOptions: firefoxLaunch } },
+    { name: 'mobile-safari', use: { ...devices['iPhone 15'] }, ...gpuInChromiumOnly },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'], launchOptions: firefoxLaunch },
+      ...gpuInChromiumOnly,
+    },
   ],
 
   webServer: {

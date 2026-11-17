@@ -58,6 +58,26 @@ routing switched off, as they do elsewhere. What needed changing was the harness
 - **It lays out in 1/60px**, so two edges that meet can differ by a rounding error.
   `theme.spec.ts` allows 0.01px where the open theme control meets the header's edge.
 
+## In CI
+
+`.github/workflows/test.yml` runs each project as its own job, side by side. Three things there
+differ from a run on a desktop, all because CI's machines have no GPU and run slower:
+
+- **WebKit and mobile-safari run on a Mac runner.** Linux has a WebKit too, but it's a different
+  port no Safari user runs, and on a Linux runner it ran PICO-8 about ten times slower than real
+  time: a cart took 12s to boot, and everything that waits for frames timed out.
+- **The tests that read the CRT shader's picture run in Chromium only.** They carry the `@gpu`
+  tag (`playwright/_ci.ts`), which the other projects skip when `CI` is set. On machines with no
+  GPU, Firefox had no WebGL at all, and WebKit on the Mac runner moved a picture that holds still
+  on a real Mac: results about the machine, not the page. Locally they run in every engine, so
+  run the suite here before merging a change to the shader.
+- **A cart gets `BOOT_MS` (30s) to boot, and a test 60s in CI.** A desktop boots one in a second
+  or two; CI has taken over 10s with the filter drawn in software at 2x. Nothing here tests how
+  fast PICO-8 boots, so the time costs nothing but a slower failure.
+
+Firefox's job also starts PulseAudio with a silent output, since the runner has no sound card,
+and without one Firefox's audio never plays and `volume.spec.ts` hears silence.
+
 ## What each file guards
 
 - **`keyboard.spec.ts`** — tab order reaches every cart, focus is visibly painted, Enter

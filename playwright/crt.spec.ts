@@ -10,6 +10,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { BUTTON } from '../src/lib/buttons.ts';
 import { LARGEST_PICTURE } from '../src/lib/crt.ts';
+import { BOOT_MS, GPU } from './_ci.ts';
 
 const choose = (page: Page, choice: 'on' | 'off') =>
   page.addInitScript((choice) => localStorage.setItem('pico-crt', choice), choice);
@@ -94,12 +95,13 @@ async function start(page: Page) {
         const win = frame.contentWindow as Window & { pico8_state?: { frame_number?: number } };
         return win.pico8_state?.frame_number ?? 0;
       }),
+      { timeout: BOOT_MS },
     )
     .toBeGreaterThan(30);
 }
 
 test.describe('the CRT filter', () => {
-  test('the screen filters the poster, then the shader takes the game, at the screen\'s own pixels', async ({
+  test('the screen filters the poster, then the shader takes the game, at the screen\'s own pixels', GPU, async ({
     page,
     isMobile,
   }) => {
@@ -123,7 +125,7 @@ test.describe('the CRT filter', () => {
     await expect(page.frameLocator('iframe').locator('.crt-screen')).toHaveCSS('pointer-events', 'none');
   });
 
-  test('it draws the game as it plays', async ({ page }) => {
+  test('it draws the game as it plays', GPU, async ({ page }) => {
     await choose(page, 'on');
     await loaded(page);
     await start(page);
@@ -145,7 +147,7 @@ test.describe('the CRT filter', () => {
       (frame.contentDocument!.getElementById('canvas') as HTMLCanvasElement).toDataURL(),
     );
 
-  test('the tube moves while the game stands still', async ({ page }) => {
+  test('the tube moves while the game stands still', GPU, async ({ page }) => {
     await choose(page, 'on');
     await loaded(page);
     await start(page);
@@ -156,7 +158,7 @@ test.describe('the CRT filter', () => {
     expect(await gameStill(page)).toBe(game);
   });
 
-  test('and holds still for prefers-reduced-motion', async ({ page }) => {
+  test('and holds still for prefers-reduced-motion', GPU, async ({ page }) => {
     // The cart's page has to see it too, since that's where the shader asks
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await choose(page, 'on');
@@ -178,7 +180,7 @@ test.describe('the CRT filter', () => {
     test.use({ deviceScaleFactor: 2 });
     test.skip(({ isMobile }) => !!isMobile, 'real fullscreen is the desktop\'s');
 
-    test('is drawn at the cap, and enlarged', async ({ page }) => {
+    test('is drawn at the cap, and enlarged', GPU, async ({ page }) => {
       await choose(page, 'on');
       await loaded(page);
       const fullscreen = page.getByRole('button', { name: 'Fullscreen' });
@@ -228,7 +230,7 @@ test.describe('the CRT filter', () => {
     expect(screenFilter).toBe('none');
   });
 
-  test('a lost context comes back, as a phone takes one from a page in the background', async ({ page }) => {
+  test('a lost context comes back, as a phone takes one from a page in the background', GPU, async ({ page }) => {
     await choose(page, 'on');
     await loaded(page);
     await start(page);
@@ -252,7 +254,7 @@ test.describe('the CRT filter', () => {
     await expect.poll(async () => (await picture(page)).brightest).toBeGreaterThan(LIT);
   });
 
-  test('the CRT button takes it off and puts it back, and a cart switch carries it', async ({ page }) => {
+  test('the CRT button takes it off and puts it back, and a cart switch carries it', GPU, async ({ page }) => {
     const crt = page.getByRole('button', { name: 'CRT' });
     const tube = page.frameLocator('iframe').locator('.crt-screen');
     await choose(page, 'on');
@@ -283,7 +285,7 @@ test.describe('the CRT filter', () => {
   // a version that should fail: one blurred across (a spot of 0.36, the first shader's), one whose
   // lines were loosened until they all but closed (reaching 0.5 and 0.6). At 1024, 8 to a game
   // pixel, where each row is two scanlines.
-  test('pixels stay pixels, and every row is a scanline', async ({ page }) => {
+  test('pixels stay pixels, and every row is a scanline', GPU, async ({ page }) => {
     await page.goto('/');
     // A URL on the dev server, typed as the module it serves
     const look = await page.evaluate(async (url) => {

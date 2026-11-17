@@ -10,6 +10,7 @@
 
 import { test, expect, devices, type Page } from '@playwright/test';
 import { BUTTON } from '../src/lib/buttons.ts';
+import { BOOT_MS } from './_ci.ts';
 
 const COMMENTARY = 'SEEN-FROM-THE-OVERLAY';
 
@@ -72,7 +73,7 @@ async function loaded(page: Page) {
 /** Tap the cart's play button, and mark its page, which a reload would wipe. */
 async function start(page: Page) {
   await page.frameLocator('iframe').locator('#p8_start_button').tap();
-  await expect.poll(() => frames(page), { timeout: 15_000 }).toBeGreaterThan(30);
+  await expect.poll(() => frames(page), { timeout: BOOT_MS }).toBeGreaterThan(30);
   await page
     .locator('iframe')
     .evaluate((frame: HTMLIFrameElement) => ((frame.contentWindow as Cart).run = 'same'));
@@ -274,7 +275,7 @@ test('a finger still down when Exit is tapped is let go', async ({ page }) => {
 test('tapped before the cart has started, it starts the cart without the export’s touch boot', async ({ page }) => {
   await loaded(page);
   await enter(page);
-  await expect.poll(() => frames(page), { timeout: 15_000 }).toBeGreaterThan(30);
+  await expect.poll(() => frames(page), { timeout: BOOT_MS }).toBeGreaterThan(30);
 
   await expect.poll(async () => (await look(page)).controller).toBe('table');
   expect((await look(page)).hash).toBe('');

@@ -7,6 +7,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { BUTTON } from '../src/lib/buttons.ts';
 import { LARGEST_PICTURE } from '../src/lib/crt.ts';
+import { BOOT_MS, GPU } from './_ci.ts';
 
 const COMMENTARY = 'SEEN-FROM-FULLSCREEN';
 
@@ -55,7 +56,7 @@ const frames = (page: Page) =>
  */
 async function start(page: Page) {
   await page.frameLocator('iframe').locator('#p8_start_button').click();
-  await expect.poll(() => frames(page), { timeout: 15_000 }).toBeGreaterThan(30);
+  await expect.poll(() => frames(page), { timeout: BOOT_MS }).toBeGreaterThan(30);
 }
 
 const leave = (page: Page) =>
@@ -212,7 +213,7 @@ test.describe('on a desktop', () => {
       expect(Math.abs(filter!.y - game!.y)).toBeLessThan(0.5);
     };
 
-    test('chosen on the handheld, it covers the game exactly, at the screen\'s own pixel', async ({ page }) => {
+    test('chosen on the handheld, it covers the game exactly, at the screen\'s own pixel', GPU, async ({ page }) => {
       await choose(page, 'on');
       await loaded(page);
       await start(page);
@@ -233,7 +234,7 @@ test.describe('on a desktop', () => {
       await expectOverGame(page, 512);
     });
 
-    test('it follows the game when the window changes', async ({ page, browserName }) => {
+    test('it follows the game when the window changes', GPU, async ({ page, browserName }) => {
       test.skip(browserName === 'chromium', "automation can't resize a fullscreen window there");
       test.skip(browserName === 'firefox', 'resizing the window there leaves fullscreen');
       await choose(page, 'on');
