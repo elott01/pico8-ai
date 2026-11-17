@@ -35,7 +35,7 @@ jobs:
   # runs, and on a Linux runner it ran PICO-8 about ten times slower than real time: a cart
   # took 12s to boot, and every test that waits for frames timed out. On macOS it's the WebKit
   # Safari is built on, and the one this suite already passes in locally.
-  playwright:
+  browsers:
     name: playwright (${{ matrix.project }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -109,3 +109,17 @@ jobs:
           name: playwright-report-${{ matrix.project }}
           path: playwright-report/
           retention-days: 7
+
+  # The check main's branch rule requires, by this name. It stands for the four jobs above, so the
+  # rule doesn't have to list them and stays right when a project is added or dropped. Without it
+  # the rule waited for a `playwright` check that the split had stopped reporting.
+  #
+  # `always()`, because a job skipped after a failure counts as passing for a required check, and
+  # the result is checked by hand for the same reason.
+  playwright:
+    needs: browsers
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every project passed
+        run: test "${{ needs.browsers.result }}" = success
