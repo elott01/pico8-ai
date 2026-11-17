@@ -60,7 +60,7 @@ test.describe('keyboard', () => {
 
   test('Enter on a focused card switches the cart', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
+    await expect(page.locator('iframe')).toHaveAttribute('src', /gemini/);
 
     await page.getByRole('button', { name: /Connect Four/ }).focus();
     await page.keyboard.press('Enter');

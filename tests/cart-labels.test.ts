@@ -4,20 +4,31 @@
 // never got, and nothing else notices. That is how Gem-in-Eye's poster came to show a shop
 // backdrop its saved label didn't have. This suite checks each live poster against the cart
 // it was exported from, and that rewriting a label keeps the file in PICO-8's own layout.
+// It checks public/labels/<cart>.png too, the full-colour copy on the cart switcher.
 //
 // A poster failure means one of two things. The label changed and the cart wasn't
 // re-exported: run `node scripts/export-cart.ts <cart>`. Or an export went out with an
 // unsaved label: if the live poster is the one to keep, `node scripts/cart-label.ts restore`
-// writes it back into the .p8.
+// writes it back into the .p8. Either way the label image follows: the export rewrites it,
+// and after a restore `node scripts/cart-label.ts png` does.
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 import { CART_ORDER } from '../src/lib/carts.ts';
-import { SIZE, countDifferences, isBlank, readLabel, readPoster, withLabel } from '../scripts/cart-label.ts';
+import {
+  SIZE,
+  countDifferences,
+  isBlank,
+  readLabel,
+  readLabelPng,
+  readPoster,
+  withLabel,
+} from '../scripts/cart-label.ts';
 
-const read = (path: string): string => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const bytes = (path: string): Buffer => readFileSync(new URL(`../${path}`, import.meta.url));
+const read = (path: string): string => bytes(path).toString('utf8');
 const sections = (cart: string): string[] => cart.split('\n').filter((line) => /^__\w+__$/.test(line));
 
 describe('cart labels', () => {
@@ -35,6 +46,14 @@ describe('cart labels', () => {
         const label = readLabel(cart) ?? '';
         const changed = countDifferences(readPoster(read(`public/games/${id}.html`)), label);
         assert.equal(changed, 0, `public/games/${id}.html's poster differs from the label in ${changed} pixels`);
+      });
+
+      it('is what the cart switcher shows', () => {
+        const path = `public/labels/${id}.png`;
+        const regenerate = `regenerate it with node scripts/cart-label.ts png carts/${id}.p8 ${path} 1`;
+        assert.ok(existsSync(new URL(`../${path}`, import.meta.url)), `${path} is missing; ${regenerate}`);
+        const changed = countDifferences(readLabelPng(bytes(path)), readLabel(cart) ?? '');
+        assert.equal(changed, 0, `${path} differs from the label in ${changed} pixels; ${regenerate}`);
       });
 
       it('survives being rewritten byte for byte', () => {

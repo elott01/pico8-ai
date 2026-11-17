@@ -1,0 +1,40 @@
+// Layout breakpoints, for every module that changes at them. Sass variables rather than
+// tokens because a media query can't read a custom property.
+//
+// They come from the arcade grid in App.module.scss. $full-device fits the device alone at
+// its full 624px, with room for a 15px page scrollbar: from there the handheld has its full
+// padding and the cropped 512px screen, and below it the phone's thin shell.
+//
+// $full-height fits the page's padding, the header, and the full-size row of carts, device
+// and panel under it. A window wider than $full-device but shorter than that is $compact:
+// the handheld and the cartridges draw at 3/4 (--device-scale in tokens.scss), and
+// everything else keeps its size.
+//
+// $medium and $wide are whole queries rather than widths because each has two widths, one
+// per device size. $medium fits the device and the panel alone. $wide fits the carts
+// column, the device, a panel at its 280px minimum and two 28px gaps inside the page's 3%
+// gutters.
+//
+// $big is a window with room to spare: the page goes wider and its text a step larger
+// (--page-width and --text-step in tokens.scss). Its height keeps the taller header from
+// pushing the bottom of the arcade off a wide, short window.
+//
+// $middle-column fits the handheld's controls three across: the speaker grille's 82px between
+// two columns kept equal to centre it, each as wide as the D-pad's caption's 150, 24px apart, in
+// the controls' 8px of padding, the shell's 32 and the page's 32. That's 502, rounded up for
+// fonts that set the caption a little wider. Any less and the caption wraps, and the shell grows
+// a line. A phone's shell is narrower, a narrow window's often isn't.
+//
+// $tight has the three columns and less height than the page's padding, the header and the
+// 3/4 row add up to, 881px. The page spends what it can of the padding above the title
+// (.page in App.module.scss). The arcade is centred in the window either side of it, so the
+// number moving a little would only move About, which is past the window's edge.
+$full-device: 680px;
+$middle-column: 520px;
+$full-height: 1122px;
+$tight-height: 881px;
+$compact: '(min-width: #{$full-device}) and (max-height: #{$full-height - 1px})';
+$medium: '(min-width: 1020px), (min-width: 850px) and (max-height: #{$full-height - 1px})';
+$wide: '(min-width: 1300px), (min-width: 1090px) and (max-height: #{$full-height - 1px})';
+$tight: '(min-width: 1090px) and (max-height: #{$tight-height - 1px})';
+$big: '(min-width: 1600px) and (min-height: 880px)';

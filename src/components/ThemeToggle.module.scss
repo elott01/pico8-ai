@@ -1,37 +1,128 @@
-.group {
-  display: inline-flex;
+@use '../styles/breakpoints' as bp;
+
+// A pill one icon wide that opens sideways to three and moves nothing else in the header,
+// since a mouse opens it just by resting there. From $medium the title and the tools share a
+// line, so it grows left from the header's edge, over the Source link, which App.module.scss
+// fades out. Below that the tools have a line of their own and it grows right, into the room
+// after them.
+$slot: 44px;
+$slide: 200ms ease;
+
+.toggle {
+  position: relative;
+  flex: none;
+  width: $slot + 2px;
+  height: $slot + 2px;
   border: 1px solid var(--rule);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+  border-radius: 23px;
   background: var(--surface);
+  transition:
+    width $slide,
+    margin-left $slide;
+
+  &.open {
+    width: 3 * $slot + 2px;
+
+    // Takes back what the width adds, so the header's flow never sees the pill change
+    @media #{bp.$medium} {
+      margin-left: -2 * $slot;
+    }
+  }
 }
 
-.button {
+// Clips the strip to the pill. The pill itself can't clip, or it would cut off the
+// trigger's focus ring, which sits outside it.
+.window {
+  height: 100%;
+  overflow: hidden;
+  border-radius: 22px;
+}
+
+// All three icons in a row, slid along while closed so only the current one shows through
+// the window. Opening slides it back as the window widens, on the same timing, so the
+// current icon moves one slot at most and the other two come out either side of it.
+.strip {
+  display: flex;
+  width: max-content;
+  transform: translateX(calc(var(--at) * -#{$slot}));
+  transition: transform $slide;
+
+  .open & {
+    transform: none;
+  }
+}
+
+// The pill's click target, drawn over it with nothing in it of its own: the icon you see is
+// the strip's. Open, clicks pass through it to the choices, but it stays in the tab order,
+// so the keyboard can still reach it to close the pill, its focus ring around all three.
+.trigger {
   appearance: none;
-  background: transparent;
+  position: absolute;
+  inset: -1px;
+  z-index: 1;
+  padding: 0;
   border: 0;
-  color: var(--ink-dim);
-  font: inherit;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  padding: 0.3rem 0.6rem;
+  border-radius: 23px;
+  background: transparent;
   cursor: pointer;
 
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .open & {
+    pointer-events: none;
+  }
+}
+
+.choice {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: $slot;
+  height: $slot;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition:
+    color $slide,
+    background-color $slide;
+
+  .trigger:hover + .window &,
   &:hover {
     color: var(--ink);
   }
 
+  // Inset, since the window clips anything drawn outside a choice
   &:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
   }
+}
 
-  + .button {
-    border-left: 1px solid var(--rule);
+// Open, the current choice is filled; the shell's lavender doubles as the brand colour.
+.open .choice[aria-pressed='true'] {
+  background: var(--surface-raised);
+  color: var(--ai);
+}
+
+// The one under the mouse takes the fill too, because that is the one a click picks, and
+// opening leaves the mouse on whichever icon slid there. Real hovers only: a tap's would stick.
+@media (hover: hover) {
+  .open .choice:hover {
+    background: var(--surface-raised);
   }
 }
 
-.active {
-  background: var(--surface-raised);
-  color: var(--accent);
+@media (prefers-reduced-motion: reduce) {
+  .toggle,
+  .strip,
+  .choice {
+    transition: none;
+  }
 }

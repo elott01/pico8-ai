@@ -1,13 +1,17 @@
-# PICO-8 + Gemini
+# Ethan's Pico-AIght Arcade
 
 **[▶ Play it](https://pico8-ai.vercel.app)** &nbsp;·&nbsp; [![tests](https://github.com/elott01/pico8-ai/actions/workflows/test.yml/badge.svg)](https://github.com/elott01/pico8-ai/actions/workflows/test.yml)
 
-PICO-8 games embedded in a React app, with Gemini on the other side of each: the opponent
-in two board games, and the shopkeeper in a dungeon crawler. One Vercel deploy: a static
-Vite/React frontend plus two serverless functions (`api/move.ts` and `api/talk.ts`) that
-hold the API key.
+PICO-8 carts with Google Gemini built in.
 
-Three carts, switchable in the browser:
+[![The arcade: a lavender handheld running Gem-in-Eye's shop, with the shelf of carts on its left and, on its right, the Gemini panel showing gem-in-eye's verdict on a purchase](docs/screenshot.png)](https://pico8-ai.vercel.app)
+
+PICO-8 games embedded in a React app and played in a handheld drawn around the cart, with
+Gemini on the other side of each: the opponent in two board games, and the shopkeeper in a
+dungeon crawler. One Vercel deploy: a static Vite/React frontend plus two serverless
+functions (`api/move.ts` and `api/talk.ts`) that hold the API key.
+
+Three carts, on a shelf beside the handheld:
 
 | cart | why it is here |
 | --- | --- |
@@ -101,7 +105,7 @@ line, and the panel labels it as the cart's.
 **Nothing the player types reaches a prompt.** The cart has no text entry, and everything
 it sends is a number from a fixed range. `api/_talk_request.ts` rebuilds each request field
 by field and rejects any record the cart could not have produced, such as a stash bigger
-than its safe or a tier bought out of order. The one free text in the prompt is
+than its chest or a tier bought out of order. The one free text in the prompt is
 gem-in-eye's memory: his last three speeches, which the page keeps in `localStorage` so he
 doesn't repeat himself. A player can edit those, so they arrive untrusted: cleaned to the
 cart's character set, capped in count and length, and quoted as data. That confines an edit
@@ -136,7 +140,7 @@ exercise every loop, and obviously not the model.
 | `vercel dev` | **Local dev — use this.** Serves the frontend *and* the `api/` functions on `localhost:3000`. The only local command where the AI works. |
 | `npm run dev` | Frontend only. `/api/move` and `/api/talk` 404, so no AI — fine for pure UI work. |
 | `npm test` | Unit suite (`node --test`), ~3s, needs nothing. `npm run test:watch` to watch. |
-| `npm run test:playwright` | Browser suite across Chromium, WebKit and mobile Safari. Boots Vite itself; no API key needed. |
+| `npm run test:playwright` | Browser suite across Chromium, WebKit, Firefox and mobile Safari. Boots Vite itself; no API key needed. |
 | `npm run bench` | Prompt benchmark against the real model. **Spends Gemini quota.** |
 | `node bench/talk.ts` | gem-in-eye's dialogue benchmark. Writes every speech to `bench/results/talk.md` for reading. `--dry` spends nothing. |
 | `npm run build` | Production build → `dist/`. Vercel runs this on deploy. |
@@ -181,14 +185,22 @@ api/_types.ts             the /api/move and /api/talk wire contracts, shared wit
 carts/*.p8                PICO-8 sources; exported into public/games/
 carts/gemini*.p8          Gem-in-Eye: the hub (shop, GPIO) loads the dungeon; one export
 public/games/*.{html,js}  exported carts; the iframe loads the .html
-src/components/           iframe embed, GPIO poll loops, cart switcher, move and talk panels
+public/labels/*.png       each cart's label for the shelf, checked against the cart by a test
+src/components/           the handheld, iframe embed, GPIO poll loops, cart shelf, move and
+                          talk panels, theme control, About
 src/lib/                  gpio.ts (byte protocol per cart), ai.ts + talk.ts (API clients),
-                          and gem-in-eye's memory in localStorage
-src/styles/               design tokens (PICO-8 palette, geometry) + global reset
+                          gem-in-eye's memory in localStorage, carts.ts (each cart's name
+                          and description), buttons.ts (the handheld's controls), crt.ts
+                          (the CRT filter's shader), volume.ts (the volume slider's gain),
+                          controller.ts (O and X on the phone's fullscreen controller),
+                          site.ts (About's bio and links)
+src/styles/               design tokens (PICO-8 palette, geometry, the handheld's colours),
+                          breakpoints + global reset
 tests/                    node:test suites — fast, no browser, no network
-playwright/               browser suite — Chromium, WebKit, mobile Safari
+playwright/               browser suite — Chromium, WebKit, Firefox, mobile Safari
 bench/                    prompt benchmarks against the real model + recorded results
-scripts/                  headless cart re-export (bundles Gem-in-Eye's two carts), label tool
+scripts/                  headless cart re-export (bundles Gem-in-Eye's two carts), label tool,
+                          cart budget against PICO-8's limits, favicon from gem-in-eye's head
 LICENSE / NOTICE          MIT, plus the Lexaloffle carve-out for public/games/
 ```
 

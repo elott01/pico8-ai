@@ -1,33 +1,56 @@
+@use '../styles/column';
+
+// A title over a box, like the cart shelf on the device's other side. Sized by the grid area
+// Pico8Game puts it in: the device's height beside it, a cap below. The box takes what the
+// title leaves, and scrolls inside that.
 .panel {
-  width: min(var(--panel-width), 100%);
-  // Matches the bezel, not the cart: the frame adds its padding on both edges. Derived
-  // rather than hard-coded, so resizing the stage keeps the two aligned.
-  max-height: calc(var(--stage-size) + 2 * var(--bezel-pad));
-  overflow-y: auto;
-  text-align: left;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  font-size: 13px;
+  @include column.titled;
+  font-size: calc(13px + var(--text-step));
   color: var(--ink);
 }
 
 .heading {
-  padding: 0.6rem 0.75rem;
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
-  border-bottom: 1px solid var(--rule);
-  position: sticky;
-  top: 0;
-  background: var(--surface);
-  z-index: 1;
+  @include column.title;
 }
 
-.empty {
+.box {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg); // the shelf's, across the device
+  background: var(--surface);
+}
+
+/* ---- Before the first card (EmptyPanel) -------------------------------------------- */
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
   padding: 0.75rem;
   color: var(--ink-dim);
+}
+
+// The one thing to do, so it reads first
+.action {
+  color: var(--ink);
+}
+
+.shows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding-left: 1.1rem;
+  list-style: disc;
+}
+
+// The card's own heading for that part, at the card's size for it (.summary)
+.label {
+  margin-right: 0.4em;
+  color: var(--ink);
+  font-size: calc(12px + var(--text-step));
 }
 
 /* ---- Live model indicator ---------------------------------------------------------- */
@@ -39,7 +62,7 @@
   padding: 0.6rem 0.75rem;
   border-bottom: 1px solid var(--rule);
   color: var(--accent);
-  font-size: 12px;
+  font-size: calc(12px + var(--text-step));
   letter-spacing: 0.04em;
 }
 
@@ -83,7 +106,7 @@
 
 .tag {
   margin-left: auto;
-  font-size: 11px;
+  font-size: calc(11px + var(--text-step));
   font-weight: 600;
   letter-spacing: 0.04em;
 }
@@ -95,7 +118,7 @@
 
 .note {
   margin-top: 0.4rem;
-  font-size: 12px;
+  font-size: calc(12px + var(--text-step));
 }
 
 // Shared by tags and notes — the colour comes from the badge's kind, so no component
@@ -117,7 +140,7 @@
 .summary {
   cursor: pointer;
   color: var(--ink-dim);
-  font-size: 12px;
+  font-size: calc(12px + var(--text-step));
 }
 
 .reasoning {
@@ -127,10 +150,25 @@
 }
 
 .reasoningText {
-  font-size: 11px;
+  font-size: calc(11px + var(--text-step));
   line-height: 1.6;
   min-width: 0;
   overflow-x: auto; // long line rows scroll here rather than widening the page
+}
+
+// What gem-in-eye was shown. Spaced, not joined with dots, so a narrow panel wraps between
+// items with none left dangling, and no item breaks in two.
+.shown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+  margin-top: 0.5rem;
+  font-size: calc(11px + var(--text-step));
+  line-height: 1.6;
+
+  > span {
+    white-space: nowrap;
+  }
 }
 
 .meta,

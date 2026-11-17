@@ -1,4 +1,5 @@
-// Exports a cart with PICO-8's command-line -export and copies both files into public/games/.
+// Exports a cart with PICO-8's command-line -export and copies both files into public/games/,
+// then rewrites public/labels/<cart>.png, so the switcher's label can't fall behind the poster.
 //
 //   node scripts/export-cart.ts <cart>
 //
@@ -14,11 +15,12 @@
 // failure. PICO8 overrides where the binary is looked for; the default is the macOS install.
 
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { bundledCarts, exportedCarts } from './cart-bundle.ts';
+import { labelPng, readLabel } from './cart-label.ts';
 
 const PICO8 = process.env.PICO8 ?? '/Applications/PICO-8.app/Contents/MacOS/pico8';
 // A build that ignores -export opens the editor and never exits.
@@ -81,5 +83,11 @@ if (unbundled.length > 0) {
   fail(1, `PICO-8's export left out ${unbundled.map((id) => `${id}.p8`).join(', ')}; nothing was copied. It said:\n${output}`);
 }
 for (const file of files) copyFileSync(join(out, file), join(ROOT, 'public', 'games', file));
+// -export refuses a cart with no saved label, so by here there is one to draw.
+const label = readLabel(readFileSync(source, 'utf8'))!;
+writeFileSync(join(ROOT, 'public', 'labels', `${cart}.png`), labelPng(label, 1));
 const extra = bundle.length > 0 ? `, with ${bundle.map((id) => `${id}.p8`).join(', ')} inside` : '';
-console.log(`exported carts/${cart}.p8 to public/games/${cart}.html and ${cart}.js${extra}`);
+console.log(
+  `exported carts/${cart}.p8 to public/games/${cart}.html and ${cart}.js${extra}, ` +
+    `and its label to public/labels/${cart}.png`,
+);

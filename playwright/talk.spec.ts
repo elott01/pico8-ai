@@ -58,8 +58,9 @@ async function stagePurchase(page: Page) {
 test.describe('gem-in-eye talk loop', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
+    // Read at each purchase, so clearing it with the cart already in still counts
     await page.evaluate(() => localStorage.clear());
-    await page.getByRole('button', { name: /Gem-in-Eye/ }).click();
+    // The cart the page starts with
     await expect(page.locator('iframe')).toHaveAttribute('src', /gemini/);
     await gpioReady(page);
   });
@@ -93,6 +94,12 @@ test.describe('gem-in-eye talk loop', () => {
     await expect(page.locator('aside')).toContainText('page one. page two.');
     await expect(page.locator('aside')).toContainText('impressed');
     await expect(page.locator('aside')).toContainText('8/10 tokens');
+    await expect(page.locator('aside').getByRole('heading')).toHaveText('Gemini');
+
+    // What came out sits outside the dropdown of what went in
+    await expect(page.locator('aside')).toContainText('noticed: zero waste.');
+    await expect(page.locator('aside details')).toContainText('300 pruned');
+    await expect(page.locator('aside details')).not.toContainText('zero waste.');
 
     // Page 2: the cart asks again with occasion 3, and the page answers without a call.
     await onGpio(page, (g) => { g[16] = 3; g[0] = 1; });

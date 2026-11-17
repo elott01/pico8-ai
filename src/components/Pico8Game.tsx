@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   IDX_STATUS,
   ST_IDLE,
@@ -25,9 +25,42 @@ import TurnPanel from './TurnPanel.tsx';
 import type { Turn } from './TurnPanel.tsx';
 import TalkPanel from './TalkPanel.tsx';
 import type { TalkTurn } from './TalkPanel.tsx';
+import Handheld from './Handheld.tsx';
+import FullscreenLayer from './FullscreenLayer.tsx';
+import CrtScreen from './CrtScreen.tsx';
+import { BUTTON_KEYS } from '../lib/buttons.ts';
+import { matchHandheld } from '../lib/controller.ts';
+import { readVolume, saveVolume, routeAudio } from '../lib/volume.ts';
+import { CARTS, NO_CART_PANEL } from '../lib/carts.ts';
 import styles from './Pico8Game.module.scss';
 
-type CartStatus = 'loading' | 'ready' | 'missing';
+declare global {
+  interface Window {
+    // The export's shell declares these inside the iframe.
+    p8_run_cart?: () => void;
+    p8_request_fullscreen?: () => void;
+    p8_touch_detected?: boolean;
+    p8_allow_mobile_menu?: boolean;
+  }
+}
+
+// Where the D-pad and keys are pressed by a finger, and fullscreen has to bring its own.
+const TOUCH_INPUT = '(hover: none), (pointer: coarse)';
+
+// 'empty' is no cart in the device at all: ejected.
+type CartStatus = 'loading' | 'ready' | 'missing' | 'empty';
+
+// The CRT toggle's choice, kept across visits. localStorage throws in some privacy modes, so
+// a blocked store costs the choice and nothing else.
+const CRT_KEY = 'pico-crt';
+
+function readCrt(): boolean {
+  try {
+    return localStorage.getItem(CRT_KEY) === 'on';
+  } catch {
+    return false;
+  }
+}
 
 // The cart is embedded as its exported .html in an iframe rather than by injecting the
 // .js: the export expects its own shell (canvas wiring, start button, audio gating), and
@@ -36,17 +69,24 @@ type CartStatus = 'loading' | 'ready' | 'missing';
 export default function Pico8Game({
   game,
   onReady,
+  onEject,
 }: {
-  game: CartId;
+  /** The cart in the device, or null once it has been ejected. */
+  game: CartId | null;
   /** Fired when the cart is loaded and the poll loop is live — the switcher uses it to
    *  release its latch, since a 1.6MB runtime does not arrive instantly. */
   onReady?: () => void;
+  /** The handheld's Eject button. */
+  onEject?: () => void;
 }) {
-  // Exactly one of these is set: a board cart talks to /api/move, a talk cart to /api/talk,
-  // and each poll loop below runs only for its own kind.
-  const boardProtocol = isBoardCart(game) ? PROTOCOLS[game] : null;
-  const talkProtocol = isBoardCart(game) ? null : TALK_PROTOCOLS[game];
+  // At most one of these is set: a board cart talks to /api/move, a talk cart to /api/talk,
+  // and each poll loop below runs only for its own kind. With no cart, neither runs.
+  const boardProtocol = game !== null && isBoardCart(game) ? PROTOCOLS[game] : null;
+  const talkProtocol = game !== null && !isBoardCart(game) ? TALK_PROTOCOLS[game] : null;
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const screenRef = useRef<HTMLDivElement>(null);
+  // What keepTouchOut reads on each touch, so it goes through a ref. See it, and the overlay.
+  const letTouchInRef = useRef(false);
   // The poll loop reads status every 100ms but must not be torn down and rebuilt each time
   // it changes, so it goes through a ref rather than the effect's dependency list.
   const statusRef = useRef<CartStatus>('loading');
@@ -57,6 +97,39 @@ export default function Pico8Game({
   // only thing the UI can see. Without it the panel sits silent for the ~1.6s the model
   // takes, which reads as a dead page on the very turn the panel exists to evidence.
   const [thinking, setThinking] = useState(false);
+  const [crt, setCrt] = useState(readCrt);
+  const toggleCrt = useCallback(() => {
+    setCrt((on) => {
+      try {
+        localStorage.setItem(CRT_KEY, on ? 'off' : 'on');
+      } catch {
+        // see readCrt
+      }
+      return !on;
+    });
+  }, []);
+  // CrtScreen covers the game once there is one, and .crt only ever covers PICO-8's poster.
+  const [crtOverGame, setCrtOverGame] = useState(false);
+  // The volume slider's setting, kept across visits like CRT's. A cart's sound starts from the
+  // ref, and the setter routeAudio gave for the cart that's in takes each change after that.
+  const [volume, setVolume] = useState(() => readVolume(browserStorage()));
+  const volumeRef = useRef(volume);
+  const setGainRef = useRef<((percent: number) => void) | null>(null);
+  const changeVolume = useCallback((percent: number) => {
+    // A drag reports every move, most of them to the step it's already on
+    if (percent === volumeRef.current) return;
+    volumeRef.current = percent;
+    setVolume(percent);
+    saveVolume(browserStorage(), percent);
+    setGainRef.current?.(percent);
+  }, []);
+  const [keyboardHeld, setKeyboardHeld] = useState(0);
+  // Whether the cart's window has focus, which is whether the keyboard reaches it, and how many
+  // keys meant for it have gone to the page instead. The handheld's lettering shows both.
+  const [keyboardInCart, setKeyboardInCart] = useState(false);
+  const [missedKeys, setMissedKeys] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [overlay, setOverlay] = useState(false);
 
   // One setter for both, so the ref the poll loop reads cannot drift from the state the
   // UI renders.
@@ -75,18 +148,124 @@ export default function Pico8Game({
     if (next !== 'loading') onReadyRef.current?.();
   }, []);
 
-  useEffect(() => {
-    applyStatus('loading');
+  // A layout effect, not a passive one, so this always runs before the new cart's onLoad. It
+  // runs in the commit that puts the iframe in, and a load event can't come until after. A
+  // passive effect runs after paint, and when the cart's page beat it there, as it did in
+  // WebKit in CI, it put 'loading' back over onLoad's 'ready', nulled the gain onLoad had just
+  // routed, and POWER stayed off for good, with the game drawn on the screen behind it.
+  useLayoutEffect(() => {
+    // No cart means no iframe to wait for, so it settles at once and the switcher's latch
+    // can't stick.
+    applyStatus(game === null ? 'empty' : 'loading');
     setTurns([]); // analysis from the previous cart would be misleading
     setTalks([]);
     setThinking(false);
+    setKeyboardHeld(0); // watchKeys' blur doesn't cover this: WebKit sends none from a removed iframe
+    setGainRef.current = null; // the last cart's sound went with its window
+    // Nor watchFocus's. The hint shows while the next cart loads, so it can't wait for that
+    // cart's own check: a switch that left focus in the old one would show the P line till then.
+    setKeyboardInCart(false);
   }, [game, applyStatus]);
+
+  // A key the cart would have taken, pressed while the page has the keyboard: the moment a
+  // player finds the cart isn't listening, so the keyboard's light flashes. The key itself is
+  // left alone. Arrow keys still scroll the page, since someone reading About may mean them, and
+  // moving focus into the cart unasked would be focus moving invisibly. Repeats from a held key
+  // count once, and anything under a modifier is a shortcut, not a game key. It listens whenever
+  // the hint shows, which is while a cart is in, loading or not. Once the cart has the keys, or
+  // the slot is empty, the count goes back to 0, which stops a flash still running: it would
+  // cover the green light, or light up an empty slot.
+  useEffect(() => {
+    if (game === null || keyboardInCart) {
+      setMissedKeys(0);
+      return;
+    }
+    const missed = (event: KeyboardEvent) => {
+      if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.keyCode in BUTTON_KEYS) setMissedKeys((n) => n + 1);
+    };
+    window.addEventListener('keydown', missed);
+    return () => window.removeEventListener('keydown', missed);
+  }, [game, keyboardInCart]);
+
+  // The handheld's D-pad and keys. pico8_buttons is the export's own hook for on-page
+  // controls, read every frame beside the keyboard. Before the cart's page has loaded there is
+  // nothing to write to, and nothing is lost: Handheld lets go of everything on a cart change.
+  const pressButtons = useCallback((held: number) => {
+    const buttons = iframeRef.current?.contentWindow?.pico8_buttons;
+    if (buttons) buttons[0] = held;
+  }, []);
+
+  // The handheld's Fullscreen button and FullscreenLayer's Exit. This is the export's own
+  // fullscreen, run inside its page, so PICO-8 knows about it and draws the game at a whole multiple of 128. It's
+  // a toggle, so one call serves both. Fullscreening the iframe from out here works too, but
+  // PICO-8 can't tell and draws 768 where 1024 fits. The iframe stays put either way, which is
+  // what keeps both poll loops below answering the cart. Focus goes to the iframe itself, or the
+  // cart gets no keys: p8_give_focus, which the export's own button uses, focuses a textarea
+  // that's display:none here, and does nothing. Pressed before the cart has started, this starts
+  // it as its play button would; if it's already running, p8_run_cart does nothing.
+  //
+  // A finger gets the overlay below instead. iPhone has no fullscreen for anything but video, and
+  // real fullscreen would cover the handheld's controls on the touch screens that do have it.
+  const toggleFullscreen = useCallback(() => {
+    const frame = iframeRef.current;
+    frame?.contentWindow?.p8_run_cart?.();
+    if (window.matchMedia(TOUCH_INPUT).matches) {
+      setOverlay((on) => !on);
+      return;
+    }
+    frame?.focus();
+    frame?.contentWindow?.p8_request_fullscreen?.();
+  }, []);
+
+  // The phone's fullscreen: the iframe stretched over the page, with PICO-8's own controller, its
+  // O and X traded to match the handheld (lib/controller.ts). The
+  // same iframe, because the poll loops live here, and a popover because the top layer is the way
+  // out from under the handheld's transform, which traps a plain position: fixed. Everything
+  // about the cart's page is the export's own switches, which keepTouchOut otherwise holds off.
+  // p8_touch_detected comes after p8_run_cart for a reason: set any sooner, the export's boot
+  // takes the touch path, which rearranges its page and adds a #playing hash.
+  useEffect(() => {
+    const frame = iframeRef.current;
+    const win = frame?.contentWindow;
+    const screen = screenRef.current;
+    if (!overlay || !win || !screen) return;
+    screen.popover = 'manual';
+    screen.showPopover();
+    letTouchInRef.current = true;
+    win.p8_allow_mobile_menu = false; // its fullscreen and close icons do nothing here
+    win.p8_touch_detected = true;
+    // Its O and X where the handheld has them, so going fullscreen doesn't swap them. Kept
+    // after Exit, since nothing reaches its controller then.
+    void matchHandheld(win);
+    const release = holdPageStill(win);
+    return () => {
+      release();
+      letTouchInRef.current = false;
+      win.p8_touch_detected = false;
+      // A finger still down never gets to let go, once touches stop reaching PICO-8
+      if (win.pico8_buttons) win.pico8_buttons[0] = 0;
+      // Set for the touch layout, and nothing puts it back
+      const canvas = frame.contentDocument?.getElementById('canvas');
+      if (canvas) canvas.style.pointerEvents = '';
+      screen.hidePopover();
+      screen.removeAttribute('popover');
+    };
+  }, [overlay]);
+
+  // Esc and the browser's own controls leave without coming through toggleFullscreen, so this
+  // follows the event rather than the button.
+  useEffect(() => {
+    const changed = () => setFullscreen(document.fullscreenElement !== null);
+    document.addEventListener('fullscreenchange', changed);
+    return () => document.removeEventListener('fullscreenchange', changed);
+  }, []);
 
   // The page's half of the GPIO protocol; the cart's half is in carts/<game>.p8 and both
   // byte layouts are declared in lib/gpio.ts. Nothing below may hardcode an offset — the
   // effect re-runs when `game` changes, so it reads the whole layout off `protocol`.
   useEffect(() => {
-    if (!boardProtocol) return;
+    if (!boardProtocol || game === null) return;
     const protocol = boardProtocol;
     let busy = false;
     // `clearInterval` stops future ticks but cannot cancel one already suspended at an
@@ -300,39 +479,206 @@ export default function Pico8Game({
     };
   }, [game, talkProtocol]);
 
-  const src = `/games/${game}.html`;
+  const src = game === null ? '' : `/games/${game}.html`;
 
+  // Two items of App's grid rather than one box of its own, so the cart switcher can sit
+  // beside them on a wide screen.
   return (
-    <div>
-      {status === 'missing' && (
-        <p className={styles.missing}>
-          No cart found at <code>{src}</code>. Export a PICO-8 game to{' '}
-          <code>public/games/</code> to play.
-        </p>
-      )}
-      <div className={styles.layout}>
-        <div className={`${styles.stage} ${status === 'missing' ? styles.hidden : ''}`}>
-          <iframe
-            // Keyed so switching carts remounts the element. Reusing it with a new `src`
-            // leaves the old cart's pico8_gpio reachable during the swap.
-            key={game}
-            ref={iframeRef}
-            className={styles.frame}
-            src={src}
-            title={game}
-            onLoad={() => applyStatus('ready')}
-            onError={() => applyStatus('missing')}
-          />
+    <>
+      <div className={styles.device}>
+        {status === 'missing' && (
+          <p className={styles.missing}>
+            No cart found at <code>{src}</code>. Export a PICO-8 game to{' '}
+            <code>public/games/</code> to play.
+          </p>
+        )}
+        <div className={status === 'missing' ? styles.hidden : styles.handheld}>
+          <Handheld
+            cartName={game === null ? null : CARTS[game].name}
+            powered={status === 'ready'}
+            thinking={thinking}
+            // Live once a cart has loaded, like the switcher, which is latched while one loads
+            canEject={status === 'ready'}
+            onEject={onEject}
+            onFullscreen={toggleFullscreen}
+            crt={crt}
+            onCrt={toggleCrt}
+            volume={volume}
+            onVolume={changeVolume}
+            onButtons={pressButtons}
+            keyboardHeld={keyboardHeld}
+            keyboardInCart={keyboardInCart}
+            missedKeys={missedKeys}
+          >
+            <div
+              ref={screenRef}
+              className={`${styles.screen} ${overlay ? styles.overlay : crt && !crtOverGame ? styles.crt : ''}`}
+            >
+              {game === null ? (
+                <p className={styles.insert}>insert a cart</p>
+              ) : (
+                <iframe
+                  // Keyed so switching carts remounts the element. Reusing it with a new `src`
+                  // leaves the old cart's pico8_gpio reachable during the swap.
+                  key={game}
+                  ref={iframeRef}
+                  className={styles.frame}
+                  // PICO-8's page is a little bigger than the iframe (its menu buttons hang off
+                  // the game's right edge), so without this it gets its own scrollbars. Those
+                  // would also narrow the page and shift the game out of the crop.
+                  scrolling="no"
+                  src={src}
+                  title={game}
+                  onLoad={() => {
+                    setGainRef.current = routeVolume(iframeRef.current, volumeRef.current);
+                    paintPageBlack(iframeRef.current);
+                    keepTouchOut(iframeRef.current, letTouchInRef);
+                    watchKeys(iframeRef.current, setKeyboardHeld);
+                    watchFocus(iframeRef.current, setKeyboardInCart);
+                    applyStatus('ready');
+                  }}
+                  onError={() => applyStatus('missing')}
+                />
+              )}
+              {/* In this page, because the overlay isn't real fullscreen and this one can be
+                  clicked. Beside the iframe rather than in it, where PICO-8 cancels touches. */}
+              {overlay && (
+                <button type="button" className={styles.overlayExit} onClick={toggleFullscreen}>
+                  Exit
+                </button>
+              )}
+            </div>
+          </Handheld>
         </div>
-        {status !== 'missing' &&
-          (boardProtocol ? (
-            <TurnPanel turns={turns} thinking={thinking} />
-          ) : (
-            <TalkPanel talks={talks} thinking={thinking} />
-          ))}
       </div>
-    </div>
+      {fullscreen && iframeRef.current && (
+        <FullscreenLayer frame={iframeRef.current} onExit={toggleFullscreen} />
+      )}
+      {crt && status === 'ready' && iframeRef.current && (
+        <CrtScreen key={game} frame={iframeRef.current} onOverGame={setCrtOverGame} />
+      )}
+      {status !== 'missing' && (
+        <div className={styles.panel}>
+          {game !== null && boardProtocol ? (
+            <TurnPanel turns={turns} thinking={thinking} intro={CARTS[game].panel} />
+          ) : game !== null && talkProtocol ? (
+            <TalkPanel talks={talks} thinking={thinking} intro={CARTS[game].panel} />
+          ) : (
+            <TurnPanel turns={[]} thinking={false} intro={NO_CART_PANEL} />
+          )}
+        </div>
+      )}
+    </>
   );
+}
+
+// PICO-8's page switches to its own touch layout once it has seen a touch: it shrinks the
+// game to two thirds of its window, draws its own controller over it, and reads every later
+// touch as a press of that controller, zeroing pico8_buttons. The handheld's D-pad and keys
+// are this page's touch controls, so touches inside the cart's page stop at its window,
+// in the capture phase, before any of PICO-8's listeners see them. A tap still clicks,
+// because a click is an event of its own, so the play button still starts the cart. The
+// overlay covers the handheld and wants PICO-8's controller, so it lets them through.
+function keepTouchOut(frame: HTMLIFrameElement | null, letIn: { current: boolean }) {
+  const win = frame?.contentWindow;
+  if (!win) return;
+  for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
+    win.addEventListener(
+      type,
+      (event) => {
+        if (!letIn.current) event.stopImmediatePropagation();
+      },
+      { capture: true },
+    );
+  }
+}
+
+// The volume slider's gain, put between PICO-8 and the speakers when the cart's page has loaded,
+// which is before its play button can be pressed and PICO-8 connects its sound. A Gem-in-Eye door
+// is a load() inside the same page, so the gain stays. See lib/volume.ts.
+function routeVolume(frame: HTMLIFrameElement | null, percent: number) {
+  const win = frame?.contentWindow as (Window & typeof globalThis) | null | undefined;
+  return win?.AudioNode ? routeAudio(win, percent) : null;
+}
+
+// PICO-8's page has a #222 background, which shows round the game wherever the iframe is bigger
+// than it (see .frame), as a grey bezel inside the handheld's black glass. The page is ours to
+// reach, being same-origin, and the cart's own screen is black.
+function paintPageBlack(frame: HTMLIFrameElement | null) {
+  const body = frame?.contentDocument?.body;
+  if (body) body.style.background = '#000';
+}
+
+// Which of the handheld's buttons the keyboard is holding, so they can move with it. Keys go to
+// whichever window has focus, so this listens in the cart's, and a button moves only when the
+// cart got its key. It's only a watcher: the runtime has the key already, so nothing here goes
+// near pico8_buttons. Two keys can press one button, so it stays down until both are up. A blur
+// lets go of everything, as the runtime does, because a key released elsewhere sends its keyup
+// elsewhere. Keys under Cmd don't count, because macOS sends no keyup for them at all.
+function watchKeys(frame: HTMLIFrameElement | null, onChange: (held: number) => void) {
+  const win = frame?.contentWindow;
+  if (!win) return;
+  const down = new Set<number>();
+  const report = () => onChange([...down].reduce((held, key) => held | BUTTON_KEYS[key]!, 0));
+  win.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.keyCode in BUTTON_KEYS && !event.metaKey) down.add(event.keyCode);
+      report();
+    },
+    { capture: true },
+  );
+  win.addEventListener(
+    'keyup',
+    (event) => {
+      down.delete(event.keyCode);
+      report();
+    },
+    { capture: true },
+  );
+  win.addEventListener('blur', () => {
+    down.clear();
+    report();
+  });
+}
+
+// Whether the cart has the keyboard. Keys go to the window with focus, so that's the cart's
+// window having it: a click on its screen, or Tab reaching the iframe, gives it focus, and a
+// click anywhere else on the page takes it away. Leaving the browser takes it too, and gives
+// it back on return, which is right, and nothing on the page shows meanwhile. It starts from
+// where focus is, not from the last cart's answer: WebKit sends no blur from a removed iframe.
+function watchFocus(frame: HTMLIFrameElement | null, onChange: (focused: boolean) => void) {
+  const win = frame?.contentWindow;
+  if (!win) return;
+  onChange(document.activeElement === frame && document.hasFocus());
+  win.addEventListener('focus', () => onChange(true));
+  win.addEventListener('blur', () => onChange(false));
+}
+
+// Nothing behind the overlay may move, because any of it showing through is the page. PICO-8
+// only cancels a touch on its controller, so a drag anywhere else ran out of the iframe and
+// scrolled the page behind, and Safari's bars with it, which opened gaps down to About.
+//
+// So every touch in the cart's page is cancelled, which also ends zooming and the long-press
+// callout, and PICO-8 still sees them: cancelling isn't stopping. `passive: false` is what makes
+// it count, because Safari ignores a cancel from a window's touch listener otherwise. This page
+// keeps its touchstart, or Exit couldn't be tapped. The .cart-overlay class is the backstop, for
+// whatever gets past that: the page can't scroll, and isn't drawn, with black behind it.
+function holdPageStill(win: Window) {
+  const scrollY = window.scrollY;
+  const cancel = (event: Event) => event.preventDefault();
+  const options = { passive: false };
+  const inCart = ['touchstart', 'touchmove', 'gesturestart'];
+  const inPage = ['touchmove', 'gesturestart'];
+  for (const type of inCart) win.addEventListener(type, cancel, options);
+  for (const type of inPage) document.addEventListener(type, cancel, options);
+  document.documentElement.classList.add('cart-overlay');
+  return () => {
+    for (const type of inCart) win.removeEventListener(type, cancel);
+    for (const type of inPage) document.removeEventListener(type, cancel);
+    document.documentElement.classList.remove('cart-overlay');
+    window.scrollTo(0, scrollY);
+  };
 }
 
 function filled(board: Board) {

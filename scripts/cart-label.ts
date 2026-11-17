@@ -1,8 +1,10 @@
-// A cart's label lives in three places, and this moves it between them:
-//   - the .p8's __label__ section, 128 rows of colour digits, the only full-colour copy;
+// A cart's label lives in four places, and this moves it between them:
+//   - the .p8's __label__ section, 128 rows of colour digits, the source of the rest;
 //   - the poster behind the play button in the exported .html, the same picture at half
 //     brightness, which every visitor sees before the cart starts;
-//   - a PNG, for looking at a capture without opening PICO-8.
+//   - public/labels/<cart>.png at scale 1, the full-colour copy the cart switcher shows,
+//     which scripts/export-cart.ts rewrites on every export;
+//   - any other PNG, for looking at a capture without opening PICO-8.
 //
 //   node scripts/cart-label.ts png     <cart.p8> <out.png> [scale]
 //   node scripts/cart-label.ts check   <cart.p8> <export.html>
@@ -10,7 +12,9 @@
 //
 // `restore` writes the poster back into the .p8, for a poster that went live from a label
 // nobody saved. Halving keeps all 32 palette colours distinct, so the round trip is exact.
-// tests/cart-labels.test.ts runs the same check as `check` on every cart.
+// After one, regenerate public/labels/<cart>.png with `png` at scale 1.
+// tests/cart-labels.test.ts runs the same check as `check` on every cart, and checks each
+// label image the same way.
 //
 // Exits 2 when the cart has no label or a blank one, meaning "capture one first", and 1 for
 // anything else that goes wrong, including a poster that doesn't match.
@@ -98,8 +102,20 @@ function predict(filter: number, left: number, up: number, corner: number): numb
 export function readPoster(html: string): string {
   const match = /\.p8_start_button\{[^}]*?data:image\/png;base64,([A-Za-z0-9+/=]+)/.exec(html);
   if (!match) throw new Error('no poster image in .p8_start_button');
-  const png = Buffer.from(match[1]!, 'base64');
+  return pngDigits(Buffer.from(match[1]!, 'base64'), DIMMED, 'poster');
+}
 
+/**
+ * A label image as colour digits, for one `labelPng` wrote at scale 1, or a browser's
+ * screenshot of one. Compared by pixel, not byte, because a newer zlib can compress the same
+ * picture differently.
+ */
+export function readLabelPng(png: Buffer): string {
+  return pngDigits(png, PALETTE, 'label image');
+}
+
+/** A SIZE x SIZE PNG as colour digits, each pixel looked up in `palette`. */
+function pngDigits(png: Buffer, palette: number[], what: string): string {
   let header: Buffer | undefined;
   const data: Buffer[] = [];
   for (let at = 8; at < png.length; ) {
@@ -110,36 +126,39 @@ export function readPoster(html: string): string {
     if (type === 'IDAT') data.push(body);
     at += 12 + length;
   }
-  // 8-bit RGB, not interlaced: the only form PICO-8 writes.
+  // 8-bit RGB, not interlaced: the only form PICO-8 or labelPng writes. RGBA too, which is
+  // how WebKit saves a screenshot; the alpha is ignored.
   if (
     !header ||
     header.readUInt32BE(0) !== SIZE ||
     header.readUInt32BE(4) !== SIZE ||
     header[8] !== 8 ||
-    header[9] !== 2 ||
+    (header[9] !== 2 && header[9] !== 6) ||
     header[12] !== 0
   ) {
-    throw new Error(`the poster is not a ${SIZE}x${SIZE} 8-bit RGB PNG`);
+    throw new Error(`the ${what} is not a ${SIZE}x${SIZE} 8-bit RGB PNG`);
   }
 
-  const stride = SIZE * 3;
+  const bytes = header[9] === 6 ? 4 : 3;
+  const stride = SIZE * bytes;
   const raw = inflateSync(Buffer.concat(data));
   const rgb = Buffer.alloc(SIZE * stride);
   for (let y = 0; y < SIZE; y++) {
     const filter = raw[y * (stride + 1)]!;
     for (let i = 0; i < stride; i++) {
-      const left = i >= 3 ? rgb[y * stride + i - 3]! : 0;
+      const left = i >= bytes ? rgb[y * stride + i - bytes]! : 0;
       const up = y > 0 ? rgb[(y - 1) * stride + i]! : 0;
-      const corner = y > 0 && i >= 3 ? rgb[(y - 1) * stride + i - 3]! : 0;
+      const corner = y > 0 && i >= bytes ? rgb[(y - 1) * stride + i - bytes]! : 0;
       rgb[y * stride + i] = (raw[y * (stride + 1) + 1 + i]! + predict(filter, left, up, corner)) & 0xff;
     }
   }
 
   let digits = '';
   for (let i = 0; i < SIZE * SIZE; i++) {
-    const colour = DIMMED.indexOf(rgb.readUIntBE(i * 3, 3));
+    const colour = palette.indexOf(rgb.readUIntBE(i * bytes, 3));
     if (colour === -1) {
-      throw new Error(`poster pixel ${i % SIZE},${Math.floor(i / SIZE)} is not a dimmed palette colour`);
+      const kind = palette === DIMMED ? 'dimmed palette' : 'palette';
+      throw new Error(`${what} pixel ${i % SIZE},${Math.floor(i / SIZE)} is not a ${kind} colour`);
     }
     digits += colour.toString(32);
   }

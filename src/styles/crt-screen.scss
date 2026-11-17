@@ -1,0 +1,18 @@
+// The canvas CrtScreen.tsx draws the filter on, inside the cart's page. The site's stylesheets stop
+// at the iframe, so this is a sheet of its own, imported ?inline and carried in with it.
+
+@use 'crt';
+
+// Placed over the game by CrtScreen.tsx, which follows it. The shader's picture is opaque and hides
+// this background, so it shows only when there's no picture: no WebGL, or a context that's been lost.
+//
+// A picture capped at LARGEST_PICTURE in src/lib/crt.ts, where frames fell behind, is enlarged to
+// fit, and smoothly: PICO-8's page sets every canvas pixelated, which at 2.75x would draw some
+// scanlines a device pixel thicker than the rest.
+.crt-screen {
+  position: fixed;
+  z-index: 1;
+  pointer-events: none;
+  image-rendering: auto;
+  @include crt.crt-filter;
+}

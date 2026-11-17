@@ -10,15 +10,53 @@
 // carts are static files, and the one test that needs a model response stubs `/api/move` in
 // the page. That keeps this runnable by anyone who clones the repo, and cheap in CI.
 
+import { mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
+import { GPU } from './playwright/_ci.ts';
 
 const PORT = 5174; // not 3000/5173, so a dev server you already have open is left alone
 const BASE_URL = `http://localhost:${PORT}`;
+
+// Firefox needs two things the other engines don't, both handed to it as environment.
+//
+// Its fullscreen fills the screen, where Chromium and WebKit keep the viewport, and a headless
+// Firefox's screen is 1366 x 768. fullscreen.spec.ts measures the game against a 1728 x 1086
+// window, so the screen is made that size. PICO-8 drew 768 there before, which was right for
+// that screen.
+//
+// On macOS 27 it hangs at launch, a core at 100% for each worker until the launch times out.
+// Its app data resolves to ~/Library/Application Support/Firefox, which macOS 27 protects, and
+// headless Firefox spins on a "Profile Missing" dialog it can't draw. App data of its own lets
+// it start. Fixed upstream in Firefox 158 (microsoft/playwright#42768): drop it once Playwright
+// bundles 158 or later. The timeout makes any hang fail in 30s rather than spin for minutes.
+const firefoxAppData = join(tmpdir(), 'pico-ai-playwright-firefox');
+const onMac = process.platform === 'darwin';
+if (onMac) mkdirSync(firefoxAppData, { recursive: true });
+const firefoxLaunch = {
+  timeout: 30_000,
+  env: {
+    ...process.env,
+    MOZ_HEADLESS_WIDTH: '1728',
+    MOZ_HEADLESS_HEIGHT: '1086',
+    ...(onMac ? { MOZ_APP_DATA: firefoxAppData, MOZ_LOCAL_APP_DATA: firefoxAppData } : {}),
+  },
+};
+
+// In CI, Firefox skips the tests that read what the CRT shader drew. CI's Linux machine has no
+// GPU, and Firefox there has no WebGL at all, so those tests could only fail. They still run in
+// Firefox locally, and in every other engine everywhere. The tag is on the tests, from
+// playwright/_ci.ts.
+const noWebGl = process.env.CI ? { grepInvert: new RegExp(GPU.tag) } : {};
 
 export default defineConfig({
   testDir: './playwright',
   // Cart switches involve a 1.6MB runtime load; the default 5s expect timeout is tight.
   expect: { timeout: 10_000 },
+  // A cart may take BOOT_MS (30s) to boot in CI, the whole of a test's default time, so a test
+  // there gets twice that. A desktop boots one in a second or two.
+  timeout: process.env.CI ? 60_000 : 30_000,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -31,6 +69,11 @@ export default defineConfig({
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
     // Real touch emulation — hasTouch and a mobile viewport, not just a narrow window.
     { name: 'mobile-safari', use: { ...devices['iPhone 15'] } },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'], launchOptions: firefoxLaunch },
+      ...noWebGl,
+    },
   ],
 
   webServer: {

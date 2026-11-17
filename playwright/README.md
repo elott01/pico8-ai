@@ -1,7 +1,7 @@
 # Browser tests
 
 ```sh
-npm run test:playwright      # all three projects
+npm run test:playwright      # all four projects
 npm run test:playwright:ui   # watch mode with a time-travel debugger
 npx playwright test --project=webkit
 ```
@@ -16,41 +16,197 @@ rather than hostage to a model whose p95 has been measured at 14s.
 First run downloads browsers:
 
 ```sh
-npx playwright install chromium webkit
+npx playwright install chromium webkit firefox
 ```
 
-## Why three projects
+## Why four projects
 
 | project | covers |
 | --- | --- |
 | `chromium` | the common case |
 | `webkit` | **the reason this suite exists** |
-| `mobile-safari` | real touch — `hasTouch`, mobile viewport, not just a narrow window |
+| `mobile-safari` | real touch — `hasTouch`, mobile viewport, not just a narrow window. The only project where PICO-8's own touch layout can switch on |
+| `firefox` | the third engine. Its first run found no bug in the page, only in the harness (below) |
 
 WebKit is not redundant with Chromium. The cart switcher was keyboard-unreachable in Safari
 while passing every Chromium check, because WebKit leaves buttons out of the tab order unless
 macOS keyboard navigation is enabled. A single-engine suite stays green through that entire
 bug. Verified by mutation: deleting the `tabIndex={0}` from `CartCard` fails `webkit` and
-leaves `chromium` passing.
+leaves `chromium` passing. Links are left out the same way, and the header's Source link was
+once committed without it: `about.spec.ts` now fails in `webkit` if a header link loses its
+`tabIndex={0}`.
+
+## Firefox
+
+Added 2026-11-08, on macOS 27.2 with Playwright 1.62.1 (Firefox 153). Everything the other
+desktop engines run, it runs and passes: the 3/4 cartridges' `zoom` and their labels, the CRT
+shader, fullscreen, the keyboard's order, and the volume slider. Its sound checks fail with the
+routing switched off, as they do elsewhere. What needed changing was the harness:
+
+- **On macOS 27 it hangs at launch.** Each worker's Firefox ("Nightly" in Activity Monitor)
+  sits at 100% CPU until the launch times out, then Playwright starts another. Its app data
+  resolves to `~/Library/Application Support/Firefox`, which macOS 27 protects, and headless it
+  spins on a "Profile Missing" dialog it can't draw. That happened here with no Firefox
+  installed and no such folder. `MOZ_APP_DATA` and `MOZ_LOCAL_APP_DATA`, set in
+  `playwright.config.ts`, give it a folder of its own. The `sandbox_extension_issue_file`
+  and `RenderCompositorSWGL` lines in its log are red herrings: turning off its sandboxes,
+  GPU process and Fission changed nothing. Fixed upstream in Firefox 158
+  ([microsoft/playwright#42768](https://github.com/microsoft/playwright/issues/42768)).
+- **Its fullscreen fills the screen**, where Chromium and WebKit keep the viewport, and a
+  headless Firefox's screen is 1366 x 768. PICO-8 drew 768 there, the right size for that
+  screen. The config sets the screen to `fullscreen.spec.ts`'s 1728 x 1086 window.
+- **It lays out in 1/60px**, so two edges that meet can differ by a rounding error.
+  `theme.spec.ts` allows 0.01px where the open theme control meets the header's edge.
+
+## In CI
+
+`.github/workflows/test.yml` runs each project as its own job, side by side. Three things there
+differ from a run on a desktop, all because CI's machines have no GPU and run slower:
+
+- **WebKit and mobile-safari run on a Mac runner.** Linux has a WebKit too, but it's a different
+  port no Safari user runs, and on a Linux runner it ran PICO-8 about ten times slower than real
+  time: a cart took 12s to boot, and everything that waits for frames timed out.
+- **Firefox skips the tests that read the CRT shader's picture.** They carry the `@gpu` tag
+  (`playwright/_ci.ts`), which the `firefox` project skips when `CI` is set: on the Linux runner,
+  with no GPU, Firefox has no WebGL at all, so they could only fail. Chromium, WebKit and
+  mobile-safari run them in CI, and every engine runs them locally, so run the suite here
+  before merging a change to the shader.
+- **The `webkit` project skips one shader test, reduced motion.** On the Mac runner its picture
+  moved between two reads with the game still, twice in a row. It holds still on a real Mac, and
+  mobile-safari passes it on the same runner, so the runner looks to blame, though the reason
+  isn't known. The skip says so where it is in `crt.spec.ts`.
+- **A cart gets `BOOT_MS` (30s) to boot, and a test 60s in CI.** A desktop boots one in a second
+  or two; CI has taken over 10s with the filter drawn in software at 2x. Nothing here tests how
+  fast PICO-8 boots, so the time costs nothing but a slower failure.
+
+Firefox's job also starts PulseAudio with a silent output, since the runner has no sound card,
+and without one Firefox's audio never plays and `volume.spec.ts` hears silence.
 
 ## What each file guards
 
-- **`keyboard.spec.ts`** — tab order reaches both cards, focus is visibly painted, Enter
+- **`keyboard.spec.ts`** — tab order reaches every cart, focus is visibly painted, Enter
   switches, the live region announces. Focus that moves invisibly is indistinguishable from a
   keyboard that does nothing, which is how the Safari bug was first misdiagnosed.
-- **`layout.spec.ts`** — no sideways scroll, equal card widths, WCAG 2.5.5 target sizes, and
-  the 7×6 board still fitting after a switch. Runs at every project's viewport, because these
-  only break at particular widths.
+- **`layout.spec.ts`** — no sideways scroll, every cartridge the same size (the empty slot
+  included), WCAG 2.5.5 target sizes, the 7×6 board still fitting after a switch, and Source
+  opening in a new tab. Runs at every project's viewport, because these only break at
+  particular widths. The size check runs at 1400px too, where the carts stand in a column:
+  in a row, stretching hides a mismatch. Also that the shelf, shell and panel fit a laptop's
+  window and end level, from 1208 x 879 to 2560 x 1440, that a 3/4 cartridge keeps its
+  label full-size and its tagline for screen readers, and that the panel's title matches the shelf's in font and position. Also
+  that the arcade has the first screen to itself, so the window's edge can't cut About, that
+  About lines up with it at every layout, and which windows get the wider page and larger
+  text: a regular one must not.
+- **`screen.spec.ts`** — the game fills the handheld's 512px screen exactly, at 4×, before
+  and after the cart starts, at 1280 and 780px, on a window tall enough for the full-size
+  handheld and on a short one, where it's drawn at 384px and PICO-8 must still draw 512 behind
+  the transform. The iframe is 540 × 539 and cropped to where PICO-8's page draws the game,
+  which is the export's layout, not ours: a new PICO-8 that moved it would fail here. Also
+  that `--device-height` is still the shell's real height, since the 3/4 handheld's box is
+  set from it, and that the iframe keeps `scrolling="no"`. Headless browsers
+  draw no scrollbars, so this can't see them come back. It checks the attribute instead,
+  plus the reason for it, that PICO-8's page still overflows the iframe.
+- **`labels.spec.ts`** — each label on the shelf is its PNG on screen, pixel for pixel, at
+  1x, across a cycle of 8 window sizes in each direction, in every layout the shelf has.
+  Zoomed to 96px at 3/4, a label lost a quarter of its rows and columns, and in Chromium which
+  ones changed with the window's size. One on a half pixel would blend. A layout check sees
+  neither, and nor does 2x, where half a pixel is a whole one.
+- **`controls.spec.ts`** — the handheld's D-pad and keys set and clear bits in
+  `pico8_buttons[0]`, two held at once, focus staying in the cart, a click with no pointer
+  tapping, letting go on a cart switch, and the disabled state with no cart. Keys held in the
+  cart draw their control pressed without touching `pico8_buttons`, and let go when focus
+  leaves or the cart changes. A held arm tips the whole D-pad, and two tip it to a corner. Its
+  lip closes on the side pressed in and opens on the far side. The depth is measured from
+  layout, since WebKit's screenshots paint 3D flat. The lettering reads `CLICK SCREEN` while
+  keys don't reach the cart, and the light beside it flashes for each cart key pressed on the
+  page. Keys that reach the cart flash nothing, and the cart taking the keys cuts a flash
+  short. A cart switch changes the lettering once, with no flicker while the next cart loads,
+  and an eject leaves it alone. Those hold the press like a person and the next cart's page
+  like a slow server, since an instant click and a fast load hide the flicker. Eject,
+  Fullscreen and CRT leave the keyboard in the cart. From 520px the pause button sits between
+  the D-pad and the keys, under a mouse or a finger, with the D-pad's caption still on one
+  line. A narrower window under a mouse keeps the keyboard light and has no pause button, and
+  at 360px the keys still sit beside the D-pad. On `mobile-safari`, the hint never shows: the
+  pause button takes the light's place at the lettering's right edge, without making the row
+  taller, and presses `0x40`. No key's caption is drawn there. A phone's shell gives back
+  their room, and a wider one keeps it, so the shell stays `--device-height`. A tap starts the
+  cart without PICO-8 switching to its touch layout.
+- **`power.spec.ts`** — POWER comes on when the cart's page loads, even when it loads before
+  React runs its effects. React's scheduler is held back a second so the cart always wins that
+  race, which only WebKit in CI was ever slow enough to lose, about one load in three.
+- **`eject.spec.ts`** — Eject empties the device, focus moves to the first cart, a cart goes
+  back in, and Tab reaches the bottom row in its drawn order (Fullscreen, Eject, CRT, then the
+  volume slider) before the cart's iframe, which swallows Tab. Eject sits on the screen's centre
+  line between two buttons its size, at full size and at 3/4.
+- **`fullscreen.spec.ts`** — the Fullscreen button draws the game at 8× and comes back to the
+  crop without restarting the run. Arrow keys move the cursor in fullscreen, checked on real
+  pixels, since a cart can look right there and take no keys. A turn played in fullscreen
+  reaches a stubbed `/api/move` and is in the panel on the way back, and a door's `load()`
+  stays fullscreen. The Exit button sits beside the game in Silkscreen, fades while the mouse
+  rests, and leaves on a real click, which is what a popover in the page failed. The CRT
+  filter carries over when it's chosen, covers the game exactly, drawn at the screen's own
+  pixels (or at 1024, on a machine whose frames fell behind), follows it when the window
+  changes (in WebKit only: automation can't resize a fullscreen window in Chromium, and in
+  Firefox a resize leaves fullscreen), and comes back to the handheld with it.
+- **`overlay.spec.ts`** — the phone's fullscreen, on `mobile-safari` only. Fullscreen stretches
+  the same iframe over the page, in both orientations, with PICO-8's controller and without its
+  icons, and from a scrolled page, which is where it first went wrong. A real touch reaches the
+  controller, whose O and X are traded to sit where the handheld's are, and each circle, tapped,
+  presses the button it shows. Exit puts everything back and touches stop reaching PICO-8 again, and a turn and a
+  door both work inside it. The page behind can't scroll and isn't drawn, every touch in the cart
+  is cancelled, and Exit returns to the same scroll position. The CRT filter is the handheld's
+  own, sits on the game and follows it round a turn of the phone. This engine has no Safari
+  bars, so none of it stands in for a real iPhone.
+- **`crt.spec.ts`** — the CRT filter's shader. The screen's CSS filter covers PICO-8's poster,
+  and the shader takes the game when it starts, at the screen's device pixels through the
+  handheld's transform. It draws the game as it plays and comes back from a lost context. The
+  tube moves while the game stands still, and holds still under `prefers-reduced-motion`. A big
+  fullscreen picture whose frames fall behind is drawn at 1024 and enlarged, with the cart's page
+  held up 50ms a frame to make them, since a test machine's GPU decides whether they would. With
+  no WebGL the CSS filter covers the game instead, once. The CRT button and a cart switch take
+  it away and bring it back, and CRT's light in the shell's edge is lit only while it's on. The
+  look is checked on made-up pictures: 1-pixel columns stay apart and every row has scanlines,
+  against limits measured on versions that should fail. It reads the shader's drawing buffer,
+  because a broken shader leaves the CSS fallback showing, and a screenshot would pass that.
+- **`volume.spec.ts`** — the volume slider. The arrow keys move it a step at a time and the
+  setting is kept; a drag moves it and leaves the keyboard in the cart. Its sound checks listen
+  to what reaches the speakers while tic-tac-toe's cursor plays its sound: half way is a quarter
+  of the amplitude, 0 is silence, and a cart starts at the level it was left at. The listener is
+  put in before the page's own gain, so a gain that went missing, or in too late, would be heard
+  at full volume; both checks fail with the routing switched off. Not on `mobile-safari`, whose
+  shell has no slider.
+- **`theme.spec.ts`** — the theme control is one icon named for the current choice. It
+  opens sideways when a mouse rests on it, without moving focus, and closes when the mouse
+  leaves, staying open through a choice; a click, Enter or a tap opens it until a choice or a
+  dismissal. Either way nothing else in the header moves: on a wide window it lies over the
+  Source link, which fades, and on a narrow one it leaves the links showing. The choice under
+  the mouse is filled, and a click as it opens picks nothing. A choice applies and survives a
+  reload, Escape closes it however it opened and puts focus back on the icon if it was inside,
+  and Auto clears the stored choice. A slow click elsewhere still lands.
+- **`about.spec.ts`** — the header's About and Source links are in the tab order, following
+  About lands Tab inside the section, every link off the site opens a new tab and says so,
+  and the chain lists the five steps a move takes, in order.
 - **`cart-switch.spec.ts`** — a turn in flight when you switch carts must never land in the
   new cart's panel. Stages a request by writing `ST_REQUEST` into `pico8_gpio` directly (the
   iframe is same-origin, which is how the page reads it at all), rather than driving the game.
+- **`panel.spec.ts`** — the Gemini panel before its first card. Each cart opens it with its
+  own intro (what to do, then what its cards hold, under the cards' own headings), which stays
+  through the first "Gemini is thinking…" without the action and goes when the first card lands.
+- **`talk.spec.ts`** — gem-in-eye's talk loop, with `/api/talk` stubbed and the cart's side
+  of the handshake played by writing GPIO directly. A purchase gets the first page and later
+  pages come from memory, a failed call answers with the fallback, and a reply that arrives
+  after the cart stopped waiting is dropped.
 - **`doors.spec.ts`**: both ways from Gem-in-Eye's dungeon back to the hub, which are
   separate code paths. One test walks the knight into the dungeon, home, and back in, and
   checks that the run (max depth, uptime) survives each `load()`. The other lets a dead weight
   kill him and rolls back, and checks the rollback is counted, he's refilled, and the hub
-  carries it back down. This is the only file that starts a cart and plays it. It reads each
-  switch from the runtime's console log, and steers through `pico8_buttons` rather than the
-  keyboard, for the reason below. The death takes ~12s, the slowest test in the suite.
+  carries it back down. A third walks him up through the shop's door to gem-in-eye and back
+  out. That door loads nothing, so the test knows the shop by its backdrop on screen, compared
+  with the hub's sprites 128-255. It's the one door that needs lining up, so he climbs the left
+  wall and then holds up and right, which turns him in the frame he reaches it. This is the
+  only file that starts a cart and plays it. It reads each switch from the runtime's console
+  log, and steers through `pico8_buttons` rather than the keyboard, for the reason below. The
+  death takes ~12s, the slowest test in the suite.
 
 ## Input that changes mid-load is lost
 

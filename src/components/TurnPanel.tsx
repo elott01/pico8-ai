@@ -5,6 +5,8 @@
 import { isLegalMove } from '../lib/gpio.ts';
 import type { Board, Protocol } from '../lib/gpio.ts';
 import type { AiFailure, Line } from '../lib/ai.ts';
+import type { PanelIntro } from '../lib/carts.ts';
+import EmptyPanel from './EmptyPanel.tsx';
 import MiniBoard from './MiniBoard.tsx';
 import styles from './TurnPanel.module.scss';
 
@@ -37,26 +39,34 @@ export type Turn = {
 type BadgeKind = 'win' | 'threat' | 'notice';
 type Badge = { text: string; kind: BadgeKind };
 
-export default function TurnPanel({ turns, thinking }: { turns: Turn[]; thinking: boolean }) {
+export default function TurnPanel({
+  turns,
+  thinking,
+  intro,
+}: {
+  turns: Turn[];
+  thinking: boolean;
+  /** What the panel says before the first turn: the cart's, or the empty slot's. */
+  intro: PanelIntro;
+}) {
   return (
     <aside className={styles.panel}>
-      <h2 className={styles.heading}>AI Turns</h2>
+      <h2 className={styles.heading}>Gemini</h2>
+      <div className={styles.box}>
+        {thinking && (
+          <div className={styles.thinking}>
+            <span className={styles.dot} aria-hidden="true" />
+            <span role="status">Gemini is thinking…</span>
+          </div>
+        )}
 
-      {thinking && (
-        <div className={styles.thinking}>
-          <span className={styles.dot} aria-hidden="true" />
-          <span role="status">Gemini is thinking…</span>
-        </div>
-      )}
+        {turns.length === 0 && <EmptyPanel intro={intro} thinking={thinking} />}
 
-      {turns.length === 0 && !thinking && (
-        <p className={styles.empty}>Waiting for the AI's first move…</p>
-      )}
-
-      {turns
-        .slice()
-        .reverse()
-        .map((t, i) => <TurnCard key={t.n} turn={t} defaultOpen={i === 0} />)}
+        {turns
+          .slice()
+          .reverse()
+          .map((t, i) => <TurnCard key={t.n} turn={t} defaultOpen={i === 0} />)}
+      </div>
     </aside>
   );
 }

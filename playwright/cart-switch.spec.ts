@@ -66,6 +66,8 @@ test.describe('switching carts mid-turn', () => {
   test('a turn in flight never lands in the new cart\'s panel', async ({ page }) => {
     await stubSlowModel(page);
     await page.goto('/');
+    // In place of Gem-in-Eye, which the page starts with: the request staged below is a board's
+    await page.getByRole('button', { name: /Tic-Tac-Toe/ }).click();
     await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
 
     await stageCartRequest(page);
@@ -87,7 +89,8 @@ test.describe('switching carts mid-turn', () => {
     await page.waitForTimeout(MOVE_DELAY + 4000);
 
     await expect(page.locator('aside')).not.toContainText(PHANTOM);
-    await expect(page.locator('aside')).toContainText("Waiting for the AI's first move");
+    // Connect Four's own intro, so the panel is the new cart's and still empty
+    await expect(page.locator('aside')).toContainText('Drop your first piece.');
   });
 
   test('switching clears the previous cart\'s turn history', async ({ page }) => {
@@ -99,6 +102,8 @@ test.describe('switching carts mid-turn', () => {
       }),
     );
     await page.goto('/');
+    await page.getByRole('button', { name: /Tic-Tac-Toe/ }).click();
+    await expect(page.locator('iframe')).toHaveAttribute('src', /tic_tac_toe/);
     await stageCartRequest(page);
     await expect(page.locator('aside')).toContainText('first cart turn');
 

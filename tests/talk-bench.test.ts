@@ -26,6 +26,7 @@ import {
   repeatedPhrases,
   numbersIn,
   strayNumbers,
+  namesAgentNumber,
 } from '../bench/talk_suite.ts';
 import { TALK_CONFIG } from '../api/_gemini.ts';
 import { TIER_COST, STASH_CAPS, SHOP_ITEMS, priceOptions } from '../api/_talk_prompt.ts';
@@ -190,6 +191,17 @@ describe('number measures', () => {
     assert.deepEqual(strayNumbers('agent 4016. agent 4015 had more sense.', since, 18), [], 'old agents are the numbers below');
     assert.deepEqual(strayNumbers('agent forty sixteen.', since, 18), []);
     assert.deepEqual(strayNumbers('one hit, the first one.', since, 18), [], '0-3 are not stats');
+    assert.deepEqual(strayNumbers('fourteen more in seven minutes.', fixture('chained'), 18), [], '6 min 40 s since the last purchase');
+  });
+
+  it('namesAgentNumber catches an agent named by number, in digits or words', () => {
+    const since = fixture('since-last-time'); // agent 4016
+    assert.equal(namesAgentNumber('depth five looks better on 4016.', since), true);
+    assert.equal(namesAgentNumber('agent forty sixteen.', since), true);
+    assert.equal(namesAgentNumber('the 4015 before you rolled back sooner.', since), true, 'an old agent');
+    assert.equal(namesAgentNumber('forty-one hundred agents before you.', fixture('maxing-out')), true, 'fused from 4014');
+    assert.equal(namesAgentNumber('forty-one dead weights and depth five.', since), false);
+    assert.equal(namesAgentNumber('ten thousand agents came before you.', since), false, "the prompt's own number");
   });
 
   it("the shipping prompt keeps the agent-number rule the A/B chose, once", () => {

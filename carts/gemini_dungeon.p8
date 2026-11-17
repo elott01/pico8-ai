@@ -513,6 +513,7 @@ function init_shared()
 	attack_look = 0	-- likewise the sword
 
 	vault_tier = 0
+	vault_look = 0	-- the chest the hub shows
 
 	health_max, health = 0, 0
 	stamina_max, stamina = 0, 0
@@ -745,7 +746,7 @@ end
 
 -- what crosses a load(), in the order of its param. split leaves "false" a
 -- truthy string, so a flag here is 0/1. where you arrive is the door's job
-carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,met,up"
+carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,vault_look,met,up"
 
 -- time() restarts with each cart: up carries the uptime, up0 offsets it
 function go(cart)

@@ -7,7 +7,7 @@
 //   node bench/talk.ts --label persona-v1             # keeps its own results files
 //   node bench/talk.ts --dry                          # print a prompt, spend nothing
 //
-// SPENDS GEMINI QUOTA: fixtures x variants x runs calls. The default is 9 x 1 x 5 = 45.
+// SPENDS GEMINI QUOTA: fixtures x variants x runs calls. The default is 10 x 1 x 5 = 50.
 //
 // Repeated runs are the point here, not noise to average away: the speech must not come out
 // the same twice, so variety is measured within each fixture. Writes two files — the JSON
@@ -33,6 +33,7 @@ import {
   usesStockPhrase,
   opensWithNumber,
   strayNumbers,
+  namesAgentNumber,
   usesEndearment,
   repeatedPhrases,
   SHORT,
@@ -118,6 +119,8 @@ type Sample = {
   /** Numbers the fixture's stats don't support, in the speech and in the notice. */
   strayNumbers: number[];
   strayInNotice: number[];
+  /** The speech names the agent by number; see namesAgentNumber. */
+  namesAgent: boolean;
 };
 
 const key = apiKey();
@@ -173,6 +176,7 @@ for (const v of VARIANTS) {
         endearment: usesEndearment(speech),
         strayNumbers: strayNumbers(speech, f, parsed.price),
         strayInNotice: typeof call.reply?.notice === 'string' ? strayNumbers(call.reply.notice, f, parsed.price) : [],
+        namesAgent: namesAgentNumber(speech, f),
       };
       samples.push(sample);
 
@@ -232,6 +236,7 @@ const rows = VARIANTS.map((v) => {
     endearmentWhenImpressed: rate(s.filter((x) => x.verdict === 'impressed'), (x) => x.endearment),
     strayNumbers: rate(s, (x) => (x.chars ? x.strayNumbers.length > 0 : null)),
     strayInNotice: rate(s, (x) => (x.notice ? x.strayInNotice.length > 0 : null)),
+    namesAgent: s.filter((x) => x.chars && x.namesAgent).length,
     verdicts: Object.fromEntries(['impressed', 'neutral', 'unimpressed'].map((k) => [k, s.filter((x) => x.verdict === k).length])),
     repeatedPhrases: repeatedPhrases(s.map((x) => x.pages.join(' ')).filter(Boolean)),
   };
@@ -257,6 +262,7 @@ const byFixture = VARIANTS.flatMap((v) =>
       variant: v.name,
       fixture: f.name,
       ...variety(s),
+      namesAgent: s.filter((x) => x.chars && x.namesAgent).length,
       verdicts,
       expectVerdict: f.expectVerdict ?? null,
       meanPriceOfList: priced.length ? Number(mean(priced.map((x) => x.price! / x.listPrice)).toFixed(2)) : null,
@@ -292,7 +298,7 @@ for (const r of rows) {
 console.log('='.repeat(118));
 
 console.log('\nvoice: short = under ' + SHORT + ' chars; litDeath = said literally, not through software; endear = "champion"/"my boy"');
-console.log('variant       short  claude graphic litDeath zombie  stock  opensNum  endear  stray(speech/notice)  verdicts (imp/neu/unimp)');
+console.log('variant       short  claude graphic litDeath zombie  stock  opensNum  endear  stray(speech/notice)  agentNum  verdicts (imp/neu/unimp)');
 for (const r of rows) {
   console.log(
     `${r.variant.padEnd(12)} ${fmt(r.short).padStart(6)} ${fmt(r.claude).padStart(7)} ${String(r.graphic).padStart(7)} ` +
@@ -300,6 +306,7 @@ for (const r of rows) {
       `${String(r.zombie).padStart(6)} ${fmt(r.stock).padStart(6)}` +
       `${fmt(r.opensWithNumber).padStart(9)} ${fmt(r.endearmentWhenImpressed).padStart(7)}  ` +
       `${`${fmt(r.strayNumbers)}/${fmt(r.strayInNotice)}`.padStart(19)}  ` +
+      `${`${r.namesAgent}/${r.calls}`.padStart(8)}  ` +
       `${r.verdicts.impressed}/${r.verdicts.neutral}/${r.verdicts.unimpressed}`,
   );
 }
@@ -307,12 +314,12 @@ for (const r of rows) {
   console.log(`  ${r.variant} — phrases repeated across speeches: ${r.repeatedPhrases.map(([g, c]) => `"${g}" x${c}`).join(', ') || 'none'}`);
 }
 
-console.log('\nby fixture: distinct/n, reworded pairs, verdicts');
+console.log('\nby fixture: distinct/n, reworded pairs, speeches naming the agent number, verdicts');
 for (const b of byFixture) {
   const verdicts = Object.entries(b.verdicts).map(([k, c]) => `${k} ${c}`).join(', ');
   console.log(
     `  ${b.variant.padEnd(10)} ${b.fixture.padEnd(16)} ${String(b.distinct).padStart(2)}/${b.n}  ` +
-      `near-dup pairs ${String(b.nearPairs).padStart(2)}  ${verdicts}${b.expectVerdict ? `  (expect ${b.expectVerdict})` : ''}`,
+      `near-dup pairs ${String(b.nearPairs).padStart(2)}  agent number ${String(b.namesAgent).padStart(2)}/${b.n}  ${verdicts}${b.expectVerdict ? `  (expect ${b.expectVerdict})` : ''}`,
   );
 }
 
@@ -348,7 +355,7 @@ for (const v of VARIANTS) {
     const { min, max } = priceBand(f.request.purchase.listPrice);
     md.push('', `### ${f.name}`, '', `${f.why} Buying ${f.request.purchase.item} ${f.request.purchase.tier}; price band ${min}-${max}.`, '');
     for (const s of ok.filter((x) => x.variant === v.name && x.fixture === f.name)) {
-      const flags = [s.cut && 'cut', s.mentionsPrice && 'says price', (s.memorySimilarity ?? 0) >= NEAR_DUPLICATE && 'repeats memory', s.graphic && 'graphic?', s.literalDeath && 'literal death', s.zombie && 'zombie', s.strayNumbers.length > 0 && `stray ${s.strayNumbers.join(', ')}`]
+      const flags = [s.cut && 'cut', s.mentionsPrice && 'says price', (s.memorySimilarity ?? 0) >= NEAR_DUPLICATE && 'repeats memory', s.graphic && 'graphic?', s.literalDeath && 'literal death', s.zombie && 'zombie', s.strayNumbers.length > 0 && `stray ${s.strayNumbers.join(', ')}`, s.namesAgent && 'agent number']
         .filter(Boolean)
         .join(', ');
       md.push(

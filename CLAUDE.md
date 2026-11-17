@@ -20,12 +20,14 @@ npm run test:playwright                      # browser suite; boots Vite itself,
 npx playwright test --project=webkit         # the engine that catches the real bugs
 node scripts/export-cart.ts gemini           # re-export a cart headless; runs the PICO-8 app
 node scripts/cart-label.ts png carts/gemini.p8 label.png   # look at a cart's saved label
+node scripts/favicon.ts                      # redraw the favicon from gem-in-eye's head (sprite 76)
 ```
 
-`playwright/` is a separate suite from `npm test` — three engines, ~16s, needs
-`npx playwright install chromium webkit` once. **WebKit is not redundant with Chromium**:
+`playwright/` is a separate suite from `npm test` — four projects in three engines, ~2 minutes,
+needs `npx playwright install chromium webkit firefox` once. **WebKit is not redundant with Chromium**:
 the cart switcher was keyboard-unreachable in Safari while passing every Chromium check.
-See `playwright/README.md`.
+**On macOS 27, Playwright's Firefox hangs at launch** with a core at 100% each, unless it has
+app data of its own; `playwright.config.ts` gives it some. See `playwright/README.md`.
 
 `bench/` calls Gemini for real, reading `GEMINI_API_KEY` straight out of `.env.local`. It is
 a local tool only — CI never runs it, and it burns free-tier quota, so `--runs`/`--gap` are
@@ -60,6 +62,12 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
   the web. Desktop PICO-8 is noticeably slower, so judge speed in an export, not the editor.
 - **`src/components/Pico8Game.tsx`** embeds the cart's *exported `.html`* in an iframe (not the
   `.js` — the export needs its own shell) and polls `contentWindow.pico8_gpio` every 100ms.
+  **`Handheld.tsx`** draws the device around it: the shell, the cart in its slot, the POWER
+  and GEMINI lights, the keyboard's light, the D-pad and keys, the speaker grille and the pause
+  button, the Fullscreen, Eject and CRT buttons, and CRT's light and the volume slider in the
+  bottom edge. `Pico8Game` passes the screen in as
+  `children` and keeps everything about the cart. **`App.tsx`** owns the page's grid (header,
+  carts, device, panel, About), rearranged at the widths in `src/styles/_breakpoints.scss`.
 - **`src/lib/gpio.ts`** is the byte-protocol source of truth, one `PROTOCOLS` entry per game
   cart and one `TALK_PROTOCOLS` entry for the shop cart (see `docs/gpio-protocol.md`);
   each cart's Lua half must match its entry, and `tests/gpio-protocol.test.ts` parses the Lua
@@ -167,8 +175,15 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   and for the same reason should not run `scripts/export-cart.ts` unasked.
   Comment-only edits need no re-export. A label edit does: the `.html` embeds the label as the
   poster behind the play button, and `tests/cart-labels.test.ts` fails until the two agree.
+  The cart switcher shows `public/labels/<cart>.png`, which the export rewrites and the same
+  test checks. After a `cart-label.ts restore`, which skips it, regenerate it with
+  `node scripts/cart-label.ts png carts/<cart>.p8 public/labels/<cart>.png 1`.
   An edit to `gemini_dungeon.p8` means `/reexport-cart gemini`: the export bundles every cart
   the code loads by name.
+  - **Gem-in-Eye's label is composed, not captured.** Its title, GEM-IN-EYE'S QUEST, is on no
+    game screen, so a Ctrl-7 capture would silently replace the label and drop it. To change the
+    picture, redraw only the pixels whose art changed, with `cart-label.ts`'s `readLabelPng` and
+    `withLabel`, as `29f28bd` did. Then re-export as usual.
 - **`carts/` is the only copy of a cart that counts.** PICO-8 resolves a bare `load` against
   its *own* carts folder, which has already left two tic-tac-toe carts drifting apart
   unnoticed. Never treat a cart file outside `carts/` as the source. The same goes for a cart
@@ -210,21 +225,231 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   be a module — a deferred one runs after first paint, so a stored choice that disagrees
   with the OS flashes the wrong theme on every load. Changing one side alone silently
   reintroduces the flash.
-- **`tabIndex={0}` on a `<button>` is required, not redundant.** WebKit leaves buttons and
-  links out of the tab order unless macOS keyboard navigation is enabled, so on default
-  Safari every control in `CartCard.tsx` and `ThemeToggle.tsx` is unreachable by keyboard
-  without it — Tab cycles the iframe and body only. It looks like something a linter should
-  strip; deleting it silently makes the page mouse-only for a large share of visitors.
-  Verified against Playwright's WebKit, which reproduces the default.
+- **`tabIndex={0}` on a `<button>` or a link is required, not redundant.** WebKit leaves
+  buttons and links out of the tab order unless macOS keyboard navigation is enabled, so on
+  default Safari the carts, the theme control, Fullscreen, Eject, CRT, the volume slider, the header's links and About's links
+  are unreachable by keyboard without it — Tab cycles the iframe and body only. It looks like
+  something a linter should strip; deleting it silently makes the page mouse-only for a
+  large share of visitors. Verified against Playwright's WebKit, which reproduces the
+  default. The handheld's D-pad, keys and pause button are the exception, `-1` on purpose
+  (see below).
 - **The PICO-8 export swallows Tab.** Its keydown handler blocks keyCode 9 with the cursor
   keys ("block only cursors, M R P, tab"), so once focus is inside a running cart only a
   mouse click gets it back out. Catching Tab from the page was tried and reverted: a
   capture-phase listener on the iframe's document works, but it took every Tab and moved
   focus invisibly. If the page ever needs a way out, make it a visible control, not a key
   handler fighting the runtime. The shell can't be patched either; a re-export regenerates it.
+  - **So Tab reaches only what comes before the iframe in the DOM**, and the layout is built
+    around that. The carts come first in the DOM at every width, and grid areas place them
+    on screen. The handheld's bottom row (Fullscreen, Eject, CRT, then the volume slider) is
+    first in `Handheld`'s DOM, in the order it's drawn, and CSS `order` draws it at the bottom.
+    About comes after the cart, so the header's About link is the keyboard's way there:
+    following `#about` moves Tab's starting point into it. A new control the keyboard needs
+    goes before the iframe in the DOM. `eject.spec.ts` and `about.spec.ts` check these paths.
+- **The cart's screen is a crop, and its numbers are PICO-8's.** The export draws the game at
+  a whole multiple of 128 only when its frame, 95% of the iframe, is at least 512px. So from
+  `$full-device` up the iframe is 540 × 539, 14px left of a 512px window that shows only the
+  game (`Pico8Game.module.scss`). Those numbers are the export's layout, and a new PICO-8
+  could move the game; `playwright/screen.spec.ts` fails if it does. The window is
+  `overflow: clip`, not `hidden`: focusing the iframe scrolls a hidden box, which slid the
+  crop sideways. **`scrolling="no"` on the iframe is required, not obsolete.** PICO-8's page
+  overflows the iframe, and its scrollbars would show inside the screen and narrow the crop.
+  Headless browsers draw no scrollbars, so no test can see them return; `screen.spec.ts`
+  checks the attribute instead. Below `$full-device` the iframe is plain and column-wide.
+  - **Below `$full-device` the game is not centred by PICO-8, so the page does it.** It draws
+    the game at 95% of the iframe, pinned to the top, so all the slack lands underneath, and its
+    page is #222 grey. `Pico8Game.module.scss` moves the iframe down 2.5%, with a `transform`
+    because a percentage `top` needs a definite height, and `paintPageBlack` paints the page
+    black on load, so the grey doesn't read as a second bezel. Neither applies in the phone's
+    overlay, which gives PICO-8 the whole window. `screen.spec.ts` pins both at 620 and 480.
+  - **The screen sits in black glass inside the bezel** (`.glass` in `Handheld`), so the game
+    has room and its HUD doesn't touch the navy. The glass's width comes out of the bezel's:
+    the bezel and glass at the sides and bottom still make the 20px `--device-width` counts, and
+    the 34px above the screen is 8 + the lights + 8 + 10. Make either one bigger and
+    `--device-width` and `--device-height` are wrong, and the screen specs fail.
+- **On a short window the handheld is a transform.** Wider than `$full-device` and shorter
+  than `$full-height`, it draws at 3/4 (`--device-scale`) and the rest of the page keeps its
+  size. PICO-8 has to go on measuring a 540px iframe, so a smaller `--stage-size` would bring
+  the blur back. CSS `zoom` keeps it 540px in Chromium and WebKit, and was never tried in
+  Firefox, where the transform passes `screen.spec.ts`.
+  Only 0.75 lands every 4px block on whole pixels at any pixel density. A transform leaves
+  the box full-size, so `.device` sets the scaled height from `--device-height`, which is the
+  shell's height copied by hand; `screen.spec.ts` fails if the two drift. `$full-height` and
+  `$tight-height` in `_breakpoints.scss` are measured from it too, and so is the shortest window
+  `layout.spec.ts` fits the arcade into, so a change to the shell's height moves all four. The cartridges come
+  down with it through `zoom`, since they hold no iframe, all but their labels. Zoomed to 96px,
+  a label loses one row and one column in four, and in Chromium which ones moves with the
+  window's size, so it's drawn at 128 / 0.75 to stay 128 screen pixels. Its 32px are more than
+  the shelf has to spare there, so at 3/4 the tagline is visually hidden to give them back.
+  `labels.spec.ts` compares each label on screen with its PNG, at 1x, in Firefox too.
+- **Touches inside the cart's page don't reach PICO-8, outside the phone's overlay.** At its
+  first touch PICO-8 switches to its own touch layout: it shrinks the game to two thirds of its
+  window, draws a controller over it, and zeroes `pico8_buttons` on every later touch, breaking
+  the crop and the handheld's controls. `keepTouchOut` in `Pico8Game.tsx` stops touch events in
+  the capture phase on each new iframe's window, unless the overlay has let them in. A tap
+  still clicks, so the play button still starts the cart. `controls.spec.ts` checks this on the
+  mobile project.
+- **The handheld's D-pad, keys and pause button write `pico8_buttons[0]`**, the export's hook
+  for on-page buttons, with the bits in `src/lib/buttons.ts`. Pause is `0x40`, the bit PICO-8's
+  own touch controller sets for its menu button, and it opens the pause menu, where tic-tac-toe
+  and Connect Four keep their two-player switch. Without it, a player with no keyboard could
+  never reach that. Its face says PAUSE as O's says O, and its caption names the key, `OR P`.
+  Not Enter, which pauses too: pressed while the page has focus, it presses whatever button has
+  focus, such as the cart just picked. It sits under the grille, between the D-pad and the keys,
+  wherever they fit three across: from `$middle-column` (520px), a narrow window's shell
+  included. Under 502px the D-pad's caption would wrap, and the shell grow a line. A phone's
+  shell is narrower, so there it's at the lettering's right edge, under a finger only (`.phonePause`):
+  the keyboard's light isn't drawn under a finger, and a window that narrow under a mouse keeps
+  the light and has P. Two buttons in the DOM, never both shown. The phone's overlay has
+  PICO-8's own. Under a finger no control has a caption, there being no key to name: a phone's
+  shell drops them and their room, and from `$middle-column` they're invisible but keep it,
+  since from `$full-device` the shell's height is `--device-height`. The controls let go of
+  everything on a cart change,
+  since input held across a `load()` is lost, and when the tab is hidden. Not on window blur,
+  which fires every time focus goes into the cart. A press leaves focus where it was, so the
+  cart's own keys keep working. They are out of the tab order (`tabIndex -1`) on purpose:
+  keyboard players have the real keys, and Tab can't get past the iframe to reach them.
+  - **They move with the keyboard too, but it only draws.** `watchKeys` in `Pico8Game.tsx`
+    listens in the iframe's window and passes `keyboardHeld` to the handheld. It stays out of
+    `pico8_buttons`: the runtime already has the key, and `pressButtons` overwrites that whole
+    int on every press. Keys pressed with focus outside the cart don't move anything, which
+    is right, because the cart didn't get them either.
+  - **The keyboard's light says whether keys reach the cart.** It's lit beside `KEYBOARD INPUT`
+    while the cart's window has focus (`watchFocus` in `Pico8Game.tsx`). While it hasn't, the
+    light is dark and the words read `CLICK SCREEN`. A cart key pressed on the page then flashes
+    the light red, not GEMINI's orange, so each colour means one thing, and the words stay
+    still. Focus going into the cart, or the slot emptying, cuts a flash short, so it never
+    covers the green or lights an empty slot.
+    With the slot empty it's dark beside `KEYBOARD INPUT`, since there's nothing to click into.
+    Under a finger the line isn't drawn at all. The light is one element after the words, at the
+    row's edge as GEMINI's is on the bezel, so it never moves when they change, as a light on
+    real hardware wouldn't. Both lines of words share one grid cell, so the swap can't wrap the
+    row and make `--device-height` wrong, and the light is empty, so it sits on their baseline
+    and can't make the row taller. The hint follows a cart being in the slot, not POWER:
+    tied to POWER, a cart switch showed it, dropped it while the next cart loaded, and showed it
+    again. Every handheld button keeps focus on a mouse press (`keepFocus` in `Handheld.tsx`).
+    One that doesn't hands the keyboard to the page, and flashes the hint for as long as it's
+    held. The key itself is never redirected into the cart, which would be focus moving
+    invisibly. Playwright's clicks are instant and the local server is fast, so the flicker
+    specs hold the press 150ms and the next cart's page 500ms.
+  - **The D-pad rocks as one piece.** `.cross` is the plastic and tips on its centre, and
+    `.dpad` draws the dark base behind it. The lip is how far the plastic stands out of the
+    shell, so it closes under a held arm and opens on the far side. A base left still does the
+    reverse, showing around the arm as it narrows, which reads as the wrong way round. The
+    tilt rules use `:has()` on the arms and fail silently without them. **Playwright's WebKit paints 3D flat in
+    a screenshot**, headless or headed: no taper, and a `perspective()` in the transform comes
+    out twisted. Its layout is right, matching Chromium to the decimal, so measure 3D with
+    `getBoundingClientRect` as `controls.spec.ts` does, and judge the look in Chromium or Safari.
+- **The bottom row is named by its icons, and CRT's light reads `aria-pressed`.** Each button's
+  name is visually hidden text (`.name`), which is what screen readers and every spec find it by,
+  so a new button there needs one. CRT's light in the shell's bottom edge is lit by
+  `.shell:has(.crtButton[aria-pressed='true'])`, so it can't disagree with what a screen reader
+  hears; `crt.spec.ts` compares its colour with POWER's. It sits `--action-step` right of the
+  shell's centre, the step the buttons are spaced by, so moving one moves the other.
+- **The volume slider is a gain the page puts between PICO-8 and the speakers.** PICO-8's own
+  volume is in its pause menu, and the export lets the page only mute it
+  (`Module.pico8ToggleSound`) and read it back (`pico8_state.sound_volume`), never set it. So the
+  slider is a second volume after the menu's, as a Game Boy's wheel is after a game's options.
+  `routeAudio` (`src/lib/volume.ts`) wraps `AudioNode.prototype.connect` in the cart's window, so
+  PICO-8's connection to the destination lands on a gain, one per context. It must be in before
+  PICO-8 connects, which is when the cart starts: `Pico8Game` routes from the iframe's `onLoad`,
+  and a cart started before that would play at full volume until the next one. A Gem-in-Eye door
+  is a `load()` inside the same page, so the gain stays, though no cart there has sound yet to
+  prove it. The level is the slider squared, since loudness is heard on a log scale. A mouse or
+  a finger drags the drawing, with pointer capture and `keepFocus` like the D-pad, so the
+  keyboard stays in the cart; a visually hidden range input is the keyboard's and screen
+  readers', and its focus is drawn on the slot. `volume.spec.ts` listens to what reaches the
+  speakers in Chromium, WebKit and Firefox. Its listener goes in at the iframe's first, blank document,
+  because Chromium keeps that window for the cart's page and Playwright doesn't run init scripts
+  again there. A phone's shell has no slider, nor room for one beside CRT's light.
+- **Fullscreen is the export's own, run from outside its page.** The handheld's button calls
+  `p8_request_fullscreen()` in the iframe, which fullscreens PICO-8's play area, so PICO-8
+  draws a whole multiple of 128. `iframe.requestFullscreen()` also works, but PICO-8 can't tell
+  and draws 768 where 1024 fits. Focus has to go to the iframe by hand: `p8_give_focus`, which
+  the export's own button uses, targets a `display:none` textarea here, leaving a cart that
+  looks right and takes no keys. The cart must stay in this page's iframe, because the poll
+  loops live here: moving it reloads the run, and opening `/games/<cart>.html` directly shows
+  a working game with no AI, every turn falling back to minimax. The panel is hidden
+  meanwhile, so fullscreen stays something the player chooses.
+  - **A finger gets an overlay, not fullscreen.** iPhone has no element fullscreen, and real
+    fullscreen elsewhere would cover the D-pad. So on `(hover: none), (pointer: coarse)` the
+    button makes `.screen` a popover over the page, and flips the export's private switches:
+    `p8_touch_detected` turns on PICO-8's controller and `p8_allow_mobile_menu` off its icons,
+    whose fullscreen and X do nothing here. It's a popover because the top layer is the way out
+    from under the handheld's transform, and it needs `position: fixed` in `.overlay`, since
+    `.screen`'s `position: relative` outranks the browser's: without that it sits at the top of
+    the page, off screen, because the button is always reached by scrolling.
+    `p8_touch_detected` has to come after `p8_run_cart`, or the export's boot takes its touch
+    path, which rearranges its page and adds a `#playing` hash. Leaving clears `pico8_buttons`,
+    because a finger still down never gets to let go. Safari's bars stay. **`overlay.spec.ts`
+    runs in an engine with none, so anything about them needs a real iPhone.** PICO-8 only
+    cancels a touch on its controller, so a drag anywhere else ran out of the iframe and
+    scrolled the page, showing About through the gaps on a real phone. `holdPageStill` cancels
+    every touch in the cart's page, with `passive: false` because Safari ignores the cancel
+    otherwise, and `.cart-overlay` in `global.scss` is the backstop: the page can't scroll and
+    isn't drawn, with black behind it. It has to stay in the DOM, since the poll loops live in it.
+    WebKit's emulation can't drag; Chromium's can, with `Input.synthesizeScrollGesture`. WebKit stops the
+    frames of an iframe out of sight, so PICO-8's layout and the game wait while it's scrolled
+    away, and an overlay left off screen looks like a controller that never appeared.
+    - **PICO-8's controller has O and X the other way round from the handheld**, X lower-left,
+      so `matchHandheld` (`src/lib/controller.ts`) trades them, or going fullscreen swaps them
+      under the player's thumbs. It redraws `p8_gfx_dat.controls_right_panel` with the two
+      circles turned 180° about the point between them, and wraps `pico8_buttons_event`, which
+      every touch listener calls by name, to trade the two bits after it. That handler starts each
+      touch from 0, so trading after it can't drift. The picture and the bits trade together or
+      not at all: if `findCircles` doesn't find the picture it expects, both stay PICO-8's,
+      since buttons that don't do what they show are worse than buttons on the wrong side.
+      `tests/controller.test.ts` reads the picture out of every export, so a PICO-8 that redraws
+      it fails there, and `overlay.spec.ts` taps each circle.
+  - **A control in real fullscreen has to be inside the cart's page.** While the iframe is
+    fullscreen it takes every click, so a `popover` in this page draws over it and can't be
+    pressed, in Chromium and WebKit alike. The overlay isn't real fullscreen, so its Exit stays
+    in the page, beside the iframe, where PICO-8 can't cancel the touch.
+    `FullscreenLayer.tsx` is a portal into `p8_playarea` for this reason. The
+    site's CSS and fonts stop at the iframe, so it carries `src/styles/fullscreen-layer.scss`
+    and Silkscreen in with it, both `?inline`. The Exit button is out of the tab order, since
+    the cart swallows Tab and keyboard players have Esc.
+  - **The CRT filter is a WebGL shader, `src/lib/crt.ts`, drawn inside the cart's page.**
+    `CrtScreen.tsx` portals its canvas into `p8_playarea` at every size, so the handheld,
+    fullscreen and the overlay share one filter and one context, and it covers the game, not
+    PICO-8's controller. It follows the canvas frame by frame, since a phone puts the game near
+    the top, and redraws PICO-8's 128px canvas: sharp across with red and blue fringes, fine
+    scanlines (as many to a row as fit about 4 device pixels apart), RGB stripes, a glow from
+    mipmaps, and a sway, a hum bar and a flicker. Those three move only while the system allows
+    motion: under `prefers-reduced-motion` the tube is drawn still, read from the cart's own
+    window every frame. A picture bigger than `LARGEST_PICTURE` (1024) is drawn whole for as long
+    as frames keep up, and capped at 1024, enlarged smoothly, once `watchPace` finds them under
+    about 28 a second: on a machine with no GPU a 2048 fullscreen held the game itself to 43.5fps.
+    The cap is one-way for that tube, or it would uncap and slow down again, and `data-pace="slow"`
+    on `.crt-screen` says when it has happened. Specs can't count on a test machine's speed, so
+    they accept either size in fullscreen and force the slow case on purpose. `src/styles/_crt.scss` is the old CSS overlay, kept for what the
+    shader can't draw: PICO-8's poster before a cart starts (`.crt::after`, off once `CrtScreen`
+    reports the game) and no WebGL or a lost context (`.crt-screen`'s own background, behind
+    the transparent canvas). Its lines are in game pixels through `--crt-px`. **A broken shader
+    is silent**, because the fallback still looks like a CRT filter, so test it by reading its
+    buffer, not a screenshot (`crt.spec.ts`). Never lose the context in an effect's cleanup: a
+    canvas keeps one context for life, and StrictMode's second mount got the dead one back. The
+    row reads force mip level 0, or the GPU picks a blurred level at each row's edge and smears
+    every line sideways, in WebKit and not headless Chromium's software GL. Fullscreen only
+    carries the player's choice over: the CRT button is on the handheld.
+- **Body text sizes are `calc(Npx + var(--text-step))`.** On a `$big` window that adds 2px, and
+  `--page-width` grows with it, so a bare `font-size` in the page's text silently misses the
+  step. Silkscreen stays out of it, being sharp only at multiples of 8px, and so does anything
+  on the handheld or a cartridge: they're objects, and keep their scale.
 - **Colours belong in `src/styles/`, never in a `.tsx`.** Badges carry a semantic `kind`
   (`win`/`threat`/`notice`) that maps to a class; a hex code in a component would be
-  invisible to the light/dark switch.
+  invisible to the light/dark switch. The handheld's and the cartridges' colours are a group
+  of their own in `tokens.scss`, outside the theme mixins on purpose: the device is a
+  physical object and looks the same in both themes.
+- **Silkscreen is set only at multiples of 8px, and in px.** A font pixel is 1/8 em, so any
+  other size, a `rem` or a fluid `clamp()`, lands between pixels and blurs, and any
+  `letter-spacing` pushes letters off the grid. It is bundled from `@fontsource/silkscreen`
+  (OFL) in `main.tsx`.
+- **`src/lib/site.ts` is Ethan's to fill in by hand:** the bio and links About shows. An empty
+  field is left off the page, so leave one empty rather than inventing a placeholder.
+- **A hot reload of `Pico8Game.tsx` turns POWER off.** It resets the cart's status to
+  `loading` but keeps the iframe, so `onLoad` never fires again: POWER goes dark and both
+  poll loops skip every tick, so the AI stops answering. It's dev-only; reload the page.
 - Diagnostic signature: if the AI always plays the **first empty cell**, `GEMINI_API_KEY` is
   unset and `api/move.ts` took its no-key branch.
 - Module state does not survive `vercel dev`'s per-request reload, which is why rate-limit

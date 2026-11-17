@@ -16,7 +16,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: calc(14px + var(--text-step));
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -25,6 +25,25 @@ body {
 // the page itself must never scroll sideways.
 body {
   overflow-x: hidden;
+}
+
+// The phone's overlay, on <html>. The page has to stay, because the poll loops live in it, but
+// it can't scroll and isn't drawn. Pico8Game's .overlay makes itself visible again inside the
+// hidden body. Black behind, so a gap iOS opens anyway, in a bounce or a bar sliding, shows nothing.
+.cart-overlay {
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--p8-black);
+
+  body {
+    position: fixed;
+    inset: 0;
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: var(--p8-black);
+    visibility: hidden;
+  }
 }
 
 h1,

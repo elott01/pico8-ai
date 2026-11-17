@@ -1,0 +1,202 @@
+@use '../styles/a11y';
+@use '../styles/breakpoints' as bp;
+
+// Two equal columns where there's room for both at $column-min, else one: from $medium, since
+// below it About is only as wide as the device. The intro and the chain, the two columns under
+// them, and the "Who made it" card all split this way, so their right-hand columns line up.
+$column-min: 340px;
+$column-gap: 48px;
+
+// $inset is a box's padding and border on each side, so a split inside a card still lines up
+// with one outside it, and both drop to one column at the same width.
+@mixin split($inset: 0px) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, $column-min - $inset), 1fr));
+  column-gap: $column-gap;
+}
+
+// Under the arcade, after a rule, and as wide as it is, so its edges line up with everything
+// above it: the device's width in one column, the page's from $medium.
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+  max-width: var(--device-width);
+  margin: 52px auto 0;
+  padding-top: 48px;
+  border-top: 1px solid var(--rule);
+  text-align: left;
+  // The header's About link lands here; this keeps the rule off the window's very top edge
+  scroll-margin-top: 24px;
+
+  @media #{bp.$medium} {
+    max-width: var(--page-width);
+  }
+}
+
+// The text on the left, the chain on the right; one column, text first, below $medium.
+.top {
+  @include split;
+  row-gap: 48px;
+  align-items: start;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+  min-width: 0;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 68ch;
+}
+
+// Silkscreen at a multiple of 8px only; see .title in App.module.scss.
+.heading {
+  font-family: var(--font-pixel);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.intro {
+  font-size: calc(16px + var(--text-step));
+  line-height: 1.6;
+}
+
+.subheading {
+  margin: 0;
+  font-size: calc(12px + var(--text-step));
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.body {
+  line-height: 1.6;
+}
+
+.chain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  width: 100%;
+  max-width: 384px;
+  // Centred in its column, or under the text in one column, which puts it under the middle of
+  // the device too
+  justify-self: center;
+
+  li {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-md);
+  }
+
+  // A two-way arrow in each gap: the board goes down toward Gemini, the answer comes back up.
+  // A mask, so its colour is a token like everything else's.
+  li + li::before {
+    content: '';
+    position: absolute;
+    top: -26px;
+    left: 50%;
+    width: 16px;
+    height: 24px;
+    transform: translateX(-50%);
+    background: var(--ink-dim);
+    $arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 2v19M2 18l3 3 3-3M11 22V3M8 6l3-3 3 3'/%3E%3C/svg%3E");
+    -webkit-mask: $arrow center / contain no-repeat;
+    mask: $arrow center / contain no-repeat;
+  }
+
+  // Gemini, outlined in the brand colour
+  li:last-child {
+    border-color: var(--ai);
+  }
+}
+
+.stepName {
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.stepNote {
+  font-size: calc(12px + var(--text-step));
+  line-height: 1.4;
+  color: var(--ink-dim);
+}
+
+.columns {
+  @include split;
+  row-gap: 32px;
+}
+
+$who-padding: 24px;
+
+.who {
+  @include split($who-padding + 1px);
+  row-gap: 24px;
+  // Less above and below, where nothing has to line up
+  padding: 20px $who-padding;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+}
+
+// One row, centred in its column like the chain and level with the middle of the bio beside
+// it, wrapping only where the column is too narrow for all of them.
+.links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-self: center;
+  gap: 12px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--rule);
+  border-radius: 22px;
+  color: var(--ink);
+  text-decoration: none;
+
+  &:hover {
+    border-color: var(--ink-dim);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  svg {
+    flex: none;
+    color: var(--ink-dim);
+  }
+}
+
+.srOnly {
+  @include a11y.visually-hidden;
+}

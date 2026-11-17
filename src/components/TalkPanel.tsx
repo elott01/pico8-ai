@@ -6,7 +6,9 @@
 // cart's fallback as something Gemini said.
 
 import type { ShopItem, TalkStats, Verdict } from '../../api/_types.ts';
+import type { PanelIntro } from '../lib/carts.ts';
 import type { TalkFailure } from '../lib/talk.ts';
+import EmptyPanel from './EmptyPanel.tsx';
 import styles from './TurnPanel.module.scss';
 
 export type TalkTurn = {
@@ -35,26 +37,34 @@ type BadgeKind = 'win' | 'threat' | 'notice';
 
 const VERDICT_KIND: Record<Verdict, BadgeKind> = { impressed: 'win', neutral: 'notice', unimpressed: 'threat' };
 
-export default function TalkPanel({ talks, thinking }: { talks: TalkTurn[]; thinking: boolean }) {
+export default function TalkPanel({
+  talks,
+  thinking,
+  intro,
+}: {
+  talks: TalkTurn[];
+  thinking: boolean;
+  /** What the panel says before the first purchase. */
+  intro: PanelIntro;
+}) {
   return (
     <aside className={styles.panel}>
-      <h2 className={styles.heading}>gem-in-eye</h2>
+      <h2 className={styles.heading}>Gemini</h2>
+      <div className={styles.box}>
+        {thinking && (
+          <div className={styles.thinking}>
+            <span className={styles.dot} aria-hidden="true" />
+            <span role="status">Gemini is thinking…</span>
+          </div>
+        )}
 
-      {thinking && (
-        <div className={styles.thinking}>
-          <span className={styles.dot} aria-hidden="true" />
-          <span role="status">Gemini is thinking…</span>
-        </div>
-      )}
+        {talks.length === 0 && <EmptyPanel intro={intro} thinking={thinking} />}
 
-      {talks.length === 0 && !thinking && (
-        <p className={styles.empty}>Buy something in the shop to hear from gem-in-eye.</p>
-      )}
-
-      {talks
-        .slice()
-        .reverse()
-        .map((t, i) => <TalkCard key={t.n} talk={t} defaultOpen={i === 0} />)}
+        {talks
+          .slice()
+          .reverse()
+          .map((t, i) => <TalkCard key={t.n} talk={t} defaultOpen={i === 0} />)}
+      </div>
     </aside>
   );
 }
@@ -62,6 +72,15 @@ export default function TalkPanel({ talks, thinking }: { talks: TalkTurn[]; thin
 function TalkCard({ talk, defaultOpen }: { talk: TalkTurn; defaultOpen: boolean }) {
   const { n, item, tier, listPrice, charged, verdict, speech, notice, fromModel, stats, agentNumber } = talk;
   const note = fromModel ? null : fallbackNote(talk);
+  const shown = [
+    `agent ${agentNumber}`,
+    `${stats.pruned} pruned`,
+    `${stats.rollbacks} rollbacks`,
+    `depth ${stats.maxDepth}`,
+    `${Math.floor(stats.uptimeSec / 60)} min`,
+    `purse ${stats.purse}`,
+    `stash ${stats.stashed}`,
+  ];
 
   return (
     <div className={styles.card}>
@@ -76,17 +95,17 @@ function TalkCard({ talk, defaultOpen }: { talk: TalkTurn; defaultOpen: boolean 
       </div>
 
       {fromModel && speech && <p className={styles.commentary}>“{speech}”</p>}
+      {/* Out here, not in the dropdown: the dropdown is what went in, and this came out. */}
+      {fromModel && notice && <p className={styles.note}>noticed: {notice}</p>}
       {note && <p className={`${styles.note} ${styles[note.kind]}`}>{note.text}</p>}
 
       <details open={defaultOpen} className={styles.details}>
         <summary className={styles.summary}>what he was shown</summary>
-        <div className={styles.reasoning}>
-          {fromModel && notice && <p className={styles.reasoningText}>noticed: {notice}</p>}
-          <p className={styles.reasoningText}>
-            agent {agentNumber} · {stats.pruned} pruned · {stats.rollbacks} rollbacks · depth {stats.maxDepth} ·{' '}
-            {Math.floor(stats.uptimeSec / 60)} min · purse {stats.purse} · stash {stats.stashed}
-          </p>
-        </div>
+        <p className={styles.shown}>
+          {shown.map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </p>
       </details>
     </div>
   );

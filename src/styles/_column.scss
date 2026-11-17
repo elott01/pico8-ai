@@ -1,0 +1,19 @@
+// A column with a title over a box: the cart shelf and the AI panel, either side of the
+// device. Shared so the two titles stay level and alike.
+
+@mixin titled {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+// Silkscreen at a multiple of 8px only; see .title in App.module.scss.
+@mixin title {
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.25;
+  color: var(--ink-dim);
+}

@@ -120,6 +120,20 @@ describe('what the prompt states', () => {
     assert.ok(p.includes('8 [unchanged since the last purchase]'));
   });
 
+  it("gives the agent's number only when it's news", () => {
+    const memory = (over: Partial<TalkRequest['memory']>) => ({ lastSpeeches: [], lastStats: null, newSession: false, agentNumber: 4012, ...over });
+    // The first purchase he remembers, a reload, and a rollback since the last purchase
+    for (const m of [memory({}), memory({ lastStats: STATS, newSession: true }), memory({ lastStats: { ...STATS, rollbacks: 7 } })]) {
+      assert.match(buildTalkPrompt(request({ memory: m })), /agent number: 4012\./);
+    }
+    // The agent he spoke to last time
+    const same = buildTalkPrompt(request({ memory: memory({ lastStats: { ...STATS, pruned: 50 } }) }));
+    assert.doesNotMatch(same, /4012/);
+    assert.match(same, /the same agent as at your last purchase, with no rollback since\. the agents before it were each lost/);
+    // The digits rule stays, since his remembered speeches may still carry the number
+    assert.match(same, /Write its number in digits exactly as given, never in words\./);
+  });
+
   it('after a reload, shows the previous agent separately instead of a collapse', () => {
     const p = buildTalkPrompt(request({ memory: { lastSpeeches: [], lastStats: { ...STATS, pruned: 112 }, newSession: true, agentNumber: 4013 } }));
     assert.doesNotMatch(p, /\[was /);
