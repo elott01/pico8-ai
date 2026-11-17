@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   IDX_STATUS,
   ST_IDLE,
@@ -148,7 +148,12 @@ export default function Pico8Game({
     if (next !== 'loading') onReadyRef.current?.();
   }, []);
 
-  useEffect(() => {
+  // A layout effect, not a passive one, so this always runs before the new cart's onLoad. It
+  // runs in the commit that puts the iframe in, and a load event can't come until after. A
+  // passive effect runs after paint, and when the cart's page beat it there, as it did in
+  // WebKit in CI, it put 'loading' back over onLoad's 'ready', nulled the gain onLoad had just
+  // routed, and POWER stayed off for good, with the game drawn on the screen behind it.
+  useLayoutEffect(() => {
     // No cart means no iframe to wait for, so it settles at once and the switcher's latch
     // can't stick.
     applyStatus(game === null ? 'empty' : 'loading');

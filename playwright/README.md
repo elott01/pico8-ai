@@ -107,6 +107,9 @@ routing switched off, as they do elsewhere. What needed changing was the harness
   taller, and presses `0x40`. No key's caption is drawn there. A phone's shell gives back
   their room, and a wider one keeps it, so the shell stays `--device-height`. A tap starts the
   cart without PICO-8 switching to its touch layout.
+- **`power.spec.ts`** — POWER comes on when the cart's page loads, even when it loads before
+  React runs its effects. React's scheduler is held back a second so the cart always wins that
+  race, which only WebKit in CI was ever slow enough to lose, about one load in three.
 - **`eject.spec.ts`** — Eject empties the device, focus moves to the first cart, a cart goes
   back in, and Tab reaches the bottom row in its drawn order (Fullscreen, Eject, CRT, then the
   volume slider) before the cart's iframe, which swallows Tab. Eject sits on the screen's centre

@@ -33,8 +33,13 @@ const BASE_URL = `http://localhost:${PORT}`;
 const firefoxAppData = join(tmpdir(), 'pico-ai-playwright-firefox');
 const onMac = process.platform === 'darwin';
 if (onMac) mkdirSync(firefoxAppData, { recursive: true });
+//
+// On a Linux machine with no GPU, as in CI, it refuses WebGL: the only GL there is Mesa's software
+// one, which Firefox blocks. The CRT filter then never draws and crt.spec fails throughout, so
+// the block is lifted. Chromium and WebKit use software GL there without being asked.
 const firefoxLaunch = {
   timeout: 30_000,
+  firefoxUserPrefs: { 'webgl.force-enabled': true },
   env: {
     ...process.env,
     MOZ_HEADLESS_WIDTH: '1728',

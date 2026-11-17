@@ -30,18 +30,23 @@ jobs:
   # workers on a 4-core runner and ran one after another, which took over 20 minutes; split,
   # they run side by side, and a failure names its engine. `browser` is what the project
   # launches: mobile-safari is WebKit with an iPhone's viewport and touch.
+  #
+  # WebKit runs on macOS. Linux has a WebKit too, but it's a different port that no Safari user
+  # runs, and on a Linux runner it ran PICO-8 about ten times slower than real time: a cart
+  # took 12s to boot, and every test that waits for frames timed out. On macOS it's the WebKit
+  # Safari is built on, and the one this suite already passes in locally.
   playwright:
     name: playwright (${{ matrix.project }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       # One engine failing says nothing about the others, so let them finish.
       fail-fast: false
       matrix:
         include:
-          - { project: chromium, browser: chromium }
-          - { project: webkit, browser: webkit }
-          - { project: mobile-safari, browser: webkit }
-          - { project: firefox, browser: firefox }
+          - { project: chromium, browser: chromium, os: ubuntu-latest }
+          - { project: webkit, browser: webkit, os: macos-latest }
+          - { project: mobile-safari, browser: webkit, os: macos-latest }
+          - { project: firefox, browser: firefox, os: ubuntu-latest }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -57,10 +62,14 @@ jobs:
         id: pw
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
 
+      # Playwright keeps browsers in a different folder on each OS. Only one exists on a runner,
+      # and the cache takes whichever it finds.
       - uses: actions/cache@v4
         id: browsers
         with:
-          path: ~/.cache/ms-playwright
+          path: |
+            ~/.cache/ms-playwright
+            ~/Library/Caches/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}-${{ matrix.browser }}
 
       # WebKit is the reason this suite exists: the cart switcher was keyboard-unreachable in
@@ -71,12 +80,24 @@ jobs:
       # config without one, and each of its tests failed at launch, in a millisecond.
       - name: Install browser
         if: steps.browsers.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps ${{ matrix.browser }}
+        run: npx playwright install ${{ matrix.browser }}
 
-      # The cache restores binaries but not the system libraries they link against.
+      # The system libraries the browser links against. Linux only: macOS has them already. The
+      # cache restores the browser but not these, so they're installed on every run.
       - name: Install browser system deps
-        if: steps.browsers.outputs.cache-hit == 'true'
+        if: runner.os == 'Linux'
         run: npx playwright install-deps ${{ matrix.browser }}
+
+      # A Linux runner has no sound card, so Firefox's audio never plays, and volume.spec hears
+      # silence at every level. A PulseAudio server with no hardware gives it a silent output
+      # that still runs. Chromium needs none, having a fake output of its own when headless.
+      - name: Give Firefox somewhere to play sound
+        if: matrix.browser == 'firefox'
+        run: |
+          sudo apt-get install -y --no-install-recommends pulseaudio
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=silent
+          pactl set-default-sink silent
 
       # Starts Vite itself (see playwright.config.ts). No GEMINI_API_KEY, no quota:
       # /api/move is stubbed in-page for the one test that needs a model response.
