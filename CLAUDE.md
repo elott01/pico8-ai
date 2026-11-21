@@ -322,7 +322,8 @@ Breaking any of these fails silently, so verify them when touching the relevant 
     square is crisp-edged, so it snaps whole. With no font to lift, each centres on the face above
     the shadow, as `controls.spec.ts` checks, up and pressed. A Z or A/B in the carts was
     mocked and dropped: neither reads in PICO-8's 5px badge, and a 7px badge crowded the hub's
-    hints over its signs. PICO-8's own phone controller and pause menu still say O.
+    hints over its signs. The phone overlay's controller draws the square too (below); only
+    PICO-8's pause menu still says O.
   - **They move with the keyboard too, but it only draws.** `watchKeys` in `Pico8Game.tsx`
     listens in the iframe's window and passes `keyboardHeld` to the handheld. It stays out of
     `pico8_buttons`: the runtime already has the key, and `pressButtons` overwrites that whole
@@ -414,8 +415,11 @@ Breaking any of these fails silently, so verify them when touching the relevant 
       not at all: if `findCircles` doesn't find the picture it expects, both stay PICO-8's,
       since buttons that don't do what they show are worse than buttons on the wrong side.
       `tests/controller.test.ts` reads the picture out of every export, so a PICO-8 that redraws
-      it fails there, and `overlay.spec.ts` taps each circle. Its O is still PICO-8's ring, not
-      the shell's square: only the positions are traded.
+      it fails there, and `overlay.spec.ts` taps each circle. After the trade, `squareTheRing`
+      redraws O's ring as the shell's square, as wide as X's cross, in PICO-8's 2px line. That
+      part is only a look, so it stands alone: if `findSymbols` doesn't find a ring and a cross
+      where it expects, the ring stays and the trade still happens. The unit test checks every
+      export's symbols and that the square stays clear of the circle's outline.
   - **A control in real fullscreen has to be inside the cart's page.** While the iframe is
     fullscreen it takes every click, so a `popover` in this page draws over it and can't be
     pressed, in Chromium and WebKit alike. The overlay isn't real fullscreen, so its Exit stays
