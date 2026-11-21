@@ -126,7 +126,8 @@ and without one Firefox's audio never plays and `volume.spec.ts` hears silence.
   Fullscreen and CRT leave the keyboard in the cart. From 520px the pause button sits between
   the D-pad and the keys, under a mouse or a finger, with the D-pad's caption still on one
   line. A narrower window under a mouse keeps the keyboard light and has no pause button, and
-  at 360px the keys still sit beside the D-pad. On `mobile-safari`, the hint never shows: the
+  at 360px the keys still sit beside the D-pad. The keys' drawn square and X sit at the centre
+  of their faces, up and pressed. On `mobile-safari`, the hint never shows: the
   pause button takes the light's place at the lettering's right edge, without making the row
   taller, and presses `0x40`. No key's caption is drawn there. A phone's shell gives back
   their room, and a wider one keeps it, so the shell stays `--device-height`. A tap starts the

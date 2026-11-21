@@ -293,7 +293,7 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   for on-page buttons, with the bits in `src/lib/buttons.ts`. Pause is `0x40`, the bit PICO-8's
   own touch controller sets for its menu button, and it opens the pause menu, where tic-tac-toe
   and Connect Four keep their two-player switch. Without it, a player with no keyboard could
-  never reach that. Its face says PAUSE as O's says O, and its caption names the key, `OR P`.
+  never reach that. Its face says PAUSE, and its caption names the key, `OR P`, as the keys' do.
   Not Enter, which pauses too: pressed while the page has focus, it presses whatever button has
   focus, such as the cart just picked. It sits under the grille, between the D-pad and the keys,
   wherever they fit three across: from `$middle-column` (520px), a narrow window's shell
@@ -309,6 +309,20 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   which fires every time focus goes into the cart. A press leaves focus where it was, so the
   cart's own keys keep working. They are out of the tab order (`tabIndex -1`) on purpose:
   keyboard players have the real keys, and Tab can't get past the iframe to reach them.
+  - **PICO-8's O is a square on the shell, and both keys' symbols are drawn, not lettered.**
+    The carts show the buttons as 🅾️ and ❎, which at PICO-8's size are a square ring and a
+    cross. A letter O on the shell read as a key's name, and its key is Z, which confused a
+    playtester. So the key shows the square the cart already draws, the captions name the
+    keys, and its screen-reader name is `Square button`. Both are SVG in 3px lines like the
+    D-pad's chevrons, and both 16px: an 18px cross looked bigger than the square. **The page
+    leaves the handheld a fraction of a pixel off the grid** (the arcade is centred, and the
+    header's heights end in .5), so anything anti-aliased on it can't count on whole pixels.
+    The cross's strokes end square across themselves, as the chevrons' do. Cut off by the box
+    instead, each end was a corner, and anti-aliasing drew every corner a different shape. The
+    square is crisp-edged, so it snaps whole. With no font to lift, each centres on the face above
+    the shadow, as `controls.spec.ts` checks, up and pressed. A Z or A/B in the carts was
+    mocked and dropped: neither reads in PICO-8's 5px badge, and a 7px badge crowded the hub's
+    hints over its signs. PICO-8's own phone controller and pause menu still say O.
   - **They move with the keyboard too, but it only draws.** `watchKeys` in `Pico8Game.tsx`
     listens in the iframe's window and passes `keyboardHeld` to the handheld. It stays out of
     `pico8_buttons`: the runtime already has the key, and `pressButtons` overwrites that whole
@@ -400,7 +414,8 @@ Breaking any of these fails silently, so verify them when touching the relevant 
       not at all: if `findCircles` doesn't find the picture it expects, both stay PICO-8's,
       since buttons that don't do what they show are worse than buttons on the wrong side.
       `tests/controller.test.ts` reads the picture out of every export, so a PICO-8 that redraws
-      it fails there, and `overlay.spec.ts` taps each circle.
+      it fails there, and `overlay.spec.ts` taps each circle. Its O is still PICO-8's ring, not
+      the shell's square: only the positions are traded.
   - **A control in real fullscreen has to be inside the cart's page.** While the iframe is
     fullscreen it takes every click, so a `popover` in this page draws over it and can't be
     pressed, in Chromium and WebKit alike. The overlay isn't real fullscreen, so its Exit stays

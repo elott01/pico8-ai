@@ -1,6 +1,6 @@
 // The handheld the cart plays in: the lavender shell, the cart standing in its slot, the
 // bezel with its two status lights and the black glass the screen sits in, the printed
-// lettering and the keyboard's light, the D-pad and O/X keys with the speaker grille and the
+// lettering and the keyboard's light, the D-pad and square/X keys with the speaker grille and the
 // pause button between them (on a phone's shell, the pause button in the lettering instead),
 // the Fullscreen, Eject and CRT buttons, and in the bottom edge CRT's light and the volume
 // slider.
@@ -305,7 +305,7 @@ export default function Handheld({
           </div>
           <span className={styles.caption}>OR ARROW KEYS</span>
         </div>
-        {/* Its face says PAUSE as O's says O, and its caption names the key, as theirs do. Only
+        {/* Its face says PAUSE, and its caption names the key, as the keys' do. Only
             P: Enter pauses too, but pressed while the page has focus, it presses whatever button
             has focus, such as the cart just picked. */}
         <div className={styles.middle}>
@@ -315,11 +315,15 @@ export default function Handheld({
         </div>
         <div className={styles.keys}>
           <div className={`${styles.control} ${styles.low}`}>
-            <button {...control(BUTTON.o, styles.key, 'O button')}>O</button>
+            <button {...control(BUTTON.o, styles.key, 'Square button')}>
+              <SquareFace />
+            </button>
             <span className={styles.caption}>OR Z</span>
           </div>
           <div className={`${styles.control} ${styles.high}`}>
-            <button {...control(BUTTON.x, styles.key, 'X button')}>X</button>
+            <button {...control(BUTTON.x, styles.key, 'X button')}>
+              <CrossFace />
+            </button>
             <span className={styles.caption}>OR X</span>
           </div>
         </div>
@@ -341,6 +345,29 @@ function Chevron({ points }: { points: string }) {
   return (
     <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2">
       <polyline points={points} />
+    </svg>
+  );
+}
+
+// The keys' symbols, drawn in solid lines as the chevrons are, both 16px so they're the same
+// size. PICO-8's O is a square here: the cart's 🅾️ is a square ring at PICO-8's size, and the
+// letter O named no key, its key being Z.
+function SquareFace() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="3" shapeRendering="crispEdges">
+      <rect x="1.5" y="1.5" width="13" height="13" />
+    </svg>
+  );
+}
+
+// Each stroke ends square across itself, as the chevrons' do, set in so its corners just reach
+// the box. Ends cut off by the box came out a different shape at each corner: the page leaves
+// the handheld a fraction of a pixel off the grid, and anti-aliasing treats every corner of
+// a cut differently. The square doesn't show it, since its edges are crisp and snap together.
+function CrossFace() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" strokeWidth="3">
+      <path d="M1.06 1.06L14.94 14.94M14.94 1.06L1.06 14.94" />
     </svg>
   );
 }
