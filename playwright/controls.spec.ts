@@ -1,4 +1,4 @@
-// The handheld's D-pad, O/X keys and pause button. They press the cart's buttons through
+// The handheld's D-pad, square and X keys, and pause button. They press the cart's buttons through
 // pico8_buttons[0], the export's hook for on-page controls, and on a touch screen they are the
 // controls: PICO-8's own touch layout is kept from switching on. They also move with the keyboard.
 
@@ -9,7 +9,7 @@ const CONTROLS = [
   ['Down', 1 << 3],
   ['Left', 1 << 0],
   ['Right', 1 << 1],
-  ['O button', 1 << 4],
+  ['Square button', 1 << 4],
   ['X button', 1 << 5],
   ['Pause button', 1 << 6],
 ] as const;
@@ -83,11 +83,11 @@ test.describe('the D-pad and keys', () => {
   test('two held at once hold both', async ({ page }) => {
     await loaded(page);
     await finger(page, 'Left', 'pointerdown', 1);
-    await finger(page, 'O button', 'pointerdown', 2);
+    await finger(page, 'Square button', 'pointerdown', 2);
     expect(await held(page)).toBe((1 << 0) | (1 << 4));
     await finger(page, 'Left', 'pointerup', 1);
     expect(await held(page)).toBe(1 << 4);
-    await finger(page, 'O button', 'pointerup', 2);
+    await finger(page, 'Square button', 'pointerup', 2);
     expect(await held(page)).toBe(0);
   });
 
@@ -195,9 +195,9 @@ test.describe('the keyboard', () => {
     ['ArrowDown', 'Down'],
     ['ArrowLeft', 'Left'],
     ['ArrowRight', 'Right'],
-    ['z', 'O button'],
-    ['c', 'O button'],
-    ['n', 'O button'],
+    ['z', 'Square button'],
+    ['c', 'Square button'],
+    ['n', 'Square button'],
     ['x', 'X button'],
     ['v', 'X button'],
     ['m', 'X button'],
@@ -235,9 +235,9 @@ test.describe('the keyboard', () => {
     await page.keyboard.down('c');
     await page.keyboard.up('z');
     await page.waitForTimeout(100);
-    await expect(control(page, 'O button')).toHaveClass(/held/);
+    await expect(control(page, 'Square button')).toHaveClass(/held/);
     await page.keyboard.up('c');
-    await expect(control(page, 'O button')).not.toHaveClass(/held/);
+    await expect(control(page, 'Square button')).not.toHaveClass(/held/);
   });
 
   test('a key and a click on one control hold it until both are up', async ({ page }) => {
@@ -285,7 +285,7 @@ test.describe('the keyboard', () => {
     await page.keyboard.down('Meta');
     await page.keyboard.down('z');
     await page.waitForTimeout(100);
-    await expect(control(page, 'O button')).not.toHaveClass(/held/);
+    await expect(control(page, 'Square button')).not.toHaveClass(/held/);
   });
 });
 
@@ -511,7 +511,7 @@ test('a window with room between the D-pad and the keys has the pause button the
   else await expect(page.getByText('OR P', { exact: true })).toBeVisible();
 
   const right = (await control(page, 'Right').boundingBox())!;
-  const o = (await control(page, 'O button').boundingBox())!;
+  const o = (await control(page, 'Square button').boundingBox())!;
   const bar = (await pause.boundingBox())!;
   expect(bar.x).toBeGreaterThan(right.x + right.width);
   expect(bar.x + bar.width).toBeLessThan(o.x);
@@ -541,7 +541,7 @@ test("under a finger the keys' captions aren't drawn, and only a phone's shell g
 
   await page.setViewportSize({ width: 340, height: 800 });
   const right = (await control(page, 'Right').boundingBox())!;
-  const o = (await control(page, 'O button').boundingBox())!;
+  const o = (await control(page, 'Square button').boundingBox())!;
   expect(o.x).toBeGreaterThan(right.x + right.width);
 
   await page.setViewportSize({ width: 1024, height: 1366 });
@@ -569,9 +569,36 @@ test('a 360px window keeps the keys beside the D-pad', async ({ page }) => {
   await loaded(page);
   const right = (await control(page, 'Right').boundingBox())!;
   const down = (await control(page, 'Down').boundingBox())!;
-  const o = (await control(page, 'O button').boundingBox())!;
+  const o = (await control(page, 'Square button').boundingBox())!;
   expect(o.x).toBeGreaterThan(right.x + right.width);
   expect(o.y).toBeLessThan(down.y + down.height);
+});
+
+// The keys' symbols are drawn, with no low-sitting font to lift, so each centres on its face: the
+// circle less the 4px shadow along its bottom, and the whole circle once pressed in. A key that
+// went back to Silkscreen's letters, or a padding change, would put them off.
+test("each key's symbol sits at the centre of its face, up and pressed", async ({ page }) => {
+  await loaded(page);
+  /** The symbol's centre less the face's, across and down, in screen pixels. */
+  const offCentre = (name: string) =>
+    control(page, name).evaluate((key: HTMLElement) => {
+      const box = key.getBoundingClientRect();
+      // At 3/4 the shadow is drawn 3px deep
+      const shadow = getComputedStyle(key).boxShadow === 'none' ? 0 : (4 * box.height) / key.offsetHeight;
+      const symbol = key.querySelector('svg')!.getBoundingClientRect();
+      return [
+        symbol.left + symbol.width / 2 - (box.left + box.width / 2),
+        symbol.top + symbol.height / 2 - (box.top + (box.height - shadow) / 2),
+      ];
+    });
+  for (const name of ['Square button', 'X button']) {
+    for (const off of await offCentre(name)) expect(off).toBeCloseTo(0, 1);
+    await finger(page, name, 'pointerdown', 1);
+    await expect(control(page, name)).toHaveClass(/held/);
+    for (const off of await offCentre(name)) expect(off).toBeCloseTo(0, 1);
+    await finger(page, name, 'pointerup', 1);
+    await expect(control(page, name)).not.toHaveClass(/held/);
+  }
 });
 
 test('a tap on the cart starts it without PICO-8 switching to its touch layout', async ({ page, isMobile }) => {

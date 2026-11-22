@@ -126,7 +126,8 @@ and without one Firefox's audio never plays and `volume.spec.ts` hears silence.
   Fullscreen and CRT leave the keyboard in the cart. From 520px the pause button sits between
   the D-pad and the keys, under a mouse or a finger, with the D-pad's caption still on one
   line. A narrower window under a mouse keeps the keyboard light and has no pause button, and
-  at 360px the keys still sit beside the D-pad. On `mobile-safari`, the hint never shows: the
+  at 360px the keys still sit beside the D-pad. The keys' drawn square and X sit at the centre
+  of their faces, up and pressed. On `mobile-safari`, the hint never shows: the
   pause button takes the light's place at the lettering's right edge, without making the row
   taller, and presses `0x40`. No key's caption is drawn there. A phone's shell gives back
   their room, and a wider one keeps it, so the shell stays `--device-height`. A tap starts the
@@ -151,8 +152,8 @@ and without one Firefox's audio never plays and `volume.spec.ts` hears silence.
 - **`overlay.spec.ts`** — the phone's fullscreen, on `mobile-safari` only. Fullscreen stretches
   the same iframe over the page, in both orientations, with PICO-8's controller and without its
   icons, and from a scrolled page, which is where it first went wrong. A real touch reaches the
-  controller, whose O and X are traded to sit where the handheld's are, and each circle, tapped,
-  presses the button it shows. Exit puts everything back and touches stop reaching PICO-8 again, and a turn and a
+  controller, whose O and X are traded to sit where the handheld's are, O drawn as its
+  square, and each circle, tapped, presses the button it shows. Exit puts everything back and touches stop reaching PICO-8 again, and a turn and a
   door both work inside it. The page behind can't scroll and isn't drawn, every touch in the cart
   is cancelled, and Exit returns to the same scroll position. The CRT filter is the handheld's
   own, sits on the game and follows it round a turn of the phone. This engine has no Safari

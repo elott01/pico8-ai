@@ -519,7 +519,7 @@
   gap: 20px;
 }
 
-// Staggered on a diagonal, O lower and X higher.
+// Staggered on a diagonal, the square lower and X higher.
 .low {
   padding-top: 32px;
 }
@@ -704,24 +704,20 @@
   justify-content: center;
   width: 56px;
   height: 56px;
-  // Lifts the letter 4px to the middle of the face. Silkscreen's capitals sit low in their
-  // line, and the shadow takes the bottom 4px off the face. The letter is 15px tall in 52, so
-  // it lands within a pixel of exact, whichever way the engine rounds.
-  padding-bottom: 8px;
+  // The shadow takes the bottom 4px off the face, so the symbol centres on the 52 above it.
+  // Not on the whole circle: counting the shadow in, it looks 2px high, as a printed button's
+  // face does above its edge.
+  padding-bottom: 4px;
   border-radius: 50%;
   background: var(--btn);
   box-shadow: inset 0 -4px 0 var(--btn-lo);
-  font-family: var(--font-pixel);
-  font-size: 24px;
-  line-height: 1;
   color: var(--btn-ink);
 
-  // Pressed in: down by the depth of its shadow. With no shadow the whole circle is the face,
-  // so the letter's lift is only for the font.
+  // Pressed in: down by the depth of its shadow. With no shadow the whole circle is the face.
   &.held {
     transform: translateY(4px);
     box-shadow: none;
-    padding-bottom: 4px;
+    padding-bottom: 0;
   }
 }
 
@@ -744,7 +740,7 @@
 }
 
 // The pause button: a bar in the D-pad's navy with the bottom row's shadow, and PAUSE on its
-// face as O and X carry theirs. The ::before makes it 44px tall to press, reaching 12px past
+// face as the keys carry their symbols. The ::before makes it 44px tall to press, reaching 12px past
 // the top and bottom, which stays clear of the grille and the caption's letters, and of the
 // screen's glass and the D-pad on a phone.
 .controls .pauseButton,
@@ -755,7 +751,8 @@
   justify-content: center;
   width: 72px;
   height: 20px;
-  // Lifts the word into the face above the shadow, as .key does its letter
+  // Lifts the word into the face above the shadow, and a little more, since Silkscreen's
+  // capitals sit low in their line
   padding-bottom: 6px;
   border-radius: 4px;
   background: var(--recess);

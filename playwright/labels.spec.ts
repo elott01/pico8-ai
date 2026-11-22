@@ -55,14 +55,15 @@ for (const [layout, width, height] of [
   test(`the labels are their PNGs, pixel for pixel: ${layout}`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await page.goto('/');
-    // With the slot empty, every label is on the shelf, whichever cart the page starts with
+    // With the slot empty, every label is on the shelf, whichever cart the page starts with.
+    // Ejected by the keyboard, so the mouse is never on the page. A click left it on Eject, and
+    // focus going to the shelf scrolled a cartridge under it, which lifted on hover. Moving the
+    // mouse off wasn't enough: under load a label was read before it had settled, and rounded to
+    // the row above the one it was drawn on.
     const eject = page.getByRole('button', { name: 'Eject' });
     await expect(eject).toBeEnabled();
-    await eject.click();
+    await eject.press('Enter');
     await expect(page.locator('iframe')).toHaveCount(0);
-    // And the mouse off the shelf. Left on Eject, scrolling the shelf into view under the
-    // handheld brought a cartridge under it, which lifted on hover while it was being read
-    await page.mouse.move(0, 0);
     await page.evaluate(async () => {
       await document.fonts.ready;
       await Promise.all([...document.images].map((image) => image.decode()));

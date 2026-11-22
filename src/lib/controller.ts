@@ -9,6 +9,10 @@
 // The picture and the buttons trade together or not at all. If the picture isn't the one this
 // expects, as a PICO-8 with a different controller might draw, both stay as PICO-8 made them: a
 // controller whose buttons don't do what their symbols say is worse than one on the wrong side.
+//
+// It also draws O's ring as the square the handheld's key shows. That part is only a look, so it
+// stands alone: if the ring and cross aren't as expected, the ring stays and the trade still
+// happens, since a ring that presses O is still right.
 
 import { BUTTON } from './buttons.ts';
 
@@ -96,10 +100,102 @@ export function findCircles(alpha: Uint8ClampedArray, width: number, height: num
   return [upperRight, lowerLeft];
 }
 
+interface Box {
+  x0: number; // first column with ink
+  y0: number; // first row
+  x1: number; // last column
+  y1: number; // last row
+}
+
+/**
+ * The symbols in two of the controller's circles: O's ring in one and X's cross in the other,
+ * each as the box its ink fills, short of the circle's own outline. Null unless each is about
+ * square and centred in its circle, the ring empty in the middle and the cross inked there.
+ */
+export function findSymbols(
+  alpha: Uint8ClampedArray,
+  width: number,
+  height: number,
+  ringAt: Circle,
+  crossAt: Circle,
+): { ring: Box; cross: Box } | null {
+  const solid = (x: number, y: number) => x >= 0 && y >= 0 && x < width && y < height && alpha[y * width + x] > 32;
+
+  const inside = (c: Circle): Box | null => {
+    let box: Box | null = null;
+    for (let y = Math.floor(c.y - c.r); y <= c.y + c.r; y++) {
+      for (let x = Math.floor(c.x - c.r); x <= c.x + c.r; x++) {
+        // The outline is the circle's last few pixels; the symbol sits well inside it
+        if (Math.hypot(x + 0.5 - c.x, y + 0.5 - c.y) >= c.r - 8 || !solid(x, y)) continue;
+        if (!box) box = { x0: x, y0: y, x1: x, y1: y };
+        box.x0 = Math.min(box.x0, x);
+        box.x1 = Math.max(box.x1, x);
+        box.y0 = Math.min(box.y0, y);
+        box.y1 = Math.max(box.y1, y);
+      }
+    }
+    if (!box) return null;
+    const across = box.x1 - box.x0 + 1;
+    const down = box.y1 - box.y0 + 1;
+    const off = (lo: number, hi: number, mid: number) => Math.abs((lo + hi + 1) / 2 - mid);
+    if (Math.abs(across - down) > 2 || off(box.x0, box.x1, c.x) > 2 || off(box.y0, box.y1, c.y) > 2) return null;
+    return box;
+  };
+  const inkedMiddle = (c: Circle) => {
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (solid(Math.floor(c.x) + dx, Math.floor(c.y) + dy)) return true;
+    return false;
+  };
+
+  const ring = inside(ringAt);
+  const cross = inside(crossAt);
+  if (!ring || !cross || inkedMiddle(ringAt) || !inkedMiddle(crossAt)) return null;
+  return { ring, cross };
+}
+
+// PICO-8 draws the controller's symbols in 2px lines
+const LINE = 2;
+
+/**
+ * The square that takes O's ring's place, as [x, y, size]: as wide as X's cross, as the
+ * handheld's two symbols are, and centred where the ring was. An even size, so it lands on
+ * whole pixels.
+ */
+export function squareFor(ring: Box, cross: Box): [number, number, number] {
+  const size = 2 * Math.round((cross.x1 - cross.x0 + 1) / 2);
+  const x = Math.round((ring.x0 + ring.x1 + 1) / 2 - size / 2);
+  const y = Math.round((ring.y0 + ring.y1 + 1) / 2 - size / 2);
+  return [x, y, size];
+}
+
+/** O's ring as a square, in a picture whose circles are already traded. Whether it did. */
+function squareTheRing(g: CanvasRenderingContext2D, ringAt: Circle, crossAt: Circle): boolean {
+  const { width, height } = g.canvas;
+  const { data } = g.getImageData(0, 0, width, height);
+  const symbols = findSymbols(
+    data.filter((_, i) => i % 4 === 3),
+    width,
+    height,
+    ringAt,
+    crossAt,
+  );
+  if (!symbols) return false;
+  const { ring, cross } = symbols;
+  // The ring's soft edge too: still well inside the circle's outline
+  g.clearRect(ring.x0 - 2, ring.y0 - 2, ring.x1 - ring.x0 + 5, ring.y1 - ring.y0 + 5);
+  const [x, y, size] = squareFor(ring, cross);
+  g.fillStyle = '#fff';
+  g.fillRect(x, y, size, LINE);
+  g.fillRect(x, y + size - LINE, size, LINE);
+  g.fillRect(x, y + LINE, LINE, size - 2 * LINE);
+  g.fillRect(x + size - LINE, y + LINE, LINE, size - 2 * LINE);
+  return true;
+}
+
 /**
  * The picture with its two circles traded: turned 180° about the point between them, which puts
  * each exactly where the other was. O's ring and X's cross look the same either way up, and the
- * pause bar is left where it is. The turn lands on whole pixels, so nothing is resampled.
+ * pause bar is left where it is. The turn lands on whole pixels, so nothing is resampled. Then
+ * the ring, now lower-left, is drawn as a square if it can be.
  */
 async function tradeCircles(src: string): Promise<string | null> {
   const img = new Image();
@@ -134,11 +230,12 @@ async function tradeCircles(src: string): Promise<string | null> {
   g.setTransform(-1, 0, 0, -1, Math.round(a.x + b.x), Math.round(a.y + b.y));
   g.drawImage(img, 0, 0);
   g.restore();
+  squareTheRing(g, b, a);
   return canvas.toDataURL();
 }
 
 /**
- * The handheld's O and X on PICO-8's controller in the cart's window, once per page. A
+ * The handheld's square and X on PICO-8's controller in the cart's window, once per page. A
  * Gem-in-Eye door is a load() inside the same page, so it keeps them. Resolves to whether they
  * are traded.
  */

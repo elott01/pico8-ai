@@ -129,7 +129,8 @@ function inPicture(page: Page, { x, y }: { x: number; y: number }) {
 
 /**
  * Which symbol the controller's picture draws in each circle, as shown. X's cross runs through
- * the middle, and O's ring leaves it empty.
+ * the middle, which O's ring and the square both leave empty, and the square has corners 25px
+ * out on each diagonal, where the ring has nothing.
  */
 const drawn = (page: Page) =>
   page.locator('iframe').evaluate(
@@ -142,9 +143,12 @@ const drawn = (page: Page) =>
       canvas.height = img.naturalHeight;
       const g = canvas.getContext('2d')!;
       g.drawImage(img, 0, 0);
+      const inked = (x: number, y: number) =>
+        g.getImageData(Math.floor(x) - 2, Math.floor(y) - 2, 5, 5).data.some((value, i) => i % 4 === 3 && value > 32);
       const symbol = ({ x, y }: { x: number; y: number }) => {
-        const { data } = g.getImageData(Math.floor(x) - 2, Math.floor(y) - 2, 5, 5);
-        return data.some((value, i) => i % 4 === 3 && value > 32) ? 'X' : 'O';
+        if (inked(x, y)) return 'X';
+        const corners = [-25, 25].flatMap((dx) => [-25, 25].map((dy) => inked(x + dx, y + dy)));
+        return corners.every(Boolean) ? 'square' : 'O';
       };
       return { upperRight: symbol(centres.upperRight), lowerLeft: symbol(centres.lowerLeft) };
     },
@@ -208,12 +212,12 @@ for (const [shape, device] of [
 
     // PICO-8 draws X lower-left and O upper-right; the handheld has them the other way round,
     // and the overlay trades PICO-8's to match. The picture and the buttons trade together, so
-    // each circle has to press what it shows.
-    test("its O and X are where the handheld's are, drawn and pressed", async ({ page }) => {
+    // each circle has to press what it shows. O's ring is drawn as the handheld's square.
+    test("its square and X are where the handheld's are, drawn and pressed", async ({ page }) => {
       await loaded(page);
       await start(page);
       await enter(page);
-      await expect.poll(() => drawn(page)).toEqual({ upperRight: 'X', lowerLeft: 'O' });
+      await expect.poll(() => drawn(page)).toEqual({ upperRight: 'X', lowerLeft: 'square' });
       await recordTouches(page);
 
       for (const [centre, bit, other] of [

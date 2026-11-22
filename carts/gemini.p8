@@ -730,12 +730,15 @@ function draw_boxes(show_menu, xw, ow)
 		draw_dialog(menu)
 	end
 	draw_dialog(dialog)
-	-- fixed x, spaced for the widest words, so neither moves. no xw, no hints
+	-- centred on its words, as the box above is. no xw, no hints.
+	-- 🅾️ first, as z is before x under the player's fingers
+	-- 28px of badges and gaps plus 4 a letter, so it starts half that left of 64
 	if xw then
-		draw_x_hint(30, 118, 7)
-		print(xw, 41, 118, 6)
-		draw_o_hint(68, 118, 7)
-		print(ow, 79, 118, 6)
+		local x = 50 - 2 * (#ow + #xw)
+		draw_o_hint(x, 118, 7)
+		x = print(ow, x + 11, 118, 6) + 7
+		draw_x_hint(x, 118, 7)
+		print(xw, x + 11, 118, 6)
 	end
 end
 
