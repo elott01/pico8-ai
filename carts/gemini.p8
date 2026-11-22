@@ -1116,6 +1116,7 @@ function init_shared()
 	-- the hub's: whether claude has met you. it rides through the dungeon so
 	-- a run doesn't reset it
 	met = 0
+	skills, skill = 0, 0	-- owned and equipped: see skill_names
 	up0 = 0
 end
 
@@ -1304,9 +1305,15 @@ function door_at(px, py)
 	end
 end
 
+-- claude's skills. an id is a place in this list. skills (a bitmask of the
+-- owned) and skill (the equipped, 0 none) carry ids across load(), so add at
+-- the end: inserting or removing one changes which skill an id means
+skill_names = split"zero-shot,plan mode,/compact,subagent,grep"
+skill_costs = split"1,2,2,3,2"	-- stamina per use
+
 -- what crosses a load(), in the order of its param. split leaves "false" a
 -- truthy string, so a flag here is 0/1. where you arrive is the door's job
-carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,vault_look,met,up"
+carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,vault_look,met,up,skills,skill"
 
 -- time() restarts with each cart: up carries the uptime, up0 offsets it
 function go(cart)

@@ -31,7 +31,13 @@ function _update()
 	if banner_t > 0 then banner_t -= 1 end
 
 	if not alive then
-		if btnp(🅾️) then respawn() end
+		-- the wait ends only with 🅾️ up, since btnp repeats while it's held
+		if dead_t > 0 then
+			frame = 0	-- the prompt's blink starts lit as the wait ends
+			if dead_t > 1 or not btn(🅾️) then dead_t -= 1 end
+		elseif btnp(🅾️) then
+			respawn()
+		end
 		return
 	end
 
@@ -43,6 +49,13 @@ function _update()
 	if btnp(❎) and stamina > 0 then
 		swing()
 		hit_crate()
+	end
+
+	-- 🅾️ runs the equipped skill. an effect that can't fire returns false, so
+	-- a refused skill costs nothing
+	if btnp(🅾️) and skill > 0 and stamina >= skill_costs[skill]
+	and skill_fx[skill_names[skill]]() then
+		stamina -= skill_costs[skill]
 	end
 
 	tick_player()
@@ -71,7 +84,7 @@ function _update()
 		if hurt <= 0 and hit(x, y, z.x, z.y) then
 			health -= 1
 			hurt = 30
-			if health <= 0 then alive = false end
+			if health <= 0 then alive, dead_t = false, rollback_delay end
 		end
 	end
 
@@ -102,12 +115,16 @@ function _draw()
 
 	if not alive then
 		print("game over", 46, 60, 8)
-		if frame % 30 < 20 then centre("press 🅾️ to rollback", 70, 7) end
+		if dead_t == 0 and frame % 30 < 20 then centre("press 🅾️ to rollback", 70, 7) end
 	end
 end
 
 -- home is gemini.p8
 function go_home() go("gemini.p8") end
+
+-- frames the death screen ignores 🅾️. it also fires skills, so a player can
+-- die mid-press
+rollback_delay = 15
 
 -- dying drops the purse (tokens). the stash is safe
 function respawn()
@@ -432,6 +449,8 @@ token_wakes = 1
 function enter_battle()
 	zombies = {}
 	drops = {}
+	-- a skill still running ends with the room it was used in
+	beam, plan_t, decoy, ring_t = nil, 0, nil, 0
 	build_layout()
 	spawn_wave(room_wave(depth))
 	tokens_left = room_tokens(depth)
@@ -478,6 +497,18 @@ function update_locks()
 		end
 	end
 end
+
+-- what 🅾️ does, by the equipped skill's name. an effect returns true if it
+-- fired. a stub never does, until its skill is built
+function skill_stub() return false end
+
+skill_fx = {
+	["zero-shot"] = skill_stub,
+	["plan mode"] = skill_stub,
+	["/compact"] = skill_stub,
+	subagent = skill_stub,
+	grep = skill_stub,
+}
 
 -- >> shared: gemini.p8 and gemini_dungeon.p8 carry this section byte for
 -- byte. it draws only from sprites 0-63, which are the same in both sheets.
@@ -556,6 +587,7 @@ function init_shared()
 	-- the hub's: whether claude has met you. it rides through the dungeon so
 	-- a run doesn't reset it
 	met = 0
+	skills, skill = 0, 0	-- owned and equipped: see skill_names
 	up0 = 0
 end
 
@@ -744,9 +776,15 @@ function door_at(px, py)
 	end
 end
 
+-- claude's skills. an id is a place in this list. skills (a bitmask of the
+-- owned) and skill (the equipped, 0 none) carry ids across load(), so add at
+-- the end: inserting or removing one changes which skill an id means
+skill_names = split"zero-shot,plan mode,/compact,subagent,grep"
+skill_costs = split"1,2,2,3,2"	-- stamina per use
+
 -- what crosses a load(), in the order of its param. split leaves "false" a
 -- truthy string, so a flag here is 0/1. where you arrive is the door's job
-carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,vault_look,met,up"
+carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,vault_look,met,up,skills,skill"
 
 -- time() restarts with each cart: up carries the uptime, up0 offsets it
 function go(cart)

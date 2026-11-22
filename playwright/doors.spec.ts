@@ -166,8 +166,9 @@ test.describe('gem-in-eye doors', () => {
     await pressUntil(page, runs, LEFT, 'gemini_dungeon');
 
     // The knight stands still. Depth 1 wakes one dead weight at least 40px off, which walks over
-    // and takes his three hearts in a few seconds. 🅾️ does nothing while he's alive, so it's
-    // pressed from the start and rolls back as soon as he dies. With no direction held, only
+    // and takes his three hearts in a few seconds. 🅾️ fires a skill while he's alive, and he has
+    // none, so it's pressed from the start. The death screen ignores it for half a second and
+    // until it comes up, so the first press after that rolls back. With no direction held, only
     // dying can load the hub
     const rollback = await pressUntil(page, runs, O, 'gemini', 45_000);
     const again = await pressUntil(page, runs, LEFT, 'gemini_dungeon');
