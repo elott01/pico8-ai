@@ -20,13 +20,16 @@ import type { TalkRequest, TalkSuccess, TalkRateLimited } from './_types.ts';
 const FALLBACK: TalkSuccess = { verdict: null, price: null, pages: null, notice: null };
 
 /**
- * When a second, identical call goes out if the first has not answered. Gemini's latency has
- * a long, flat tail unrelated to the prompt: across 315 bench calls, 1 in 8 took longer than
- * the page's 12s, spread evenly over every fixture and no longer in output. Taking whichever
- * of two calls answers first cut that to about 2% when simulated on those latencies, for one
- * extra call on about 1 in 5 purchases.
+ * When a second, identical call goes out if the first has not answered. Google sometimes
+ * holds a call far past the page's 12s, whatever the prompt: on 3.1 Flash-Lite it was 1 in 8
+ * of 315 bench calls, spread evenly over every fixture and no longer in output. Taking
+ * whichever of two calls answers first cut that to about 2% when simulated, as if the two
+ * were slow independently. On 3.5 it is 2 in 350, and those came back to back, as they would
+ * in a slow spell at Google, where a second call may be slow too.
  *
- * Talk only, for now: /api/move has the same tail and gets this if it holds up in practice.
+ * Talk only. /api/move is not known to be any faster: its 48 bench calls on 3.5 were all
+ * quick, which is too few to tell. It goes without because the cart's minimax plays a slow
+ * turn and the game goes on, while here the speech is what the purchase is for.
  */
 export const HEDGE_MS = 5_000;
 

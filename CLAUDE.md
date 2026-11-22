@@ -86,8 +86,10 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
   - Both endpoints share the Gemini call, retry, quota and origin rules in
     **`api/_ask_gemini.ts`**.
   - **Only `/api/talk` hedges, on purpose.** If the first call has not answered at
-    `HEDGE_MS` (5s), an identical second one goes out and the first success wins. It is on
-    trial there before `/api/move` gets it. A call already retrying 503s is never hedged.
+    `HEDGE_MS` (5s), an identical second one goes out and the first success wins. `/api/move`
+    goes without because slow calls are rare on 3.5 (2 of 398 benched) and the cart's minimax
+    plays a slow turn, not because moves are known to be faster. A call already retrying 503s
+    is never hedged.
   - On the page, `Pico8Game.tsx` runs a second poll loop for talk carts. **`src/lib/talk.ts`**
     holds the client and gem-in-eye's memory in `localStorage`, keyed per speaker, and
     **`TalkPanel.tsx`** shows what he was shown and what he said.
