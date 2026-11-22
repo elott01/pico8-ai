@@ -11,6 +11,10 @@
 // A cart that load()s others by name exports with them bundled into the one .js, as
 // scripts/cart-bundle.ts reads them out of its code. Gem-in-Eye is two carts this way.
 //
+// What is exported is a copy of each cart without its comments (scripts/strip-comments.ts), which
+// would otherwise use up PICO-8's compressed-code limit. If stripping changed anything else, it
+// stops before PICO-8 runs.
+//
 // Exits 2 when the cart has no saved label, which -export requires, and 1 for any other
 // failure. PICO8 overrides where the binary is looked for; the default is the macOS install.
 
@@ -19,8 +23,10 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import { luaSection, tokenize } from './cart-budget.ts';
 import { bundledCarts, exportedCarts } from './cart-bundle.ts';
 import { labelPng, readLabel } from './cart-label.ts';
+import { stripCart } from './strip-comments.ts';
 
 const PICO8 = process.env.PICO8 ?? '/Applications/PICO-8.app/Contents/MacOS/pico8';
 // A build that ignores -export opens the editor and never exits.
@@ -51,15 +57,19 @@ mkdirSync(home);
 mkdirSync(out);
 
 // A bundled cart is named in the export command. Where PICO-8 looks for that name isn't
-// documented, so a bundle exports from copies in the work folder, which is at once PICO-8's
-// current folder, its root_path and the exported cart's own folder. A lone cart runs as before.
-let main = source;
-const rootPath: string[] = [];
-if (bundle.length > 0) {
-  for (const id of [cart, ...bundle]) copyFileSync(cartPath(id), join(out, `${id}.p8`));
-  main = join(out, `${cart}.p8`);
-  rootPath.push('-root_path', out);
+// documented, so it exports from the stripped copies in the work folder, which is at once
+// PICO-8's current folder, its root_path and the exported cart's own folder.
+for (const id of [cart, ...bundle]) {
+  const original = readFileSync(cartPath(id), 'utf8');
+  const stripped = stripCart(original);
+  const tokens = (p8: string): string => JSON.stringify(tokenize(luaSection(p8)));
+  if (tokens(stripped) !== tokens(original)) {
+    fail(1, `stripping carts/${id}.p8's comments changed its code, so nothing was exported; see scripts/strip-comments.ts`);
+  }
+  writeFileSync(join(out, `${id}.p8`), stripped);
 }
+const main = join(out, `${cart}.p8`);
+const rootPath = bundle.length > 0 ? ['-root_path', out] : [];
 const command = [`${cart}.html`, ...bundle.map((id) => `${id}.p8`)].join(' ');
 
 const run = spawnSync(PICO8, ['-home', home, ...rootPath, main, '-export', command], {

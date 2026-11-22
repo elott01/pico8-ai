@@ -27,7 +27,7 @@ that loads it. It has no export or label of its own, so a request to export
 
 What each export file carries:
 
-- **`.js`**: the cart ROM, meaning code (comments included), sprites, map and sound.
+- **`.js`**: the cart ROM, meaning code without its comments, sprites, map and sound.
 - **`.html`**: the label, at half brightness, as the poster behind the play button. Every
   visitor sees it, because autoplay is off.
 
@@ -60,10 +60,11 @@ Read the diff by section:
 | `__gfx__`, `__gff__`, `__map__`, `__sfx__`, `__music__` | export; the `.js` changes |
 | `__label__` | export; the `.html` and `public/labels/<cart>.png` change |
 | only comments or blank lines in `__lua__`, including `--[[ ]]` blocks | nothing |
+| nothing, but `node scripts/cart-budget.ts` says the export has its comments in | export; the `.js` changes |
 
-A line holding code and a trailing comment counts as code. A comment-only edit would still
-change the `.js` bytes, but not what the cart does, so it isn't worth a 1.7 MB diff. Export one
-only if the user asks.
+The export script leaves comments out, so a comment-only edit can't change the `.js`, and neither
+can a new trailing comment on a line whose code is the same. The last row is for exports made before
+it did: the first one since drops them, with no code changed.
 
 The `__label__` row has one exception. If
 `node scripts/cart-label.ts check carts/<cart>.p8 public/games/<cart>.html` passes, the live
@@ -121,6 +122,10 @@ export, so this is the "before" for step 5.
 ```sh
 node scripts/export-cart.ts <cart>
 ```
+
+It exports copies of the carts with their comments stripped (`scripts/strip-comments.ts`), because
+comments count towards PICO-8's compressed-code limit. The `.p8` keeps them. If stripping changes
+any token, it stops before PICO-8 runs. That's a bug in `strip-comments.ts`, not in the cart.
 
 It runs PICO-8 headless in a temp folder (an export lands wherever PICO-8 was started), with a
 temp `-home` so the user's PICO-8 config is never touched. It bundles every cart the code
