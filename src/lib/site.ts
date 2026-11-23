@@ -20,9 +20,8 @@ type Site = {
 export const SITE: Site = {
   repo: 'https://github.com/elott01/pico8-ai',
   bio:
-    'I’ve been building software at one of the largest US banks since 2024, including ' +
-    'several web apps with AI integration. I made this for fun, to experiment with some of ' +
-    'the same ideas.',
+    'I’ve been building software at one of the largest US banks since 2024. I made this on ' +
+    'my own time, for fun.',
   links: {
     github: 'https://github.com/elott01',
     linkedin: 'https://www.linkedin.com/in/ethan-lott/',
