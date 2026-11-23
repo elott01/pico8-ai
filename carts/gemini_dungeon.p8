@@ -49,7 +49,8 @@ function _update()
 
 	if btnp(❎) and enough(1) then
 		swing()
-		hit_crate()
+		thrown = false
+		hit_crate(attack_tier + 1, sword_box())
 	end
 
 	-- 🅾️ runs the equipped skill. an effect that can't fire returns false, so
@@ -62,15 +63,14 @@ function _update()
 	tick_player()
 	token_t = (token_t + 1) % (token_frames * token_hold + token_pause)
 
-	if attack > 0 then
+	-- zero-shot's swing is only a look: its beam does the hitting
+	if attack > 0 and not thrown then
 		local sx, sy = sword_box()
 		for z in all(zombies) do
-			if hit(sx, sy, z.x, z.y) then
-				del(zombies, z)
-				pruned += 1
-			end
+			if hit(sx, sy, z.x, z.y) then prune(z) end
 		end
 	end
+	update_beam()
 
 	if token_alive and hit(x, y, token_x, token_y) then
 		tokens = min(tokens + 1, token_max)
@@ -97,7 +97,10 @@ function _draw()
 	cls()
 	draw_hud()
 	map(room.mx, room.my, 0, 0, 16, 16)
-	if alive then draw_player() end
+	if alive then
+		draw_player()
+		if beam then draw_beam(beam) end
+	end
 	for z in all(zombies) do
 		draw_zombie(z)
 	end
@@ -120,8 +123,11 @@ function _draw()
 	end
 end
 
--- home is gemini.p8
-function go_home() go("gemini.p8") end
+-- home is gemini.p8. it heals, whichever way he got there
+function go_home()
+	health = health_max
+	go("gemini.p8")
+end
 
 -- frames the death screen ignores 🅾️. it also fires skills, so a player can
 -- die mid-press
@@ -130,7 +136,7 @@ rollback_delay = 15
 -- dying drops the purse (tokens). the stash is safe
 function respawn()
 	rollbacks += 1
-	health, stamina, tokens = health_max, stamina_max, 0
+	stamina, tokens = stamina_max, 0
 	go_home()
 end
 
@@ -147,16 +153,24 @@ function mid_tile(px, py)
 	return (px + 4) \ 8, (py + 4) \ 8
 end
 
--- the tile id is the damage state; a swing adds attack_tier + 1
+-- every prune goes through here, so dead weights with health change one place
+function prune(z)
+	del(zombies, z)
+	pruned += 1
+end
+
+-- the tile id is the damage state. a swing adds attack_tier + 1, and a beam
+-- breaks it
 crate_base, crate_stages = 144, 3
 
-function hit_crate()
-	local tx, ty = mid_tile(sword_box())
+-- n stages to a crate under px,py's centre
+function hit_crate(n, px, py)
+	local tx, ty = mid_tile(px, py)
 	if tx < 0 or tx > 15 or ty < 0 or ty > 15 then return end
 	local mx, my = room.mx + tx, room.my + ty
 	local st = mget(mx, my) - crate_base
 	if st < 0 or st >= crate_stages then return end
-	st += attack_tier + 1
+	st += n
 	if st < crate_stages then
 		mset(mx, my, crate_base + st)
 	else
@@ -507,6 +521,61 @@ function update_locks()
 	end
 end
 
+zero_speed = 3		-- px a frame: a room in about a second
+zero_col = 12
+
+-- 🅾️ swings, and the swing flies on from the blade as a beam. the first thing
+-- in its path, up close or across the room, goes in one hit, a crate too. it's
+-- claude's, so gem-in-eye's attack upgrades never reach it. one at a time
+function zero_shot()
+	if beam then return false end
+	attack, thrown = 6, true
+	local sx, sy = sword_box()
+	local dx, dy = sword_ofs()
+	beam = {x = sx, y = sy, dx = dx / 8, dy = dy / 8}
+	beam_hit()
+	return true
+end
+
+function update_beam()
+	if beam then
+		beam.x += beam.dx * zero_speed
+		beam.y += beam.dy * zero_speed
+		beam_hit()
+	end
+end
+
+-- the first dead weight it meets is pruned. a solid tile under its centre
+-- stops it, and a crate there breaks. so does leaving the screen
+function beam_hit()
+	local b = beam
+	for z in all(zombies) do
+		if hit(b.x, b.y, z.x, z.y) then
+			prune(z)
+			beam = nil
+			return
+		end
+	end
+	if not open_tile(mid_tile(b.x, b.y)) then
+		hit_crate(crate_stages, b.x, b.y)
+		beam = nil
+	end
+end
+
+-- sprite 3, the side swing's blade, in blue with a hilt behind its guard. left
+-- flips it, and up and down turn it, down 2px left so it leaves from the blade
+function draw_beam(b)
+	for i = -1, 7 do
+		for j = 0, 7 do
+			if i < 0 and j == 5 or i >= 0 and sget(24 + i, j) > 0 then
+				local px, py = b.dx < 0 and 7 - i or i, j
+				if b.dy != 0 then px, py = b.dy > 0 and j - 2 or j, b.dy < 0 and 7 - i or i end
+				pset(b.x + px, b.y + py, zero_col)
+			end
+		end
+	end
+end
+
 plan_frames = 60	-- frames frozen
 plan_warn = 15		-- the last of them, blinking
 plan_pal = split"1,5,13,5,5,6,7,5,9,5"	-- body 3 to lavender, the rest dark
@@ -523,7 +592,7 @@ end
 function skill_stub() return false end
 
 skill_fx = {
-	["zero-shot"] = skill_stub,
+	["zero-shot"] = zero_shot,
 	["plan mode"] = plan_mode,
 	["/compact"] = skill_stub,
 	subagent = skill_stub,
@@ -810,7 +879,7 @@ end
 -- owned) and skill (the equipped, 0 none) carry ids across load(), so add at
 -- the end: inserting or removing one changes which skill an id means
 skill_names = split"zero-shot,plan mode,/compact,subagent,grep"
-skill_costs = split"1,3,2,3,2"	-- stamina per use
+skill_costs = split"3,3,2,3,2"	-- stamina per use
 
 -- what crosses a load(), in the order of its param. split leaves "false" a
 -- truthy string, so a flag here is 0/1. where you arrive is the door's job

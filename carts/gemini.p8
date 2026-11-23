@@ -944,8 +944,8 @@ end
 
 -- by id: tokens (a guess, as tier_cost is), what it does, his line as it sells
 skill_shop = {
-	{20, "at full health, your swing flies.",
-	 "works first try, as long as nothing's gone wrong yet."},
+	{20, "your swing flies and prunes in one hit.",
+	 "works first try. no practice needed!"},
 	{15, "dead weights wait 2 seconds.",
 	 "nothing runs until you say so. well, except you."},
 	{15, "pushes dead weights back.",
@@ -1434,7 +1434,7 @@ end
 -- owned) and skill (the equipped, 0 none) carry ids across load(), so add at
 -- the end: inserting or removing one changes which skill an id means
 skill_names = split"zero-shot,plan mode,/compact,subagent,grep"
-skill_costs = split"1,3,2,3,2"	-- stamina per use
+skill_costs = split"3,3,2,3,2"	-- stamina per use
 
 -- what crosses a load(), in the order of its param. split leaves "false" a
 -- truthy string, so a flag here is 0/1. where you arrive is the door's job
