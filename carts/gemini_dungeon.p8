@@ -30,6 +30,7 @@ function _update()
 	frame += 1
 	if banner_t > 0 then banner_t -= 1 end
 	if flash_t > 0 then flash_t -= 1 end
+	if ring_t > 0 then ring_t -= 1 end
 
 	if not alive then
 		-- the wait ends only with 🅾️ up, since btnp repeats while it's held
@@ -71,6 +72,8 @@ function _update()
 		end
 	end
 	update_beam()
+	update_pull()
+	update_ring()
 
 	if token_alive and hit(x, y, token_x, token_y) then
 		tokens = min(tokens + 1, token_max)
@@ -100,6 +103,12 @@ function _draw()
 	if alive then
 		draw_player()
 		if beam then draw_beam(beam) end
+		-- /compact's ring grows out from him, and fades in a dither
+		if ring_t > 0 then
+			fillp(ring_t < 3 and 0x5a5a or 0)
+			circ(x + 3.5, y + 3.5, ring_r(), ring_col)
+			fillp()
+		end
 	end
 	for z in all(zombies) do
 		draw_zombie(z)
@@ -223,12 +232,12 @@ end
 
 function spawn_token()
 	token_x, token_y = tile_xy(rnd(floor_tiles()))
-	token_alive = true
+	token_alive, token_pull = true, false
 end
 
 -- zombie bodies 17-19 share the knight's feet row, so his steps fit
 function spawn_zombie(zx, zy)
-	add(zombies, {x = zx, y = zy, speed = 0.75,
+	add(zombies, {x = zx, y = zy, speed = 0.75, daze = 0,
 		walk_t = 0, body = 17, side = true, flipx = false})
 end
 
@@ -319,6 +328,12 @@ function update_zombies()
 		local z = zombies[i]
 		local wasx, wasy = z.x, z.y
 		local sp = z.speed
+
+		-- carried by /compact's ring, then dazed: it stands still for both
+		if z.daze > 0 then
+			z.daze -= 1
+			sp = 0
+		end
 
 		-- one axis at a time, so walls slide it along
 		local gx, gy = zombie_goal(z, ptx, pty)
@@ -473,7 +488,7 @@ function enter_battle()
 	zombies = {}
 	drops = {}
 	-- a skill still running ends with the room it was used in
-	beam, plan_t, decoy, ring_t = nil, 0, nil, 0
+	beam, plan_t, decoy, ring_t, token_pull = nil, 0, nil, 0, false
 	build_layout()
 	spawn_wave(room_wave(depth))
 	tokens_left = room_tokens(depth)
@@ -576,6 +591,70 @@ function draw_beam(b)
 	end
 end
 
+ring_frames = 8
+ring_grow = 3		-- px a frame
+ring_max = 24		-- px, its radius as it fades
+ring_col = 11
+compact_daze = 15	-- frames a dead weight stands, once the ring's gone
+
+-- a ring grows out from him, and whatever it touches it carries out on its
+-- edge. it fires even with nothing in reach. nothing is pruned
+function compact()
+	if ring_t > 0 then return false end
+	ring_t = ring_frames
+	return true
+end
+
+function ring_r() return ring_max - (ring_t - 1) * ring_grow end
+
+-- a dead weight the ring touches goes to its edge, the way the ring grows: one
+-- about on top of him, where that's no clear way, the way he faces. walls stop it
+function update_ring()
+	if ring_t == 0 then return end
+	local r = ring_r() + 4
+	for z in all(zombies) do
+		local dx, dy = z.x - x, z.y - y
+		if abs(dx) < r and abs(dy) < r then
+			local d = sqrt(dx * dx + dy * dy)
+			if d < r then
+				local ux, uy = sword_ofs()
+				ux, uy = ux / 8, uy / 8
+				if d >= 4 then ux, uy = dx / d, dy / d end
+				local nx, ny = mid(0, x + ux * r, 120), mid(0, y + uy * r, 120)
+				if box_free(nx, z.y) then z.x = nx end
+				if box_free(z.x, ny) then z.y = ny end
+				z.daze = ring_t + compact_daze
+			end
+		end
+	end
+end
+
+grep_speed = 6		-- px a frame: a room in about two thirds of a second
+
+-- the token and every drop fly to him, over walls, and he picks them up as if
+-- he'd walked there: the token still wakes its dead weight. no token, no grep
+function grep()
+	if not token_alive or token_pull then return false end
+	token_pull = true
+	for d in all(drops) do d.pull = true end
+	return true
+end
+
+function update_pull()
+	if token_pull then token_x, token_y = pull_to(token_x, token_y) end
+	for d in all(drops) do
+		if d.pull then d.x, d.y, d.pull = pull_to(d.x, d.y) end
+	end
+end
+
+-- a step toward him. the third value is false once it's arrived
+function pull_to(px, py)
+	local dx, dy = x - px, y - py
+	local d = max(abs(dx), abs(dy))
+	if d <= grep_speed then return x, y, false end
+	return px + dx / d * grep_speed, py + dy / d * grep_speed, true
+end
+
 plan_frames = 60	-- frames frozen
 plan_warn = 15		-- the last of them, blinking
 plan_pal = split"1,5,13,5,5,6,7,5,9,5"	-- body 3 to lavender, the rest dark
@@ -594,9 +673,9 @@ function skill_stub() return false end
 skill_fx = {
 	["zero-shot"] = zero_shot,
 	["plan mode"] = plan_mode,
-	["/compact"] = skill_stub,
+	["/compact"] = compact,
 	subagent = skill_stub,
-	grep = skill_stub,
+	grep = grep,
 }
 
 -- >> shared: gemini.p8 and gemini_dungeon.p8 carry this section byte for
