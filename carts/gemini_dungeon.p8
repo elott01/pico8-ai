@@ -74,6 +74,7 @@ function _update()
 	update_beam()
 	update_pull()
 	update_ring()
+	update_decoy()
 
 	if token_alive and hit(x, y, token_x, token_y) then
 		tokens = min(tokens + 1, token_max)
@@ -101,6 +102,7 @@ function _draw()
 	draw_hud()
 	map(room.mx, room.my, 0, 0, 16, 16)
 	if alive then
+		if decoy then draw_decoy(decoy) end
 		draw_player()
 		if beam then draw_beam(beam) end
 		-- /compact's ring grows out from him, and fades in a dither
@@ -287,12 +289,13 @@ function is_solid(px, py)
 	return fget(tile_at(px, py), 0)
 end
 
--- next tile downhill, ties toward you. adjacent or unreached: at you
-function zombie_goal(z, ptx, pty)
+-- next tile downhill, ties toward the target (aim_x, aim_y in px, on tile
+-- ptx, pty). adjacent or unreached: at it
+function zombie_goal(z, ptx, pty, aim_x, aim_y)
 	local tx, ty = mid_tile(z.x, z.y)
 	local here = flow[tx + ty * 16]
-	if not here or here <= 1 then return x, y end
-	local gx, gy, bd, be = x, y, here, 999
+	if not here or here <= 1 then return aim_x, aim_y end
+	local gx, gy, bd, be = aim_x, aim_y, here, 999
 	for n in all(nbrs) do
 		local nx, ny = tx + n[1], ty + n[2]
 		local d = flow[nx + ny * 16]
@@ -318,7 +321,10 @@ function update_zombies()
 		return
 	end
 
-	local ptx, pty = mid_tile(x, y)
+	-- they go for the subagent while it's out, else for him
+	local aim_x, aim_y = x, y
+	if decoy then aim_x, aim_y = decoy.x, decoy.y end
+	local ptx, pty = mid_tile(aim_x, aim_y)
 	if flow_at != ptx + pty * 16 then
 		flow_at = ptx + pty * 16
 		build_flow(ptx, pty)
@@ -336,7 +342,7 @@ function update_zombies()
 		end
 
 		-- one axis at a time, so walls slide it along
-		local gx, gy = zombie_goal(z, ptx, pty)
+		local gx, gy = zombie_goal(z, ptx, pty, aim_x, aim_y)
 		local mx, my = mid(-sp, gx - z.x, sp), mid(-sp, gy - z.y, sp)
 		if box_free(z.x + mx, z.y) then z.x += mx else mx = 0 end
 		if box_free(z.x, z.y + my) then z.y += my else my = 0 end
@@ -357,9 +363,9 @@ function update_zombies()
 			end
 		end
 
-		-- face the way it moves, or the player when still
+		-- face the way it moves, or its target when still
 		local fx, fy = mx, my
-		if fx == 0 and fy == 0 then fx, fy = x - z.x, y - z.y end
+		if fx == 0 and fy == 0 then fx, fy = aim_x - z.x, aim_y - z.y end
 		-- 17 side, 18 toward you, 19 walking away
 		z.side = abs(fx) > abs(fy)
 		if z.side then z.flipx = fx < 0 end
@@ -666,15 +672,46 @@ function plan_mode()
 	return true
 end
 
--- what 🅾️ does, by the equipped skill's name. an effect returns true if it
--- fired. a stub never does, until its skill is built
-function skill_stub() return false end
+decoy_frames = 90	-- 3 seconds alone, less for every dead weight on it
+decoy_warn = 15		-- the last of them, blinking
+decoy_pal = split"1,2,3,4,4,9,10"	-- the knight's 5, 6 and 7 in claude's orange
 
+-- a copy of him, in the pose he's in, where he stands. dead weights go for it
+-- instead, even ones that wake meanwhile, and drain it. it doesn't shield him
+function subagent()
+	if decoy then return false end
+	decoy = {x = x, y = y, t = decoy_frames, body = bodies[facing], fx = facing == "side" and flipx}
+	return true
+end
+
+-- a frame a frame, and a frame more for every dead weight touching it
+function update_decoy()
+	local d = decoy
+	if not d then return end
+	d.t -= 1
+	for z in all(zombies) do
+		if hit(d.x, d.y, z.x, z.y) then d.t -= 1 end
+	end
+	if d.t <= 0 then decoy = nil end
+end
+
+-- standing, so its feet are sprite 48's
+function draw_decoy(d)
+	if d.t <= decoy_warn and d.t % 4 < 2 then return end
+	pal(decoy_pal)
+	draw_rows(d.body, d.x, d.y, d.fx, 0, 7)
+	draw_rows(48, d.x, d.y, d.fx, 7, 1)
+	pal()
+end
+
+-- what 🅾️ does, by the equipped skill's name. an effect returns true if it
+-- fired, or false to refuse at no cost. tests/skills.test.ts holds every skill
+-- in skill_names to one of its own
 skill_fx = {
 	["zero-shot"] = zero_shot,
 	["plan mode"] = plan_mode,
 	["/compact"] = compact,
-	subagent = skill_stub,
+	subagent = subagent,
 	grep = grep,
 }
 
