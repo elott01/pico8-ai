@@ -29,6 +29,7 @@ end
 function _update()
 	frame += 1
 	if banner_t > 0 then banner_t -= 1 end
+	if flash_t > 0 then flash_t -= 1 end
 
 	if not alive then
 		-- the wait ends only with 🅾️ up, since btnp repeats while it's held
@@ -46,14 +47,14 @@ function _update()
 	local d = door_at(x + 4, y + 4)
 	if d then d.act(d) end
 
-	if btnp(❎) and stamina > 0 then
+	if btnp(❎) and enough(1) then
 		swing()
 		hit_crate()
 	end
 
 	-- 🅾️ runs the equipped skill. an effect that can't fire returns false, so
 	-- a refused skill costs nothing
-	if btnp(🅾️) and skill > 0 and stamina >= skill_costs[skill]
+	if btnp(🅾️) and skill > 0 and enough(skill_costs[skill])
 	and skill_fx[skill_names[skill]]() then
 		stamina -= skill_costs[skill]
 	end
@@ -81,7 +82,7 @@ function _update()
 	take_drops()
 
 	for z in all(zombies) do
-		if hurt <= 0 and hit(x, y, z.x, z.y) then
+		if hurt <= 0 and plan_t == 0 and hit(x, y, z.x, z.y) then
 			health -= 1
 			hurt = 30
 			if health <= 0 then alive, dead_t = false, rollback_delay end
@@ -219,9 +220,12 @@ end
 
 function draw_zombie(z)
 	local fx = z.side and z.flipx
+	-- frozen. blinks before it thaws
+	if plan_t > plan_warn or plan_t % 4 > 1 then pal(plan_pal) end
 	draw_rows(z.body, z.x, z.y, fx, 0, 7)
 	draw_rows(step_spr(z.side and walk_cycle or walk_cycle_ud, z.walk_t),
 		z.x, z.y, fx, 7, 1)
+	pal()
 end
 
 -- flow field: bfs from your tile, rebuilt when it changes. no corner-cutting
@@ -286,6 +290,11 @@ function zflow(z)
 end
 
 function update_zombies()
+	if plan_t > 0 then
+		plan_t -= 1
+		return
+	end
+
 	local ptx, pty = mid_tile(x, y)
 	if flow_at != ptx + pty * 16 then
 		flow_at = ptx + pty * 16
@@ -498,13 +507,24 @@ function update_locks()
 	end
 end
 
+plan_frames = 60	-- frames frozen
+plan_warn = 15		-- the last of them, blinking
+plan_pal = split"1,5,13,5,5,6,7,5,9,5"	-- body 3 to lavender, the rest dark
+
+-- every dead weight freezes, and any that wake. one that's frozen can't hurt
+function plan_mode()
+	if plan_t > 0 then return false end
+	plan_t = plan_frames
+	return true
+end
+
 -- what 🅾️ does, by the equipped skill's name. an effect returns true if it
 -- fired. a stub never does, until its skill is built
 function skill_stub() return false end
 
 skill_fx = {
 	["zero-shot"] = skill_stub,
-	["plan mode"] = skill_stub,
+	["plan mode"] = plan_mode,
 	["/compact"] = skill_stub,
 	subagent = skill_stub,
 	grep = skill_stub,
@@ -553,6 +573,7 @@ function init_shared()
 	hurt = 0
 	stamina_rate = 45	-- frames per stamina point
 	stam_t = 0
+	flash_t = 0		-- the stamina bar's flash, counting down
 
 	num_gap = 3		-- px a count tucks toward its colon
 
@@ -667,6 +688,15 @@ function move_player()
 	walk_t = moved and (walk_t + 1) % (walk_hold * #walk_cycle) or 0
 end
 
+flash_frames = 17	-- three flashes, 3 frames on and 3 off
+flash_col = 8
+
+-- whether stamina covers n. if not, its bar flashes
+function enough(n)
+	if stamina >= n then return true end
+	flash_t = flash_frames
+end
+
 function swing()
 	attack = 6
 	stamina -= 1
@@ -712,7 +742,7 @@ end
 
 function draw_hud()
 	draw_bar(13, health_x, health, health_max, health_col)
-	draw_bar(14, stamina_x, stamina, stamina_max, stamina_col)
+	draw_bar(14, stamina_x, stamina, stamina_max, stamina_col, flash_t % 6 > 2 and flash_col)
 	-- padded to the cap's width so the readout holds still
 	local tv = tostr(tokens)
 	while #tv < token_digits do tv = " "..tv end
@@ -735,11 +765,11 @@ function apply_tiers()
 	stamina_max = smax
 end
 
-function draw_bar(icon, bx, n, nmax, col)
+function draw_bar(icon, bx, n, nmax, col, edge)
 	pal(7, col)
 	spr(icon, bx - 8 - icon_gap, 0)
 	pal()
-	rect(bx, 0, bx + 1 + nmax * 5, 6, 7)
+	rect(bx, 0, bx + 1 + nmax * 5, 6, edge or 7)
 	for i = 0, n - 1 do
 		rectfill(bx + 2 + i * 5, 2, bx + 4 + i * 5, 4, col)
 	end
@@ -780,7 +810,7 @@ end
 -- owned) and skill (the equipped, 0 none) carry ids across load(), so add at
 -- the end: inserting or removing one changes which skill an id means
 skill_names = split"zero-shot,plan mode,/compact,subagent,grep"
-skill_costs = split"1,2,2,3,2"	-- stamina per use
+skill_costs = split"1,3,2,3,2"	-- stamina per use
 
 -- what crosses a load(), in the order of its param. split leaves "false" a
 -- truthy string, so a flag here is 0/1. where you arrive is the door's job
@@ -813,14 +843,14 @@ __gfx__
 0070070000676600006766648777770078ddddd0ab777770d188888000676600003b3300008e880000a7aa000067660000676600007770000077000044777770
 00000000060660600006600040000000070000000a0000000d0000000606606003033030080880800a0aa0a00606606006066060000700000700000004000000
 00000000005005000050050000000000000000000000000000000000005505000050550000505000000505000050050000500500000000000000000000000000
-00088000003333300033330000333300000000000000000000000000000000000000000000000000000000000000000000000000007666000000000000000000
-00388300003333300033330000333300000000000000000000000000000000000000000000000000000000000000000000000000005555000000000000000000
-03333330003a83800083380000333300000000000000000000000000000000000000000000000000000000000000000000000000006556000000000000000000
-07033070003332300032230000333300000000000000000000000000000000000000000000000000000000000000000000000000006556000000000000000000
-07733770000330000003300000033000000000000000000000000000000000000000000000000000000000000000000000000700000550600000000000000000
-03333330000444300343443003443430000000000000000000000000000000000000000000000000000000000000000000000700006666000000000000000000
-03333330000440000004400000044000000000000000000000000000000000000000000000000000000000000000000000000700006460000000000000000000
-03333330005005000050050000500500000000000000000000000000000000000000000000000000000000000000000000000700054845000000000000000000
+00088000003333300033330000333300000000cc00dddd00000bb000009a99900666600000000000000000000000000000000000007666000000000000000000
+0038830000333330003333000033330000000c7c0dddddd000bbbb00009444406cc7c60000000000000000000000000000000000005555000000000000000000
+03333330003a838000833800003333000000c7c0dd7dd7dd0b0000b0009994906c7cc60000000000000000000000000000000000006556000000000000000000
+070330700033323000322300003333000c0c7c00dd7dd7ddbb0770bb009994906cccc60000000000000000000000000000000000006556000000000000000000
+077337700003300000033000000330000cc7c000dd7dd7ddbb0770bb000440006cccc60000000000000000000000000000000700000550600000000000000000
+0333333000044430034344300344343000cc0000dd7dd7dd0b0000b0009a99000666640000000000000000000000000000000700006666000000000000000000
+033333300004400000044000000440000c0cc0000dddddd000bbbb00090990900000044000000000000000000000000000000700006460000000000000000000
+03333330005005000050050000500500c000000000dddd00000bb000004004000000004400000000000000000000000000000700054845000000000000000000
 00aaaa00007aaa000077aa0000a77a0000aa770000aaaa0000aaaa0000aaaa0000aaaa0000aaaa0000aaaa000000000000766600000700000000000000000000
 0aa99aa007a99aa007799aa00a779aa00aa77aa00aa997700aa99a700aa99aa00aa99aa00aa99aa00aa99aa00000000000666600000700000000000000000000
 aa9aa9aa7a9aa9aa779aa9aaa77aa9aaaa77a9aaaa9a77aaaa9aa77aaa9aa977aa9aa9aaaa9aa9aaaa9aa9aa0000000000666600000700000000000000000000
