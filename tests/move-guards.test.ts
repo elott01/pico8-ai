@@ -12,7 +12,7 @@ import { mockReq, mockRes, rateLimitedBody } from './_mocks.ts';
 
 const { default: handler } = await import('../api/move.ts');
 
-const HOST = 'pico8-ai.vercel.app';
+const HOST = 'pico-aight.vercel.app';
 const SAME_ORIGIN = { host: HOST, origin: `https://${HOST}` };
 
 let seq = 0;

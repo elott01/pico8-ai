@@ -13,7 +13,7 @@ import type { Captured } from './_mocks.ts';
 const { default: handler } = await import('../api/move.ts');
 const { askGemini, CLIENT_ABORT_MS } = await import('../api/_ask_gemini.ts');
 
-const HOST = 'pico8-ai.vercel.app';
+const HOST = 'pico-aight.vercel.app';
 
 // A well-formed Gemini response; `fields` overrides the parts the test cares about.
 const geminiReply = (fields: Record<string, unknown>) =>
