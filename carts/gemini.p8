@@ -1,7 +1,8 @@
 pico-8 cartridge // http://www.pico-8.com
 version 43
 __lua__
--- gem-in-eye's hub: the room the game starts in, his shop and claude's talk.
+-- gem-in-eye's hub: the room the game starts in, his shop, and claude's talk
+-- and shop.
 -- the left door loads gemini_dungeon.p8, and dying or walking home there
 -- loads this back. the run crosses each load() in its param: see carry.
 -- load() looks in pico-8's current folder, so run this from carts/ (pico8
@@ -87,6 +88,7 @@ end
 function _update()
 	frame += 1
 	if banner_t > 0 then banner_t -= 1 end
+	if flash_t > 0 then flash_t -= 1 end
 
 	-- candlelight: the shop's light wavers, and each torch and candle picks a flame
 	if frame % 4 == 0 then
@@ -118,7 +120,7 @@ function _update()
 		local msg = near_talk.msg
 		if near_talk.act then msg = near_talk.act(near_talk) end
 		if msg then open_dialog(msg) end
-	elseif btnp(❎) and stamina > 0 then
+	elseif btnp(❎) and enough(1) then
 		swing()
 	end
 
@@ -937,13 +939,106 @@ function draw_shelf()
 	draw_arrow(sx(shelf.at) - 2, shelf_cy + s * 4 + 3)
 end
 
+-- claude's shop, in his talk: a menu of skills, each opening the shelf. it's
+-- apart from gem-in-eye's, whose buy asks gemini for the price and the speech
+
+-- by id: tokens (a guess, as tier_cost is), what it does, his line as it sells
+skill_shop = {
+	{20, "your swing flies and prunes in one hit.",
+	 "works first try. no practice needed!"},
+	{15, "dead weights wait 2 seconds.",
+	 "nothing runs until you say so. well, except you."},
+	{15, "pushes dead weights back.",
+	 "makes some room. everything's still there, just further off."},
+	{25, "a copy of you they chase.",
+	 "i don't keep agents myself. this one's a copy of you, on loan."},
+	{10, "pulls the token to you.",
+	 "finds it and brings it here. can't say what it wakes up."},
+}
+skills_prompt = "skills are just instructions. one fits in your head at a time."
+
+-- the only place the game says what 🅾️ does in the dungeon
+skill_how = "it's yours! press 🅾️ in the depths of the orphan branch to use it."
+
+function owned(id) return (skills >> id - 1 & 1) > 0 end
+
+-- fixed columns, as in shop_rows
+function skill_rows()
+	local rows = {}
+	for i, n in ipairs(skill_names) do
+		local p = i == skill and "on" or owned(i) and "owned" or tostr(skill_shop[i][1])
+		while #n < 9 do n = n.." " end
+		while #p < 5 do p = " "..p end
+		add(rows, n.."   "..p)
+	end
+	return rows
+end
+
+function open_skills(sel)
+	skill_at = nil
+	open_menu(skill_rows(), open_skill)
+	menu.sel = sel or 1
+	menu_lines(menu)
+	open_dialog(skills_prompt)
+end
+
+-- skill_at: the one on the shelf, nil when the shelf's away
+function open_skill(id)
+	skill_at = id
+	open_dialog(skill_names[id]..". "..skill_shop[id][2].." "..skill_costs[id].." stamina. "
+		..(id == skill and "equipped." or owned(id) and "owned." or tokens_str(skill_shop[id][1]).."."))
+end
+
+-- ⬅️➡️ browse, ❎ buys or equips, 🅾️ back to the menu
+function update_skills()
+	local a = skill_at
+	if btnp(⬅️) then a -= 1 end
+	if btnp(➡️) then a += 1 end
+	a = mid(1, a, #skill_names)
+	if a != skill_at then open_skill(a) end
+	if btnp(❎) then
+		buy_skill(a)
+	elseif btnp(🅾️) then
+		open_skills(a)
+	end
+end
+
+-- buying equips
+function buy_skill(id)
+	local s = skill_shop[id]
+	if id == skill then return end
+	if owned(id) then
+		open_dialog(skill_names[id].." loaded.")
+	elseif afford(s[1]) then
+		spend(s[1])
+		skills |= 1 << id - 1
+		-- how first: 🅾️ backs out of a page, so the second can be missed
+		speak({skill_how, skill_names[id]..". "..s[3]})
+	else
+		open_dialog("that's "..tokens_str(s[1])..". you have "..(tokens + vault)..". no rush!")
+		return
+	end
+	skill = id
+end
+
+-- icons are sprites 20-24, by id
+function draw_skills()
+	for i = 1, #skill_names do
+		local sx = 64 + (i - (#skill_names + 1) / 2) * shelf_gap
+		spr(19 + i, sx - 4, shelf_cy - 4)
+		if i == skill_at then draw_arrow(sx - 2, shelf_cy + 7) end
+	end
+end
+
 -- claude's talk: his line, ❎ topics, ❎ answer, 🅾️ back out
 
--- asks max 26 chars. each say string starts a box. show(t) gates a topic
+-- asks max 26 chars. each say string starts a box, or act runs instead. show(t)
+-- gates a topic
 claude_hello = "hi there! you must be the new agent. i'm claude, pleased to meet you!"
 claude_back = "hi again!"
 claude_prompt = "what's on your mind?"
 claude_topics = {
+	{ask = "what can you teach me?", act = open_skills},
 	{ask = "who are you?",
 	 say = {"i'm claude! i'm not hiring agents right now, sorry.",
 		"but i might need one someday. i'll keep your number handy!"}},
@@ -964,7 +1059,7 @@ function enter_talk()
 end
 
 function exit_talk()
-	scene, dialog, menu, pages = nil
+	scene, dialog, menu, pages, skill_at = nil
 end
 
 -- rebuilt each time so topics can change. the caret keeps its row
@@ -988,8 +1083,13 @@ end
 function ask_topic(i)
 	local t = topics[i]
 	t.asked = true
+	if t.act then t.act() else speak(t.say) end
+end
+
+-- pages of page_lines lines. each string starts one
+function speak(strs)
 	pages = {}
-	for s in all(t.say) do
+	for s in all(strs) do
 		local lines = wrap_text(s, box_chars)
 		for j = 1, #lines, page_lines do
 			local p = {}
@@ -1020,10 +1120,20 @@ function update_talk()
 	if pages then
 		if turn_page() then
 			pages = nil
-			open_topics()
+			if skill_at then open_skill(skill_at) else open_topics() end
 		end
+	elseif skill_at then
+		update_skills()
 	elseif menu then
-		if btnp(🅾️) then exit_talk() else update_menu(menu) end
+		if not btnp(🅾️) then
+			update_menu(menu)
+		elseif menu.pick == open_skill then
+			-- the shop is the first topic, where a fresh menu's caret is
+			menu = nil
+			open_topics()
+		else
+			exit_talk()
+		end
 	elseif btnp(❎) then
 		open_topics()
 	elseif btnp(🅾️) then
@@ -1036,7 +1146,12 @@ function draw_talk()
 	cls(0)
 	local s = claude_cycle[1]
 	sspr(s % 16 * 8, s \ 16 * 8, 16, 16, wiz_x, wiz_y + 3, 32, 32)
-	draw_boxes(menu and not pages, pages and "next" or "ask", pages and "back" or "leave")
+	if skill_at then draw_skills() end
+	local selling = menu and menu.pick == open_skill
+	draw_boxes(menu and not pages and not skill_at,
+		pages and "next" or skill_at and (owned(skill_at) and "equip" or "buy")
+			or selling and "look" or "ask",
+		(pages or selling) and "back" or "leave")
 end
 
 -- >> shared: gemini.p8 and gemini_dungeon.p8 carry this section byte for
@@ -1082,6 +1197,7 @@ function init_shared()
 	hurt = 0
 	stamina_rate = 45	-- frames per stamina point
 	stam_t = 0
+	flash_t = 0		-- the stamina bar's flash, counting down
 
 	num_gap = 3		-- px a count tucks toward its colon
 
@@ -1116,6 +1232,7 @@ function init_shared()
 	-- the hub's: whether claude has met you. it rides through the dungeon so
 	-- a run doesn't reset it
 	met = 0
+	skills, skill = 0, 0	-- owned and equipped: see skill_names
 	up0 = 0
 end
 
@@ -1195,6 +1312,15 @@ function move_player()
 	walk_t = moved and (walk_t + 1) % (walk_hold * #walk_cycle) or 0
 end
 
+flash_frames = 17	-- three flashes, 3 frames on and 3 off
+flash_col = 8
+
+-- whether stamina covers n. if not, its bar flashes
+function enough(n)
+	if stamina >= n then return true end
+	flash_t = flash_frames
+end
+
 function swing()
 	attack = 6
 	stamina -= 1
@@ -1240,7 +1366,7 @@ end
 
 function draw_hud()
 	draw_bar(13, health_x, health, health_max, health_col)
-	draw_bar(14, stamina_x, stamina, stamina_max, stamina_col)
+	draw_bar(14, stamina_x, stamina, stamina_max, stamina_col, flash_t % 6 > 2 and flash_col)
 	-- padded to the cap's width so the readout holds still
 	local tv = tostr(tokens)
 	while #tv < token_digits do tv = " "..tv end
@@ -1263,11 +1389,11 @@ function apply_tiers()
 	stamina_max = smax
 end
 
-function draw_bar(icon, bx, n, nmax, col)
+function draw_bar(icon, bx, n, nmax, col, edge)
 	pal(7, col)
 	spr(icon, bx - 8 - icon_gap, 0)
 	pal()
-	rect(bx, 0, bx + 1 + nmax * 5, 6, 7)
+	rect(bx, 0, bx + 1 + nmax * 5, 6, edge or 7)
 	for i = 0, n - 1 do
 		rectfill(bx + 2 + i * 5, 2, bx + 4 + i * 5, 4, col)
 	end
@@ -1304,9 +1430,15 @@ function door_at(px, py)
 	end
 end
 
+-- claude's skills. an id is a place in this list. skills (a bitmask of the
+-- owned) and skill (the equipped, 0 none) carry ids across load(), so add at
+-- the end: inserting or removing one changes which skill an id means
+skill_names = split"zero-shot,plan mode,/compact,subagent,grep"
+skill_costs = split"3,3,2,3,2"	-- stamina per use
+
 -- what crosses a load(), in the order of its param. split leaves "false" a
 -- truthy string, so a flag here is 0/1. where you arrive is the door's job
-carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,vault_look,met,up"
+carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,vault_look,met,up,skills,skill"
 
 -- time() restarts with each cart: up carries the uptime, up0 offsets it
 function go(cart)
@@ -1335,14 +1467,14 @@ __gfx__
 0070070000676600006766648777770078ddddd0ab777770d188888000676600003b3300008e880000a7aa000067660000676600007770000077000044777770
 00000000060660600006600040000000070000000a0000000d0000000606606003033030080880800a0aa0a00606606006066060000700000700000004000000
 00000000005005000050050000000000000000000000000000000000005505000050550000505000000505000050050000500500000000000000000000000000
-00088000003333300033330000333300000000000000000000000000000000000000000000000000000000000000000000000000007666000000000000000000
-00388300003333300033330000333300000000000000000000000000000000000000000000000000000000000000000000000000005555000000000000000000
-03333330003a83800083380000333300000000000000000000000000000000000000000000000000000000000000000000000000006556000000000000000000
-07033070003332300032230000333300000000000000000000000000000000000000000000000000000000000000000000000000006556000000000000000000
-07733770000330000003300000033000000000000000000000000000000000000000000000000000000000000000000000000700000550600000000000000000
-03333330000444300343443003443430000000000000000000000000000000000000000000000000000000000000000000000700006666000000000000000000
-03333330000440000004400000044000000000000000000000000000000000000000000000000000000000000000000000000700006460000000000000000000
-03333330005005000050050000500500000000000000000000000000000000000000000000000000000000000000000000000700054845000000000000000000
+00088000003333300033330000333300000000cc00dddd00000bb000009a99900666600000000000000000000000000000000000007666000000000000000000
+0038830000333330003333000033330000000c7c0dddddd000bbbb00009444406cc7c60000000000000000000000000000000000005555000000000000000000
+03333330003a838000833800003333000000c7c0dd7dd7dd0b0000b0009994906c7cc60000000000000000000000000000000000006556000000000000000000
+070330700033323000322300003333000c0c7c00dd7dd7ddbb0770bb009994906cccc60000000000000000000000000000000000006556000000000000000000
+077337700003300000033000000330000cc7c000dd7dd7ddbb0770bb000440006cccc60000000000000000000000000000000700000550600000000000000000
+0333333000044430034344300344343000cc0000dd7dd7dd0b0000b0009a99000666640000000000000000000000000000000700006666000000000000000000
+033333300004400000044000000440000c0cc0000dddddd000bbbb00090990900000044000000000000000000000000000000700006460000000000000000000
+03333330005005000050050000500500c000000000dddd00000bb000004004000000004400000000000000000000000000000700054845000000000000000000
 00aaaa00007aaa000077aa0000a77a0000aa770000aaaa0000aaaa0000aaaa0000aaaa0000aaaa0000aaaa000000000000766600000700000000000000000000
 0aa99aa007a99aa007799aa00a779aa00aa77aa00aa997700aa99a700aa99aa00aa99aa00aa99aa00aa99aa00000000000666600000700000000000000000000
 aa9aa9aa7a9aa9aa779aa9aaa77aa9aaaa77a9aaaa9a77aaaa9aa77aaa9aa977aa9aa9aaaa9aa9aaaa9aa9aa0000000000666600000700000000000000000000

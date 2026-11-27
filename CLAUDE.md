@@ -55,9 +55,9 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
 
 - **`carts/tic_tac_toe.p8`** owns all game logic (turns, win detection) and a local minimax.
   On the CPU's turn it publishes the board to GPIO and waits.
-- **Gem-in-Eye is two carts in one export.** `carts/gemini.p8` boots: the hub, the shop,
-  Claude's talk and the GPIO bridge. `carts/gemini_dungeon.p8` is the combat and never touches
-  GPIO. Each door is a `load()` that resets the machine, so the run crosses in `load()`'s param
+- **Gem-in-Eye is two carts in one export.** `carts/gemini.p8` boots: the hub, gem-in-eye's shop,
+  Claude's talk and skill shop, and the GPIO bridge. `carts/gemini_dungeon.p8` is the combat,
+  every skill's effect included, and never touches GPIO. Each door is a `load()` that resets the machine, so the run crosses in `load()`'s param
   string, packed in `carry`'s order and read back with `stat(6)`. A load costs about a frame on
   the web. Desktop PICO-8 is noticeably slower, so judge speed in an export, not the editor.
 - **`src/components/Pico8Game.tsx`** embeds the cart's *exported `.html`* in an iframe (not the
@@ -86,8 +86,10 @@ cart (Lua) ⇄ pico8_gpio (128 bytes) ⇄ React poll loop ⇄ /api/move ⇄ Gemi
   - Both endpoints share the Gemini call, retry, quota and origin rules in
     **`api/_ask_gemini.ts`**.
   - **Only `/api/talk` hedges, on purpose.** If the first call has not answered at
-    `HEDGE_MS` (5s), an identical second one goes out and the first success wins. It is on
-    trial there before `/api/move` gets it. A call already retrying 503s is never hedged.
+    `HEDGE_MS` (5s), an identical second one goes out and the first success wins. `/api/move`
+    goes without because slow calls are rare on 3.5 (2 of 398 benched) and the cart's minimax
+    plays a slow turn, not because moves are known to be faster. A call already retrying 503s
+    is never hedged.
   - On the page, `Pico8Game.tsx` runs a second poll loop for talk carts. **`src/lib/talk.ts`**
     holds the client and gem-in-eye's memory in `localStorage`, keyed per speaker, and
     **`TalkPanel.tsx`** shows what he was shown and what he said.
@@ -165,6 +167,13 @@ Breaking any of these fails silently, so verify them when touching the relevant 
   the other; `tests/cart-bundle.test.ts` fails otherwise. `carry`'s order is the param's format,
   so a key added on one side shifts every value after it. What crosses must be a number or a
   word, because `split` leaves `"false"` a truthy string: a flag goes as 0/1.
+- **A Claude skill's id is its place in `skill_names`** (shared section). `skill_costs`, the hub's
+  `skill_shop` rows and the icons (sprite 19 + id) all go by position, and so do `skills` (a
+  bitmask) and `skill` in `carry`. Add a skill at the end of all four together, and never remove
+  one from the middle. `skill_fx` in the dungeon is keyed by name instead, so a skill sold without
+  an effect fails `tests/skills.test.ts` rather than firing another's. An effect returns false to
+  refuse, which costs nothing. Effects live only in the dungeon: the hub is short of tokens, and
+  in the lore skills don't run on main.
 
 ## Gotchas
 

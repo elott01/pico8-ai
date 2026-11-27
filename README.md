@@ -17,7 +17,7 @@ Three carts, on a shelf beside the handheld:
 | --- | --- |
 | **Tic-tac-toe** | 3×3. Solved by 40 lines of minimax, so it proves the pipeline — not the model |
 | **Connect Four** | 7×6. No cheap perfect play, so the model's judgement does real work |
-| **Gem-in-Eye** | A dungeon crawler whose shopkeeper is Gemini. No board and no right answer, so the model does what code can't: judge the run and talk about it, in character |
+| **Gem-in-Eye** | A dungeon crawler whose shopkeeper is Gemini. No board and no right answer, so the model does what code can't: judge the run and talk about it, in character. Its second shopkeeper, Claude, is scripted for now |
 
 The side panel shows the model's own output for every turn — its analysis of a move, or
 what gem-in-eye was shown and what he said — so you can see what it saw, and when the cart
@@ -62,6 +62,10 @@ and a page of speech. It is the one cart where text crosses the
 bridge, and only into the cart. The server cleans the speech and pages it to the cart's own
 word wrap, so one `/api/talk` call serves every page, and the panel shows exactly what the
 cart printed.
+
+Claude, the rival shopkeeper, sells skills the knight uses in the dungeon with the square
+button (Z on a keyboard). His shop is scripted for now: it sends nothing over the bridge and
+calls no model, so the panel shows nothing for it. Voicing him through `/api/talk` is planned.
 
 The two functions are siblings rather than one with a branch: a speech has no legal move
 and no right answer, which is everything `api/_games.ts` dispatches on. They share the
@@ -183,7 +187,7 @@ api/_games.ts             per-cart dispatch: board size, prompt, schema, legalit
 api/_ratelimit.ts         per-IP + global quota limiting, KV-backed, fails open
 api/_types.ts             the /api/move and /api/talk wire contracts, shared with the client
 carts/*.p8                PICO-8 sources; exported into public/games/
-carts/gemini*.p8          Gem-in-Eye: the hub (shop, GPIO) loads the dungeon; one export
+carts/gemini*.p8          Gem-in-Eye: the hub (both shops, GPIO) loads the dungeon; one export
 public/games/*.{html,js}  exported carts; the iframe loads the .html
 public/labels/*.png       each cart's label for the shelf, checked against the cart by a test
 src/components/           the handheld, iframe embed, GPIO poll loops, cart shelf, move and

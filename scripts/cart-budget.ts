@@ -9,7 +9,8 @@
 //   `, . : ; :: ) ] } end local` are free, a string is one token, and a minus or ~ in front of
 //   a number literal merges into it when nothing before it is a value. Run on `963d7ff`, this
 //   gave the same 5,123 (hub) and 3,335 (dungeon) as PICO-8's `info`.
-// - Characters, of 65,535, are the code's length as the ROM stores it. A P8SCII glyph like
+// - Characters, of 65,535, are the .p8's code, comments and all, counted as a ROM stores it: PICO-8
+//   has to open the .p8, though an export leaves the comments out. A P8SCII glyph like
 //   ⬅️ is one byte there, though it is two characters in the .p8. Anything else non-ASCII
 //   costs its UTF-8 bytes: a `·` in a comment costs two. The newline before the next section
 //   isn't stored.
@@ -18,8 +19,9 @@
 //   public/games/<cart>.js holds one 0x8000-byte ROM per cart it carries, and the code at
 //   0x4300 starts with `\0pxa`, its length decompressed, then compressed, each 2 bytes
 //   big-endian. That is the last export's size, so when the exported code's length differs
-//   from the .p8's, the cart has changed since, and the number is flagged as stale. An edit
-//   that keeps the length the same goes unseen.
+//   from the .p8's without its comments, which is what an export holds, the cart has changed
+//   since, and the number is flagged as stale. An edit that keeps the length the same goes
+//   unseen, and so does one that only touches comments, which no export holds.
 //
 // Exits 1 when a cart is over a limit or a cart named has no export to measure.
 
@@ -27,6 +29,7 @@ import { existsSync, readFileSync } from 'node:fs';
 
 import { CART_ORDER } from '../src/lib/carts.ts';
 import { exportedCarts } from './cart-bundle.ts';
+import { stripComments } from './strip-comments.ts';
 
 export const LIMITS = { tokens: 8192, chars: 65535, compressed: 15616 } as const;
 
@@ -195,11 +198,17 @@ function main(args: string[]): number {
       const tokens = countTokens(code);
       const chars = codeLength(code);
       const rom = lengths?.[k];
-      const stale = rom !== undefined && rom.decompressed !== chars;
+      const exported = codeLength(stripComments(code));
+      const stale = rom !== undefined && rom.decompressed !== exported;
       if (!rom) notes.push(`${name} has never been exported. /reexport-cart ${id} measures it.`);
       if (stale) {
-        notes.push(`${name} has changed since its export (${n(rom.decompressed)} characters then, ` +
-          `${n(chars)} now), so compressed is the last export's. /reexport-cart ${id} brings it level.`);
+        notes.push(
+          rom.decompressed === chars
+            ? `${name} was exported with its comments in, so compressed counts them. ` +
+                `/reexport-cart ${id} leaves them out.`
+            : `${name} has changed since its export (${n(rom.decompressed)} characters then, ` +
+                `${n(exported)} now), so compressed is the last export's. /reexport-cart ${id} brings it level.`,
+        );
       }
       over ||= tokens > LIMITS.tokens || chars > LIMITS.chars || (rom?.compressed ?? 0) > LIMITS.compressed;
       rows.push([

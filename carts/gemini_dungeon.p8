@@ -29,9 +29,17 @@ end
 function _update()
 	frame += 1
 	if banner_t > 0 then banner_t -= 1 end
+	if flash_t > 0 then flash_t -= 1 end
+	if ring_t > 0 then ring_t -= 1 end
 
 	if not alive then
-		if btnp(🅾️) then respawn() end
+		-- the wait ends only with 🅾️ up, since btnp repeats while it's held
+		if dead_t > 0 then
+			frame = 0	-- the prompt's blink starts lit as the wait ends
+			if dead_t > 1 or not btn(🅾️) then dead_t -= 1 end
+		elseif btnp(🅾️) then
+			respawn()
+		end
 		return
 	end
 
@@ -40,23 +48,33 @@ function _update()
 	local d = door_at(x + 4, y + 4)
 	if d then d.act(d) end
 
-	if btnp(❎) and stamina > 0 then
+	if btnp(❎) and enough(1) then
 		swing()
-		hit_crate()
+		thrown = false
+		hit_crate(attack_tier + 1, sword_box())
+	end
+
+	-- 🅾️ runs the equipped skill. an effect that can't fire returns false, so
+	-- a refused skill costs nothing
+	if btnp(🅾️) and skill > 0 and enough(skill_costs[skill])
+	and skill_fx[skill_names[skill]]() then
+		stamina -= skill_costs[skill]
 	end
 
 	tick_player()
 	token_t = (token_t + 1) % (token_frames * token_hold + token_pause)
 
-	if attack > 0 then
+	-- zero-shot's swing is only a look: its beam does the hitting
+	if attack > 0 and not thrown then
 		local sx, sy = sword_box()
 		for z in all(zombies) do
-			if hit(sx, sy, z.x, z.y) then
-				del(zombies, z)
-				pruned += 1
-			end
+			if hit(sx, sy, z.x, z.y) then prune(z) end
 		end
 	end
+	update_beam()
+	update_pull()
+	update_ring()
+	update_decoy()
 
 	if token_alive and hit(x, y, token_x, token_y) then
 		tokens = min(tokens + 1, token_max)
@@ -68,10 +86,10 @@ function _update()
 	take_drops()
 
 	for z in all(zombies) do
-		if hurt <= 0 and hit(x, y, z.x, z.y) then
+		if hurt <= 0 and plan_t == 0 and hit(x, y, z.x, z.y) then
 			health -= 1
 			hurt = 30
-			if health <= 0 then alive = false end
+			if health <= 0 then alive, dead_t = false, rollback_delay end
 		end
 	end
 
@@ -83,7 +101,17 @@ function _draw()
 	cls()
 	draw_hud()
 	map(room.mx, room.my, 0, 0, 16, 16)
-	if alive then draw_player() end
+	if alive then
+		if decoy then draw_decoy(decoy) end
+		draw_player()
+		if beam then draw_beam(beam) end
+		-- /compact's ring grows out from him, and fades in a dither
+		if ring_t > 0 then
+			fillp(ring_t < 3 and 0x5a5a or 0)
+			circ(x + 3.5, y + 3.5, ring_r(), ring_col)
+			fillp()
+		end
+	end
 	for z in all(zombies) do
 		draw_zombie(z)
 	end
@@ -102,17 +130,24 @@ function _draw()
 
 	if not alive then
 		print("game over", 46, 60, 8)
-		if frame % 30 < 20 then centre("press 🅾️ to rollback", 70, 7) end
+		if dead_t == 0 and frame % 30 < 20 then centre("press 🅾️ to rollback", 70, 7) end
 	end
 end
 
--- home is gemini.p8
-function go_home() go("gemini.p8") end
+-- home is gemini.p8. it heals, whichever way he got there
+function go_home()
+	health = health_max
+	go("gemini.p8")
+end
+
+-- frames the death screen ignores 🅾️. it also fires skills, so a player can
+-- die mid-press
+rollback_delay = 15
 
 -- dying drops the purse (tokens). the stash is safe
 function respawn()
 	rollbacks += 1
-	health, stamina, tokens = health_max, stamina_max, 0
+	stamina, tokens = stamina_max, 0
 	go_home()
 end
 
@@ -129,16 +164,24 @@ function mid_tile(px, py)
 	return (px + 4) \ 8, (py + 4) \ 8
 end
 
--- the tile id is the damage state; a swing adds attack_tier + 1
+-- every prune goes through here, so dead weights with health change one place
+function prune(z)
+	del(zombies, z)
+	pruned += 1
+end
+
+-- the tile id is the damage state. a swing adds attack_tier + 1, and a beam
+-- breaks it
 crate_base, crate_stages = 144, 3
 
-function hit_crate()
-	local tx, ty = mid_tile(sword_box())
+-- n stages to a crate under px,py's centre
+function hit_crate(n, px, py)
+	local tx, ty = mid_tile(px, py)
 	if tx < 0 or tx > 15 or ty < 0 or ty > 15 then return end
 	local mx, my = room.mx + tx, room.my + ty
 	local st = mget(mx, my) - crate_base
 	if st < 0 or st >= crate_stages then return end
-	st += attack_tier + 1
+	st += n
 	if st < crate_stages then
 		mset(mx, my, crate_base + st)
 	else
@@ -191,20 +234,23 @@ end
 
 function spawn_token()
 	token_x, token_y = tile_xy(rnd(floor_tiles()))
-	token_alive = true
+	token_alive, token_pull = true, false
 end
 
 -- zombie bodies 17-19 share the knight's feet row, so his steps fit
 function spawn_zombie(zx, zy)
-	add(zombies, {x = zx, y = zy, speed = 0.75,
+	add(zombies, {x = zx, y = zy, speed = 0.75, daze = 0,
 		walk_t = 0, body = 17, side = true, flipx = false})
 end
 
 function draw_zombie(z)
 	local fx = z.side and z.flipx
+	-- frozen. blinks before it thaws
+	if plan_t > plan_warn or plan_t % 4 > 1 then pal(plan_pal) end
 	draw_rows(z.body, z.x, z.y, fx, 0, 7)
 	draw_rows(step_spr(z.side and walk_cycle or walk_cycle_ud, z.walk_t),
 		z.x, z.y, fx, 7, 1)
+	pal()
 end
 
 -- flow field: bfs from your tile, rebuilt when it changes. no corner-cutting
@@ -243,12 +289,13 @@ function is_solid(px, py)
 	return fget(tile_at(px, py), 0)
 end
 
--- next tile downhill, ties toward you. adjacent or unreached: at you
-function zombie_goal(z, ptx, pty)
+-- next tile downhill, ties toward the target (aim_x, aim_y in px, on tile
+-- ptx, pty). adjacent or unreached: at it
+function zombie_goal(z, ptx, pty, aim_x, aim_y)
 	local tx, ty = mid_tile(z.x, z.y)
 	local here = flow[tx + ty * 16]
-	if not here or here <= 1 then return x, y end
-	local gx, gy, bd, be = x, y, here, 999
+	if not here or here <= 1 then return aim_x, aim_y end
+	local gx, gy, bd, be = aim_x, aim_y, here, 999
 	for n in all(nbrs) do
 		local nx, ny = tx + n[1], ty + n[2]
 		local d = flow[nx + ny * 16]
@@ -269,7 +316,15 @@ function zflow(z)
 end
 
 function update_zombies()
-	local ptx, pty = mid_tile(x, y)
+	if plan_t > 0 then
+		plan_t -= 1
+		return
+	end
+
+	-- they go for the subagent while it's out, else for him
+	local aim_x, aim_y = x, y
+	if decoy then aim_x, aim_y = decoy.x, decoy.y end
+	local ptx, pty = mid_tile(aim_x, aim_y)
 	if flow_at != ptx + pty * 16 then
 		flow_at = ptx + pty * 16
 		build_flow(ptx, pty)
@@ -280,8 +335,14 @@ function update_zombies()
 		local wasx, wasy = z.x, z.y
 		local sp = z.speed
 
+		-- carried by /compact's ring, then dazed: it stands still for both
+		if z.daze > 0 then
+			z.daze -= 1
+			sp = 0
+		end
+
 		-- one axis at a time, so walls slide it along
-		local gx, gy = zombie_goal(z, ptx, pty)
+		local gx, gy = zombie_goal(z, ptx, pty, aim_x, aim_y)
 		local mx, my = mid(-sp, gx - z.x, sp), mid(-sp, gy - z.y, sp)
 		if box_free(z.x + mx, z.y) then z.x += mx else mx = 0 end
 		if box_free(z.x, z.y + my) then z.y += my else my = 0 end
@@ -302,9 +363,9 @@ function update_zombies()
 			end
 		end
 
-		-- face the way it moves, or the player when still
+		-- face the way it moves, or its target when still
 		local fx, fy = mx, my
-		if fx == 0 and fy == 0 then fx, fy = x - z.x, y - z.y end
+		if fx == 0 and fy == 0 then fx, fy = aim_x - z.x, aim_y - z.y end
 		-- 17 side, 18 toward you, 19 walking away
 		z.side = abs(fx) > abs(fy)
 		if z.side then z.flipx = fx < 0 end
@@ -432,6 +493,8 @@ token_wakes = 1
 function enter_battle()
 	zombies = {}
 	drops = {}
+	-- a skill still running ends with the room it was used in
+	beam, plan_t, decoy, ring_t, token_pull = nil, 0, nil, 0, false
 	build_layout()
 	spawn_wave(room_wave(depth))
 	tokens_left = room_tokens(depth)
@@ -479,6 +542,179 @@ function update_locks()
 	end
 end
 
+zero_speed = 3		-- px a frame: a room in about a second
+zero_col = 12
+
+-- 🅾️ swings, and the swing flies on from the blade as a beam. the first thing
+-- in its path, up close or across the room, goes in one hit, a crate too. it's
+-- claude's, so gem-in-eye's attack upgrades never reach it. one at a time
+function zero_shot()
+	if beam then return false end
+	attack, thrown = 6, true
+	local sx, sy = sword_box()
+	local dx, dy = sword_ofs()
+	beam = {x = sx, y = sy, dx = dx / 8, dy = dy / 8}
+	beam_hit()
+	return true
+end
+
+function update_beam()
+	if beam then
+		beam.x += beam.dx * zero_speed
+		beam.y += beam.dy * zero_speed
+		beam_hit()
+	end
+end
+
+-- the first dead weight it meets is pruned. a solid tile under its centre
+-- stops it, and a crate there breaks. so does leaving the screen
+function beam_hit()
+	local b = beam
+	for z in all(zombies) do
+		if hit(b.x, b.y, z.x, z.y) then
+			prune(z)
+			beam = nil
+			return
+		end
+	end
+	if not open_tile(mid_tile(b.x, b.y)) then
+		hit_crate(crate_stages, b.x, b.y)
+		beam = nil
+	end
+end
+
+-- sprite 3, the side swing's blade, in blue with a hilt behind its guard. left
+-- flips it, and up and down turn it, down 2px left so it leaves from the blade
+function draw_beam(b)
+	for i = -1, 7 do
+		for j = 0, 7 do
+			if i < 0 and j == 5 or i >= 0 and sget(24 + i, j) > 0 then
+				local px, py = b.dx < 0 and 7 - i or i, j
+				if b.dy != 0 then px, py = b.dy > 0 and j - 2 or j, b.dy < 0 and 7 - i or i end
+				pset(b.x + px, b.y + py, zero_col)
+			end
+		end
+	end
+end
+
+ring_frames = 8
+ring_grow = 3		-- px a frame
+ring_max = 24		-- px, its radius as it fades
+ring_col = 11
+compact_daze = 15	-- frames a dead weight stands, once the ring's gone
+
+-- a ring grows out from him, and whatever it touches it carries out on its
+-- edge. it fires even with nothing in reach. nothing is pruned
+function compact()
+	if ring_t > 0 then return false end
+	ring_t = ring_frames
+	return true
+end
+
+function ring_r() return ring_max - (ring_t - 1) * ring_grow end
+
+-- a dead weight the ring touches goes to its edge, the way the ring grows: one
+-- about on top of him, where that's no clear way, the way he faces. walls stop it
+function update_ring()
+	if ring_t == 0 then return end
+	local r = ring_r() + 4
+	for z in all(zombies) do
+		local dx, dy = z.x - x, z.y - y
+		if abs(dx) < r and abs(dy) < r then
+			local d = sqrt(dx * dx + dy * dy)
+			if d < r then
+				local ux, uy = sword_ofs()
+				ux, uy = ux / 8, uy / 8
+				if d >= 4 then ux, uy = dx / d, dy / d end
+				local nx, ny = mid(0, x + ux * r, 120), mid(0, y + uy * r, 120)
+				if box_free(nx, z.y) then z.x = nx end
+				if box_free(z.x, ny) then z.y = ny end
+				z.daze = ring_t + compact_daze
+			end
+		end
+	end
+end
+
+grep_speed = 6		-- px a frame: a room in about two thirds of a second
+
+-- the token and every drop fly to him, over walls, and he picks them up as if
+-- he'd walked there: the token still wakes its dead weight. no token, no grep
+function grep()
+	if not token_alive or token_pull then return false end
+	token_pull = true
+	for d in all(drops) do d.pull = true end
+	return true
+end
+
+function update_pull()
+	if token_pull then token_x, token_y = pull_to(token_x, token_y) end
+	for d in all(drops) do
+		if d.pull then d.x, d.y, d.pull = pull_to(d.x, d.y) end
+	end
+end
+
+-- a step toward him. the third value is false once it's arrived
+function pull_to(px, py)
+	local dx, dy = x - px, y - py
+	local d = max(abs(dx), abs(dy))
+	if d <= grep_speed then return x, y, false end
+	return px + dx / d * grep_speed, py + dy / d * grep_speed, true
+end
+
+plan_frames = 60	-- frames frozen
+plan_warn = 15		-- the last of them, blinking
+plan_pal = split"1,5,13,5,5,6,7,5,9,5"	-- body 3 to lavender, the rest dark
+
+-- every dead weight freezes, and any that wake. one that's frozen can't hurt
+function plan_mode()
+	if plan_t > 0 then return false end
+	plan_t = plan_frames
+	return true
+end
+
+decoy_frames = 90	-- 3 seconds alone, less for every dead weight on it
+decoy_warn = 15		-- the last of them, blinking
+decoy_pal = split"1,2,3,4,4,9,10"	-- the knight's 5, 6 and 7 in claude's orange
+
+-- a copy of him, in the pose he's in, where he stands. dead weights go for it
+-- instead, even ones that wake meanwhile, and drain it. it doesn't shield him
+function subagent()
+	if decoy then return false end
+	decoy = {x = x, y = y, t = decoy_frames, body = bodies[facing], fx = facing == "side" and flipx}
+	return true
+end
+
+-- a frame a frame, and a frame more for every dead weight touching it
+function update_decoy()
+	local d = decoy
+	if not d then return end
+	d.t -= 1
+	for z in all(zombies) do
+		if hit(d.x, d.y, z.x, z.y) then d.t -= 1 end
+	end
+	if d.t <= 0 then decoy = nil end
+end
+
+-- standing, so its feet are sprite 48's
+function draw_decoy(d)
+	if d.t <= decoy_warn and d.t % 4 < 2 then return end
+	pal(decoy_pal)
+	draw_rows(d.body, d.x, d.y, d.fx, 0, 7)
+	draw_rows(48, d.x, d.y, d.fx, 7, 1)
+	pal()
+end
+
+-- what 🅾️ does, by the equipped skill's name. an effect returns true if it
+-- fired, or false to refuse at no cost. tests/skills.test.ts holds every skill
+-- in skill_names to one of its own
+skill_fx = {
+	["zero-shot"] = zero_shot,
+	["plan mode"] = plan_mode,
+	["/compact"] = compact,
+	subagent = subagent,
+	grep = grep,
+}
+
 -- >> shared: gemini.p8 and gemini_dungeon.p8 carry this section byte for
 -- byte. it draws only from sprites 0-63, which are the same in both sheets.
 -- tests/cart-bundle.test.ts holds both to that
@@ -522,6 +758,7 @@ function init_shared()
 	hurt = 0
 	stamina_rate = 45	-- frames per stamina point
 	stam_t = 0
+	flash_t = 0		-- the stamina bar's flash, counting down
 
 	num_gap = 3		-- px a count tucks toward its colon
 
@@ -556,6 +793,7 @@ function init_shared()
 	-- the hub's: whether claude has met you. it rides through the dungeon so
 	-- a run doesn't reset it
 	met = 0
+	skills, skill = 0, 0	-- owned and equipped: see skill_names
 	up0 = 0
 end
 
@@ -635,6 +873,15 @@ function move_player()
 	walk_t = moved and (walk_t + 1) % (walk_hold * #walk_cycle) or 0
 end
 
+flash_frames = 17	-- three flashes, 3 frames on and 3 off
+flash_col = 8
+
+-- whether stamina covers n. if not, its bar flashes
+function enough(n)
+	if stamina >= n then return true end
+	flash_t = flash_frames
+end
+
 function swing()
 	attack = 6
 	stamina -= 1
@@ -680,7 +927,7 @@ end
 
 function draw_hud()
 	draw_bar(13, health_x, health, health_max, health_col)
-	draw_bar(14, stamina_x, stamina, stamina_max, stamina_col)
+	draw_bar(14, stamina_x, stamina, stamina_max, stamina_col, flash_t % 6 > 2 and flash_col)
 	-- padded to the cap's width so the readout holds still
 	local tv = tostr(tokens)
 	while #tv < token_digits do tv = " "..tv end
@@ -703,11 +950,11 @@ function apply_tiers()
 	stamina_max = smax
 end
 
-function draw_bar(icon, bx, n, nmax, col)
+function draw_bar(icon, bx, n, nmax, col, edge)
 	pal(7, col)
 	spr(icon, bx - 8 - icon_gap, 0)
 	pal()
-	rect(bx, 0, bx + 1 + nmax * 5, 6, 7)
+	rect(bx, 0, bx + 1 + nmax * 5, 6, edge or 7)
 	for i = 0, n - 1 do
 		rectfill(bx + 2 + i * 5, 2, bx + 4 + i * 5, 4, col)
 	end
@@ -744,9 +991,15 @@ function door_at(px, py)
 	end
 end
 
+-- claude's skills. an id is a place in this list. skills (a bitmask of the
+-- owned) and skill (the equipped, 0 none) carry ids across load(), so add at
+-- the end: inserting or removing one changes which skill an id means
+skill_names = split"zero-shot,plan mode,/compact,subagent,grep"
+skill_costs = split"3,3,2,3,2"	-- stamina per use
+
 -- what crosses a load(), in the order of its param. split leaves "false" a
 -- truthy string, so a flag here is 0/1. where you arrive is the door's job
-carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,vault_look,met,up"
+carry = split"tokens,vault,pruned,rollbacks,max_depth,depth,health,health_max,stamina,stamina_max,health_tier,stamina_tier,armor_tier,armor_look,attack_tier,attack_look,vault_tier,vault_look,met,up,skills,skill"
 
 -- time() restarts with each cart: up carries the uptime, up0 offsets it
 function go(cart)
@@ -775,14 +1028,14 @@ __gfx__
 0070070000676600006766648777770078ddddd0ab777770d188888000676600003b3300008e880000a7aa000067660000676600007770000077000044777770
 00000000060660600006600040000000070000000a0000000d0000000606606003033030080880800a0aa0a00606606006066060000700000700000004000000
 00000000005005000050050000000000000000000000000000000000005505000050550000505000000505000050050000500500000000000000000000000000
-00088000003333300033330000333300000000000000000000000000000000000000000000000000000000000000000000000000007666000000000000000000
-00388300003333300033330000333300000000000000000000000000000000000000000000000000000000000000000000000000005555000000000000000000
-03333330003a83800083380000333300000000000000000000000000000000000000000000000000000000000000000000000000006556000000000000000000
-07033070003332300032230000333300000000000000000000000000000000000000000000000000000000000000000000000000006556000000000000000000
-07733770000330000003300000033000000000000000000000000000000000000000000000000000000000000000000000000700000550600000000000000000
-03333330000444300343443003443430000000000000000000000000000000000000000000000000000000000000000000000700006666000000000000000000
-03333330000440000004400000044000000000000000000000000000000000000000000000000000000000000000000000000700006460000000000000000000
-03333330005005000050050000500500000000000000000000000000000000000000000000000000000000000000000000000700054845000000000000000000
+00088000003333300033330000333300000000cc00dddd00000bb000009a99900666600000000000000000000000000000000000007666000000000000000000
+0038830000333330003333000033330000000c7c0dddddd000bbbb00009444406cc7c60000000000000000000000000000000000005555000000000000000000
+03333330003a838000833800003333000000c7c0dd7dd7dd0b0000b0009994906c7cc60000000000000000000000000000000000006556000000000000000000
+070330700033323000322300003333000c0c7c00dd7dd7ddbb0770bb009994906cccc60000000000000000000000000000000000006556000000000000000000
+077337700003300000033000000330000cc7c000dd7dd7ddbb0770bb000440006cccc60000000000000000000000000000000700000550600000000000000000
+0333333000044430034344300344343000cc0000dd7dd7dd0b0000b0009a99000666640000000000000000000000000000000700006666000000000000000000
+033333300004400000044000000440000c0cc0000dddddd000bbbb00090990900000044000000000000000000000000000000700006460000000000000000000
+03333330005005000050050000500500c000000000dddd00000bb000004004000000004400000000000000000000000000000700054845000000000000000000
 00aaaa00007aaa000077aa0000a77a0000aa770000aaaa0000aaaa0000aaaa0000aaaa0000aaaa0000aaaa000000000000766600000700000000000000000000
 0aa99aa007a99aa007799aa00a779aa00aa77aa00aa997700aa99a700aa99aa00aa99aa00aa99aa00aa99aa00000000000666600000700000000000000000000
 aa9aa9aa7a9aa9aa779aa9aaa77aa9aaaa77a9aaaa9a77aaaa9aa77aaa9aa977aa9aa9aaaa9aa9aaaa9aa9aa0000000000666600000700000000000000000000
