@@ -93,6 +93,13 @@ make each derivation an explicit output field (per-line `twos`/`ones`, then `win
 re-deriving in its head. Since JSON keys generate in order, that ordering is load-bearing:
 `commentary` comes last, after `move`, so flavour text can never steer the game.
 
+**Handing tic-tac-toe the facts made it play worse.** A perception layer that computed the
+line facts in code was built, benchmarked and rejected. Generating the derivation buys the
+model's *attention*, not its arithmetic: handed the same facts as a table, it skimmed them
+and missed an immediate block. Connect Four ships a facts-based prompt because it won its
+own A/B; tic-tac-toe does not because it lost. See
+[`bench/results/README.md`](bench/results/README.md).
+
 **Code supplies the facts; the model supplies the words.** In the board carts, code owns
 the rules and the model picks the move. Gem-in-Eye makes the same split on a different
 kind of task. The cart owns every number: the agent's record, the list price, and a price
@@ -115,11 +122,19 @@ doesn't repeat himself. A player can edit those, so they arrive untrusted: clean
 cart's character set, capped in count and length, and quoted as data. That confines an edit
 to the player's own session, but it can't tell a forged speech from a real one.
 
-**Known limits.** The move priority (win → block → center → corner) has no concept of
-forks, so a player who takes two opposite corners can still win. Gemini's free-tier quota
-is per-project rather than per-key, so both endpoints share one budget, limited two ways:
-per IP, and a global cap counted in *actual Gemini calls* rather than requests. One request
-can retry several times, and `/api/talk` sends a second call when the first is slow.
+**Known limits.** Neither board cart sees two moves ahead. Tic-tac-toe's move priority
+(win → block → center → corner) has no concept of forks, so a player who takes two
+opposite corners can still win. Connect Four answers the equivalent position, one move
+creating two winning threats, with the centre column **0 out of 9 times, across every
+prompt variant tested**. Two carts, two prompt styles, the same blind spot, so it belongs
+to the model rather than the prompt. Closing it means computing "this move creates two
+threats" in code, which is a decision about how much the program plays, not a prompt to
+tune.
+
+Gemini's free-tier quota is per-project rather than per-key, so both endpoints share one
+budget, limited two ways: per IP, and a global cap counted in *actual Gemini calls* rather
+than requests. One request can retry several times, and `/api/talk` sends a second call
+when the first is slow.
 
 ## Setup
 
@@ -214,21 +229,12 @@ LICENSE / NOTICE          MIT, plus the Lexaloffle carve-out for public/games/
 
 ## Roadmap
 
-- **Two-ply sight.** The one measured weakness, and it belongs to the model rather than the
-  prompt. Tic-tac-toe loses to a two-corner fork; Connect Four answers the equivalent
-  position — one move creating two winning threats — with the centre column **0 out of 9
-  times, across every prompt variant tested**. Two carts, two prompt styles, the same blind
-  spot. Closing it means computing "this move creates two threats" in code, which is a
-  decision about how much the program plays rather than a prompt to tune.
-- **Another board cart.** `api/_games.ts` and `PROTOCOLS` make it one entry each and no
-  edit to `move.ts`; Connect Four proved that contract. Gem-in-Eye has no board, so it got
-  its own endpoint instead.
-- **Not on the list: a perception layer for tic-tac-toe.** It was built, benchmarked and
-  rejected. Computing the line facts in code made play *worse*: generating the derivation
-  buys the model's *attention*, not its arithmetic, and handed the same facts as a table it
-  skimmed and missed an immediate block. Connect Four ships a facts-based prompt because it
-  won its own A/B; tic-tac-toe does not because it lost.
-  See [`bench/results/README.md`](bench/results/README.md).
+Gem-in-Eye is where the work is now. Nothing here has a date.
+
+- **More conversation with the shopkeepers.** Gem-in-eye speaks only when you buy
+  something, and Claude's lines are scripted. The plan is to experiment with talking to
+  both more often, as far as a free-tier budget allows.
+- **Sound effects and music.** Neither Gem-in-Eye cart has any yet.
 
 ## License
 

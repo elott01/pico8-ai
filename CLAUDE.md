@@ -486,7 +486,8 @@ Breaking any of these fails silently, so verify them when touching the relevant 
 ## Known limitation — two-ply sight, in both carts
 
 The move priority (win → block → center → corner) has no concept of forks, so a player taking
-two opposite corners can still win at tic-tac-toe. See the Roadmap in `README.md`.
+two opposite corners can still win at tic-tac-toe. See Known limits, under Design decisions in
+`README.md`.
 
 This is not a tic-tac-toe quirk. Connect Four reproduces it exactly: the `double-threat`
 fixture, where one column creates two winning threats at once, is **0/9 across every prompt
