@@ -20,6 +20,9 @@ function _init()
 
 	drops = {}
 
+	-- counts swings, so each one hurts a dead weight once (see hurt_zombie)
+	swing_n = 0
+
 	find_layouts()
 
 	arrive()
@@ -50,6 +53,7 @@ function _update()
 
 	if btnp(❎) and enough(1) then
 		swing()
+		swing_n += 1
 		thrown = false
 		hit_crate(attack_tier + 1, sword_box())
 	end
@@ -64,11 +68,15 @@ function _update()
 	tick_player()
 	token_t = (token_t + 1) % (token_frames * token_hold + token_pause)
 
-	-- zero-shot's swing is only a look: its beam does the hitting
+	-- zero-shot's swing is only a look: its beam does the hitting. the blade
+	-- is out for several frames, and hurts each dead weight once a swing
 	if attack > 0 and not thrown then
 		local sx, sy = sword_box()
 		for z in all(zombies) do
-			if hit(sx, sy, z.x, z.y) then prune(z) end
+			if z.hit_by != swing_n and hit(sx, sy, z.x, z.y) then
+				z.hit_by = swing_n
+				hurt_zombie(z, attack_tier + 1)
+			end
 		end
 	end
 	update_beam()
@@ -85,14 +93,21 @@ function _update()
 
 	take_drops()
 
+	-- the flash ticks here, not in update_zombies, which stops for plan mode
 	for z in all(zombies) do
+		if z.flash > 0 then z.flash -= 1 end
 		if hurt <= 0 and plan_t == 0 and hit(x, y, z.x, z.y) then
 			health -= 1
 			hurt = 30
 			if health <= 0 then alive, dead_t = false, rollback_delay end
 		end
 	end
+	for z in all(dying) do
+		z.t += 1
+		if z.t >= 2 + dissolve_frames then del(dying, z) end
+	end
 
+	update_pending()
 	update_zombies()
 	update_locks()
 end
@@ -101,6 +116,9 @@ function _draw()
 	cls()
 	draw_hud()
 	map(room.mx, room.my, 0, 0, 16, 16)
+	for z in all(dying) do
+		draw_dying(z)
+	end
 	if alive then
 		if decoy then draw_decoy(decoy) end
 		draw_player()
@@ -111,6 +129,9 @@ function _draw()
 			circ(x + 3.5, y + 3.5, ring_r(), ring_col)
 			fillp()
 		end
+	end
+	for p in all(pending) do
+		draw_mark(p)
 	end
 	for z in all(zombies) do
 		draw_zombie(z)
@@ -164,10 +185,39 @@ function mid_tile(px, py)
 	return (px + 4) \ 8, (py + 4) \ 8
 end
 
--- every prune goes through here, so dead weights with health change one place
+-- every prune goes through here: a swing that takes the last hp, or the beam.
+-- it leaves as it was, holes and all, to dissolve
 function prune(z)
 	del(zombies, z)
 	pruned += 1
+	z.t = 0
+	add(dying, z)
+end
+
+dissolve_frames = 8	-- after two frames white
+
+hit_flash = 4		-- frames white, counting the one it's hit on
+kb_frames = 4		-- frames pushed, kb_speed px each: about a tile
+kb_speed = 2
+hit_daze = 8		-- frames it stands once the push ends
+
+-- n damage, the way a swing hurts a crate. one that's left shows more holes,
+-- flashes, and the blade pushes it back. a frozen one isn't pushed: it would go
+-- when it thawed
+function hurt_zombie(z, n)
+	z.hp -= n
+	if z.hp <= 0 then
+		prune(z)
+		return
+	end
+	-- one hit from pruned is always the most holes, whatever it started with
+	z.holes = hole_n[tier_max + 1 - z.hp]
+	z.flash = hit_flash
+	if plan_t == 0 then
+		local dx, dy = sword_ofs()
+		z.kx, z.ky, z.kb = dx / 8, dy / 8, kb_frames
+		z.daze = max(z.daze, kb_frames + hit_daze)
+	end
 end
 
 -- the tile id is the damage state. a swing adds attack_tier + 1, and a beam
@@ -239,18 +289,62 @@ end
 
 -- zombie bodies 17-19 share the knight's feet row, so his steps fit
 function spawn_zombie(zx, zy)
-	add(zombies, {x = zx, y = zy, speed = 0.75, daze = 0,
-		walk_t = 0, body = 17, side = true, flipx = false})
+	add(zombies, {x = zx, y = zy, speed = 0.75, daze = 0, hp = zombie_hp(depth), holes = 0,
+		flash = 0, kb = 0, hit_by = 0, walk_t = 0, body = 17, side = true, flipx = false})
+end
+
+-- pruning zeroes weights, so a hit dead weight shows holes. x,y pairs in the
+-- body, in the order they open. hole_n is how many by how close it is to
+-- pruned: 1 hit away is the last, and zombie_hp's cap is one more than its size
+holes = split"3,1,5,5,5,0,2,3,3,6,2,1,4,2,4,4,1,5,5,3"
+hole_n = split"2,5,10"
+
+-- draws everything in colour c, until the next pal()
+function flat(c)
+	for i = 1, 15 do pal(i, c) end
+end
+
+-- blacks out pixel i,j of sprite n drawn at x,y, only if the sprite has one
+-- there: a side view has no left hand to lose
+function zero(n, x, y, fx, i, j)
+	if sget(n % 16 * 8 + i, n \ 16 * 8 + j) > 0 then
+		pset(x + (fx and 7 - i or i), y + j, 0)
+	end
+end
+
+function punch(z, fx)
+	for k = 1, z.holes do
+		zero(z.body, z.x, z.y, fx, holes[k * 2 - 1], holes[k * 2])
+	end
 end
 
 function draw_zombie(z)
 	local fx = z.side and z.flipx
 	-- frozen. blinks before it thaws
 	if plan_t > plan_warn or plan_t % 4 > 1 then pal(plan_pal) end
+	-- hit, over it
+	if z.flash > 0 then flat(7) end
 	draw_rows(z.body, z.x, z.y, fx, 0, 7)
 	draw_rows(step_spr(z.side and walk_cycle or walk_cycle_ud, z.walk_t),
 		z.x, z.y, fx, 7, 1)
 	pal()
+	punch(z, fx)
+end
+
+-- pruned: white for two frames, then its pixels go out in a scattered order.
+-- drawn under everything else, so the black it leaves only lands on floor
+function draw_dying(z)
+	local fx = z.side and z.flipx
+	if z.t < 2 then flat(7) end
+	spr(z.body, z.x, z.y, 1, 1, fx)
+	pal()
+	punch(z, fx)
+	local gone = (z.t - 2) / dissolve_frames * 8
+	for j = 0, 7 do
+		for i = 0, 7 do
+			if (i * 5 + j * 3) % 8 < gone then zero(z.body, z.x, z.y, fx, i, j) end
+		end
+	end
 end
 
 -- flow field: bfs from your tile, rebuilt when it changes. no corner-cutting
@@ -332,6 +426,17 @@ function update_zombies()
 
 	for i = 1, #zombies do
 		local z = zombies[i]
+
+		-- pushed by a hit, one axis at a time so a wall stops it. clamped too:
+		-- box_free can't see past the screen, and doors aren't solid. before
+		-- wasx, so its feet don't step while it slides
+		if z.kb > 0 then
+			z.kb -= 1
+			local nx, ny = mid(0, z.x + z.kx * kb_speed, 120), mid(0, z.y + z.ky * kb_speed, 120)
+			if box_free(nx, z.y) then z.x = nx end
+			if box_free(z.x, ny) then z.y = ny end
+		end
+
 		local wasx, wasy = z.x, z.y
 		local sp = z.speed
 
@@ -490,8 +595,12 @@ function room_wave(d) return min(d, spawn_cap) end
 function room_tokens(d) return 2 + d end
 token_wakes = 1
 
+-- 1 at depths 1-2, then one more every 3 depths. capped at the top attack
+-- tier's damage, so that tier always prunes in one hit
+function zombie_hp(d) return min(1 + d \ 3, tier_max + 1) end
+
 function enter_battle()
-	zombies = {}
+	zombies, pending, dying = {}, {}, {}
 	drops = {}
 	-- a skill still running ends with the room it was used in
 	beam, plan_t, decoy, ring_t, token_pull = nil, 0, nil, 0, false
@@ -505,7 +614,12 @@ end
 
 spawn_cap = 12		-- max opening wave
 spawn_clear = 40	-- px kept clear of the player (chebyshev)
+spawn_warn = 45		-- frames a dead weight flickers before it lands
+spawn_gap = 8		-- frames more for each after the first in a wave
+mark_col = 5
 
+-- each one flickers where it will land first, so none appears without
+-- warning, and a wave lands one by one. the cap counts them
 function spawn_wave(n)
 	-- far from you, spread out before doubling up. else the furthest tile
 	local clear, best, bd = {}, nil, -1
@@ -517,7 +631,7 @@ function spawn_wave(n)
 	end
 	local pool = {}
 	for k = 1, n do
-		if #zombies >= spawn_cap or not best then return end
+		if #zombies + #pending >= spawn_cap or not best then return end
 		if #pool == 0 then
 			for c in all(clear) do add(pool, c) end
 		end
@@ -526,15 +640,41 @@ function spawn_wave(n)
 			i = rnd(pool)
 			del(pool, i)
 		end
-		spawn_zombie(tile_xy(i))
+		local px, py = tile_xy(i)
+		add(pending, {x = px, y = py, t = spawn_warn + (k - 1) * spawn_gap})
 	end
 end
 
--- a lock door is shut until the room is spent. set every frame
+-- one lands when its time's up, unless he's standing on it: then it waits
+-- for him to step off. it was placed clear of him; the warning is his fair
+-- chance to keep away
+function update_pending()
+	for p in all(pending) do
+		if p.t > 0 then
+			p.t -= 1
+		elseif not hit(x, y, p.x, p.y) then
+			spawn_zombie(p.x, p.y)
+			del(pending, p)
+		end
+	end
+end
+
+-- facing him, all one dark colour, blinking faster as it lands
+function draw_mark(p)
+	local b = p.t > 15 and 8 or 4
+	if p.t % b < b / 2 then
+		flat(mark_col)
+		spr(18, p.x, p.y)
+		pal()
+	end
+end
+
+-- a lock door is shut until the room is spent, the flickering included. set
+-- every frame
 door_open, door_locked = 133, 135
 
 function update_locks()
-	local spent = tokens_left == 0 and #zombies == 0
+	local spent = tokens_left == 0 and #zombies == 0 and #pending == 0
 	for d in all(room.doors) do
 		if d.lock then
 			mset(room.mx + d.tx, room.my + d.ty, spent and door_open or door_locked)
@@ -742,7 +882,7 @@ function init_shared()
 	health_tier = 0
 	stamina_tier = 0
 
-	-- armor does nothing yet. attack speeds up crate breaking
+	-- armor does nothing yet. attack is damage, to crates and dead weights
 	armor_tier = 0
 	armor_look = 0	-- worn tier. the rating stays armor_tier
 	attack_tier = 0

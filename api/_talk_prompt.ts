@@ -31,12 +31,12 @@ export const STASH_CAPS: readonly number[] = [10, 20, 40, 80];
 
 export const VERDICTS: readonly Verdict[] = ['impressed', 'neutral', 'unimpressed'];
 
-/** What each upgrade does, as of the cart on 2026-10-17. Armor really does nothing yet. */
+/** What each upgrade does, as of the cart on 2026-11-26. Armor really does nothing yet. */
 const EFFECT: Record<ShopItem, string> = {
   vitality: '+1 health bar per tier, on a base of 3',
   stamina: '+1 stamina bar per tier, on a base of 3. each sword swing costs 1 stamina; 1 comes back every 1.5 seconds',
   armor: 'does nothing yet. owned tiers can only be worn as a look',
-  attack: 'breaks crates in fewer swings. dead weights already die in one hit',
+  attack: 'each tier adds 1 damage to a sword swing, so crates break and dead weights die in fewer swings. dead weights take more swings the deeper the agent goes',
   stash: 'raises the stash chest from 10 to 20, 40, then 80 tokens. each tier is a new chest, and any owned one can be set out as a look',
 };
 
