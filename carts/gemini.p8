@@ -1181,7 +1181,7 @@ function init_shared()
 	health_tier = 0
 	stamina_tier = 0
 
-	-- armor does nothing yet. attack speeds up crate breaking
+	-- armor does nothing yet. attack is damage, to crates and dead weights
 	armor_tier = 0
 	armor_look = 0	-- worn tier. the rating stays armor_tier
 	attack_tier = 0
