@@ -23,6 +23,9 @@ function _init()
 	-- counts swings, so each one hurts a dead weight once (see hurt_zombie)
 	swing_n = 0
 
+	-- frames left of a push from a hit (see throw_back)
+	push_t = 0
+
 	find_layouts()
 
 	arrive()
@@ -35,6 +38,12 @@ function _update()
 	if flash_t > 0 then flash_t -= 1 end
 	if ring_t > 0 then ring_t -= 1 end
 
+	-- pruned ones finish dissolving even if he's died meanwhile
+	for z in all(dying) do
+		z.t += 1
+		if z.t >= 2 + dissolve_frames then del(dying, z) end
+	end
+
 	if not alive then
 		-- the wait ends only with 🅾️ up, since btnp repeats while it's held
 		if dead_t > 0 then
@@ -46,7 +55,13 @@ function _update()
 		return
 	end
 
-	move_player()
+	-- thrown back by a hit, he can't walk until he lands
+	if push_t > 0 then
+		push_t -= 1
+		push_player()
+	else
+		move_player()
+	end
 
 	local d = door_at(x + 4, y + 4)
 	if d then d.act(d) end
@@ -99,13 +114,20 @@ function _update()
 		if hurt <= 0 and plan_t == 0 and hit(x, y, z.x, z.y) then
 			health -= 1
 			hurt = 30
-			if health <= 0 then alive, dead_t = false, rollback_delay end
+			-- the killing hit doesn't throw him: he goes where he stands, as a
+			-- pruned dead weight does, with no blink or swing left to freeze
+			-- (draw_death). they wait at his edge while he blinks (can_go) and
+			-- stand still once he's dead, so none is on him
+			if health <= 0 then
+				alive, dead_t, hurt, attack = false, rollback_delay, 0, 0
+			else
+				throw_back(z)
+			end
 		end
 	end
-	for z in all(dying) do
-		z.t += 1
-		if z.t >= 2 + dissolve_frames then del(dying, z) end
-	end
+	-- once he's dead nothing moves, from the frame it happens: his blink is
+	-- cleared, so can_go would let them step onto him
+	if not alive then return end
 
 	update_pending()
 	update_zombies()
@@ -150,6 +172,7 @@ function _draw()
 	if alive and banner_t > 0 then centre(banner_msg, 60, 7) end
 
 	if not alive then
+		draw_death()
 		print("game over", 46, 60, 8)
 		if dead_t == 0 and frame % 30 < 20 then centre("press 🅾️ to rollback", 70, 7) end
 	end
@@ -218,6 +241,29 @@ function hurt_zombie(z, n)
 		z.kx, z.ky, z.kb = dx / 8, dy / 8, kb_frames
 		z.daze = max(z.daze, kb_frames + hit_daze)
 	end
+end
+
+-- a dead weight that hurts him throws him back a tile, as a swing throws it:
+-- away from it along whichever axis it's further off on, or backwards if it's
+-- dead on top of him. whole px, so he still fits one-tile gaps. it stands a
+-- moment, so it ends up in the blade's reach instead of on top of him
+function throw_back(z)
+	local dx, dy = x - z.x, y - z.y
+	if dx == 0 and dy == 0 then
+		dx, dy = sword_ofs()
+		dx, dy = -dx, -dy
+	end
+	if abs(dx) >= abs(dy) then dx, dy = sgn(dx), 0 else dx, dy = 0, sgn(dy) end
+	push_x, push_y, push_t = dx, dy, kb_frames
+	z.daze = max(z.daze, kb_frames + hit_daze)
+end
+
+-- one axis at a time, as theirs is. a door stops it too, or a hit by the
+-- entrance could throw him home
+function push_player()
+	local nx, ny = x + push_x * kb_speed, y + push_y * kb_speed
+	if box_free(nx, y) and not is_door(nx + 4, y + 4) then x = nx end
+	if box_free(x, ny) and not is_door(x + 4, ny + 4) then y = ny end
 end
 
 -- the tile id is the damage state. a swing adds attack_tier + 1, and a beam
@@ -339,10 +385,42 @@ function draw_dying(z)
 	spr(z.body, z.x, z.y, 1, 1, fx)
 	pal()
 	punch(z, fx)
-	local gone = (z.t - 2) / dissolve_frames * 8
 	for j = 0, 7 do
 		for i = 0, 7 do
-			if (i * 5 + j * 3) % 8 < gone then zero(z.body, z.x, z.y, fx, i, j) end
+			if dissolved(i, j, z.t) then zero(z.body, z.x, z.y, fx, i, j) end
+		end
+	end
+end
+
+-- whether pixel i,j is out, t frames into a dissolve: none for the two white
+-- frames, then more each frame, in a fixed scattered order
+function dissolved(i, j, t)
+	return (i * 5 + j * 3) % 8 < (t - 2) / dissolve_frames * 8
+end
+
+-- he goes as a pruned dead weight does, in the wait before the rollback
+-- prompt, and over everything, so dead weights crowding him can't hide it.
+-- he's drawn from several sprites and palettes, so it's done on the screen:
+-- what's under his 8x8 is kept, he's drawn there on black, and each pixel is
+-- then his, whitened or kept, or what was under him
+function draw_death()
+	local t = rollback_delay - dead_t
+	if t >= 2 + dissolve_frames then return end
+	local under = {}
+	for j = 0, 7 do
+		for i = 0, 7 do
+			under[i + j * 8] = pget(x + i, y + j)
+		end
+	end
+	rectfill(x, y, x + 7, y + 7, 0)
+	draw_player()
+	for j = 0, 7 do
+		for i = 0, 7 do
+			if pget(x + i, y + j) == 0 or dissolved(i, j, t) then
+				pset(x + i, y + j, under[i + j * 8])
+			elseif t < 2 then
+				pset(x + i, y + j, 7)
+			end
 		end
 	end
 end
@@ -403,6 +481,14 @@ function zombie_goal(z, ptx, pty, aim_x, aim_y)
 	return gx, gy
 end
 
+-- a step a dead weight may take: not into a wall, and not further into him
+-- while he can't be hurt. it waits at his edge instead, so the next hit lands
+-- as it touches him, as the first does. one already on him can back out
+function can_go(z, nx, ny)
+	return box_free(nx, ny) and not (hurt > 0 and hit(nx, ny, x, y)
+		and abs(nx - x) + abs(ny - y) < abs(z.x - x) + abs(z.y - y))
+end
+
 -- distance on foot, 999 if unreached
 function zflow(z)
 	local tx, ty = mid_tile(z.x, z.y)
@@ -449,8 +535,8 @@ function update_zombies()
 		-- one axis at a time, so walls slide it along
 		local gx, gy = zombie_goal(z, ptx, pty, aim_x, aim_y)
 		local mx, my = mid(-sp, gx - z.x, sp), mid(-sp, gy - z.y, sp)
-		if box_free(z.x + mx, z.y) then z.x += mx else mx = 0 end
-		if box_free(z.x, z.y + my) then z.y += my else my = 0 end
+		if can_go(z, z.x + mx, z.y) then z.x += mx else mx = 0 end
+		if can_go(z, z.x, z.y + my) then z.y += my else my = 0 end
 
 		-- unstack: only the further one yields (both yielding deadlocks at
 		-- one-tile gaps). ties go by list order
@@ -462,8 +548,8 @@ function update_zombies()
 				if zd > od or (zd == od and i > j) then
 					local px = z.x < other.x and -sp or sp
 					local py = z.y < other.y and -sp or sp
-					if box_free(z.x + px, z.y) then z.x += px end
-					if box_free(z.x, z.y + py) then z.y += py end
+					if can_go(z, z.x + px, z.y) then z.x += px end
+					if can_go(z, z.x, z.y + py) then z.y += py end
 				end
 			end
 		end
