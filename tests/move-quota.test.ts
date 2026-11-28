@@ -11,7 +11,7 @@ import { asResponse, mockReq, mockRes, rateLimitedBody } from './_mocks.ts';
 
 const { default: handler } = await import('../api/move.ts');
 
-const HOST = 'pico8-ai.vercel.app';
+const HOST = 'pico-aight.vercel.app';
 let geminiCalls = 0;
 
 globalThis.fetch = (async () => {

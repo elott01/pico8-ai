@@ -15,7 +15,7 @@ import { asResponse, mockReq, mockRes, successBody } from './_mocks.ts';
 
 const { default: handler } = await import('../api/move.ts');
 
-const HOST = 'pico8-ai.vercel.app';
+const HOST = 'pico-aight.vercel.app';
 const TTT_BOARD = new Array(9).fill(0);
 const C4_BOARD = new Array(42).fill(0);
 

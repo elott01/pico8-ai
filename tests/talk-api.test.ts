@@ -16,7 +16,7 @@ import type { TalkRequest, TalkSuccess, TalkRateLimited } from '../api/_types.ts
 
 const { default: handler, HEDGE_MS } = await import('../api/talk.ts');
 
-const HOST = 'pico8-ai.vercel.app';
+const HOST = 'pico-aight.vercel.app';
 
 const REQUEST: TalkRequest = {
   occasion: 'purchase',
